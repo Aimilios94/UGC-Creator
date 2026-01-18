@@ -1,0 +1,461 @@
+{
+  "name": "UGC Ad Builder Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ugc-ad-trigger",
+        "options": {}
+      },
+      "id": "86dcff02-28b5-4a46-a6c1-76d61052cf0d",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        9280,
+        3696
+      ],
+      "webhookId": "0d034abe-9725-4da6-8279-10f1fa7837d8"
+    },
+    {
+      "parameters": {
+        "inputDataFieldName": "file",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "root",
+          "cachedResultName": "/ (Root folder)"
+        },
+        "options": {}
+      },
+      "id": "8ad2273f-b479-41c9-9426-73553f9d078a",
+      "name": "Upload file",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        9472,
+        3696
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "aOVjQqxzQRGHbem3",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Describe this image in detail for a UGC ad prompt.",
+        "options": {
+          "systemMessage": "=Analyze the given image and determine if it primarily depicts a product or a character, or BOTH.\n\nIf the image is of a product, return the analysis in YAML format with the following fields:\nbrand_name: (Name of the brand shown in the image, if visible or inferable)\ncolor_scheme:\n\nhex: (Hex code of each prominent color used)\nname: (Descriptive name of the color)\nfont_style: (Describe the font family or style used: serif/sans-serif, bold/thin, etc.)\nvisual_description: (A full sentence or two summarizing what is seen in the image, ignoring the background)\n\nIf the image is of a character, return the analysis in YAML format with the following fields:\n\ncharacter_name: (Name of the character if visible or inferable)\ncolor_scheme:\n\nhex: (Hex code of each prominent color used on the character)\nname: (Descriptive name of the color)\noutfit_style: (Description of clothing style, accessories, or notable features)\nvisual_description: (A full sentence or two summarizing what the character looks like, ignoring the background)\n\nOnly return the YAML. Do not explain or add any other comments.\n\nIf it is BOTH, return both descriptions as guided above in YAML format",
+          "passthroughBinaryImages": true
+        }
+      },
+      "id": "b26c74e2-c706-4d53-a260-3a9fa113b77a",
+      "name": "Describe img",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        9680,
+        3696
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Image Description: {{ $json.output }}\nUser Ad Concept: {{ $('Webhook').item.json.body.description }}\nPlatform: {{ $('Webhook').item.json.body.platform }}\nAd Type: {{ $('Webhook').item.json.body.adType }}\nTone: {{ $('Webhook').item.json.body.tone }}\nAspect Ratio: {{ $('Webhook').item.json.body.ratio }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=ROLE: UGC Image Prompt Builder\n\nPurpose: Given an image URL (often a product or reference image), write a short, natural description that can drive an image/video generator.\n\nDefaults:\n\nIf instructions are vague, place the product with the character in an everyday setting that makes sense for the item.\n\nIf style or setting isn't specified, assume casual UGC realism.\n\nUGC Realism Principles:\n\nLook unstaged and lifelike.\n\nPhone-photo vibe: off-center framing, light motion blur, mixed indoor light, slight grain.\n\nEmbrace imperfections: wrinkles, stray hairs, skin texture, cluttered backgrounds.\n\nKeep any visible packaging text exactly as shown. Never invent claims, numbers, or badges.\n\nCamera Cues (use at least 2-3 each time):\n\n\"phone snapshot\", \"handheld framing\", \"off-center composition\", \"natural indoor light\", \"soft shadows\", \"slight motion blur\", \"auto exposure\", \"unpolished look\", \"mild grain\"\n\nSafety / Scope:\n\nDo not name copyrighted characters.\n\nYou do not write dialogue or scripts; you only output an image prompt.\n\nOutput Contract:\n\nReturn only one JSON object:\n\nimage_prompt: one string (≤120 words) in plain prose that covers subject, action, mood, setting, style/camera, color notes, and text-accuracy notes.\n\nDiversity Defaults:\n\nWhen people aren't specified, vary gender and ethnicity naturally.\n\nDefault age range: 21-38.\n\nPrefer real-world spaces (home, street, store, gym, office) unless told otherwise.\n\n--- Examples ---\n\nGood example 1: { \"image_prompt\": \"a young adult casually holding a skincare tube near a bathroom mirror; action: dabs a small amount on the back of the hand; mood: easy morning; setting: small apartment bathroom with towel on rack and toothbrush cup; style/camera: phone snapshot, handheld framing, off-center composition, natural window light, slight motion blur, mild grain; colors: soft whites and mint label; text accuracy: keep every word on the tube exactly as visible, no added claims\"}\n\nGood example 2: { \"image_prompt\": \"commuter wearing wireless earbuds while opening the charging case; action: steps out of subway exit; mood: in-the-moment; setting: busy sidewalk with passersby and glass reflections; style/camera: unpolished phone photo, auto exposure, mixed daylight and neon glow, gentle lens smudge; colors: charcoal and silver product stands out; text accuracy: preserve logo and model name precisely\"}\n\nBad example (avoid):\n\nFabricating certifications or numbers on packaging.\n\nStudio-perfect lighting or ad-speak like \"cinematic masterpiece\".\n\nReturning anything other than the two required keys.\n\nPre-send checklist:\n\nNatural, handheld tone? ✓\n\nAt least two camera cues included? ✓\n\nProduct text preserved exactly? ✓\n\nOnly image_prompt returned? ✓"
+        }
+      },
+      "id": "f0a569bd-ba95-4f42-b4cb-5da3eae9f827",
+      "name": "Image Prompt Generator",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        9216,
+        3984
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "94af31ed-1faf-41fc-a6d2-8db42b1bf246",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        9184,
+        4192
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "F6tNxjPR5tEnWhNQ",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"prompt\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+      },
+      "id": "b875ef62-f59d-4bbd-b8c7-fde80001904f",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        9360,
+        4192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fal.run/fal-ai/flux/schnell",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Key 964a5c98-64a6-4771-9226-6aadf52e3539:44001b04ded63b44b9890507636d982f"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.output.prompt }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9837e671-c03d-4f3a-b82c-9e98b2ac5e64",
+      "name": "Create Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        9872,
+        3984
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generated Image URL: {{ $json.images[0].url }}\nUser Ad Concept: {{ $('Webhook').item.json.body.description }}\nPlatform: {{ $('Webhook').item.json.body.platform }}\nTone: {{ $('Webhook').item.json.body.tone }}\nAspect Ratio: {{ $('Webhook').item.json.body.ratio }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "id": "a545a21b-4ca0-43fd-be42-a18d5f2e8a15",
+      "name": "Video Prompt Generator",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        9536,
+        4432
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "1739fa87-4356-4d59-be0e-85acada39fd9",
+      "name": "GPT",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        9520,
+        4656
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "F6tNxjPR5tEnWhNQ",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"prompt\": {\n      \"type\": \"string\"\n    }\n  }\n}"
+      },
+      "id": "b2d49ddb-5883-476d-9f3c-b9b9a29dc087",
+      "name": "Structured Output Parser 1",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        9680,
+        4624
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fal.run/fal-ai/kling-video/v1/standard/image-to-video\n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Key 964a5c98-64a6-4771-9226-6aadf52e3539:44001b04ded63b44b9890507636d982f"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "prompt",
+              "value": "={{ $json.output.prompt }}\n"
+            },
+            {
+              "name": "image_url",
+              "value": "={{ $node[\"Create Image\"].json.images[0].url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d6e899a2-8f09-4a07-8dff-d8e8df3eebbe",
+      "name": "Create Video1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        10064,
+        4432
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "aimilka.94@gmail.com",
+        "subject": "Your AI UGC Ad is ready!",
+        "message": "=Check out your new ad video! Generated based on your concept: {{ $json.video.url }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "2839e35c-a15b-4a3a-a0ec-6363da9495b1",
+      "name": "Send a message",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        10416,
+        4432
+      ],
+      "webhookId": "cd6d3d63-d3f5-4467-bc27-2dcddca5f910",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "CwS5OPIM4cfUTFij",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Uploaded Image & description From Antigravity",
+        "height": 250,
+        "width": 808,
+        "color": 3
+      },
+      "id": "2a7a3e86-1e26-4d86-a1ff-57e112cd0e2e",
+      "name": "Sticky Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        9168,
+        3584
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Create New Image with NanoBanana",
+        "height": 400,
+        "width": 1000,
+        "color": 2
+      },
+      "id": "97ab3310-5306-4b17-a01d-4f33dfe37439",
+      "name": "Sticky Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        9136,
+        3888
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Create AI UGC Ad with Veo3.1 & Send via Email",
+        "height": 450,
+        "width": 1600,
+        "color": 4
+      },
+      "id": "122153ff-4f57-4aed-ae5c-4629771b4019",
+      "name": "Sticky Note 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        9104,
+        4304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Upload file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Describe img",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Describe img": {
+      "main": [
+        [
+          {
+            "node": "Image Prompt Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image Prompt Generator": {
+      "main": [
+        [
+          {
+            "node": "Create Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Image Prompt Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Describe img",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Image Prompt Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Image": {
+      "main": [
+        [
+          {
+            "node": "Video Prompt Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Prompt Generator": {
+      "main": [
+        [
+          {
+            "node": "Create Video1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Video Prompt Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser 1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Video Prompt Generator",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Video1": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "96f46413-ab91-4d1b-b480-0254d60964f5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cc3d4cb8dc409222627047c4e903bfa4e8917a1787cc5104b10ac3bf498b9d60"
+  },
+  "id": "XVSluPKKxsHJEoHO",
+  "tags": []
+}
