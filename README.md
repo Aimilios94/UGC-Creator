@@ -261,6 +261,23 @@ The frontend will be available at `http://localhost:5173`
    - Go to Workflows → Import from File
    - Select `UGC Ad Builder Workflow.json`
 
+#### n8n Workflow Preview
+
+<p align="center">
+  <img src="frontend/public/assets/workflow-screenshot.png" width="800" alt="n8n Workflow"/>
+</p>
+
+<p align="center"><em>Visual workflow showing the complete ad generation pipeline in n8n</em></p>
+
+**Workflow Stages:**
+| Stage | Description |
+|-------|-------------|
+| **Input Processing** | Webhook receives image & form data, uploads to Google Drive |
+| **Image Analysis** | GPT-4o analyzes the product/character in the uploaded image |
+| **AI Image Creation** | Generates UGC-style prompt → Flux Schnell creates new image |
+| **AI Video Creation** | Generates motion prompt → Kling Video animates the image |
+| **Email Delivery** | Sends final video URL to user via Gmail |
+
 3. **Configure credentials**
    | Credential | Setup |
    |------------|-------|
