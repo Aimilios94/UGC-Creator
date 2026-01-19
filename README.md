@@ -6,6 +6,12 @@
   <img src="https://img.shields.io/badge/Fal.ai-Flux%20%2B%20Kling-FF6B6B?style=for-the-badge" alt="Fal.ai" />
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Vercel-Deployed-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel" />
+  <img src="https://img.shields.io/badge/ngrok-Tunnel-1F1E37?style=for-the-badge&logo=ngrok&logoColor=white" alt="ngrok" />
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
+</p>
+
 <h1 align="center">UGC Ad Builder</h1>
 
 <p align="center">
@@ -14,14 +20,30 @@
 </p>
 
 <p align="center">
-  <a href="#features">Features</a> •
-  <a href="#demo">Demo</a> •
-  <a href="#tech-stack">Tech Stack</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#getting-started">Getting Started</a> •
-  <a href="#deployment">Deployment</a> •
-  <a href="#license">License</a>
+  <a href="https://ugc-creator-delta.vercel.app" target="_blank"><strong>View Live Demo</strong></a>
 </p>
+
+<p align="center">
+  <a href="#-features">Features</a> •
+  <a href="#-live-demo">Demo</a> •
+  <a href="#-tech-stack">Tech Stack</a> •
+  <a href="#-architecture">Architecture</a> •
+  <a href="#-getting-started">Getting Started</a> •
+  <a href="#-deployment">Deployment</a> •
+  <a href="#-license">License</a>
+</p>
+
+---
+
+## Overview
+
+UGC Ad Builder is a full-stack application that automates the creation of User-Generated Content style video advertisements. The platform combines a modern React frontend with a powerful n8n workflow backend, leveraging multiple AI services to transform simple product images into engaging video ads.
+
+**Key Highlights:**
+- End-to-end automation from image upload to video delivery
+- Integration with 5+ external APIs and services
+- Production-ready deployment with Vercel and ngrok tunneling
+- Clean, responsive UI with premium dark mode aesthetics
 
 ---
 
@@ -29,131 +51,197 @@
 
 | Feature | Description |
 |---------|-------------|
-| **Drag & Drop Upload** | Easy file upload for product images with visual preview |
-| **Multi-Platform Support** | TikTok, Instagram Reels, YouTube Shorts, Facebook Ads |
-| **AI Image Analysis** | Automatic product/character detection using GPT-4o |
+| **Drag & Drop Upload** | Intuitive file upload with real-time preview and validation |
+| **Multi-Platform Support** | Optimized outputs for TikTok, Instagram Reels, YouTube Shorts, Facebook Ads |
+| **AI Image Analysis** | Automatic product/character detection using OpenAI GPT-4o vision |
 | **AI Image Generation** | Creates UGC-style images with Flux Schnell via Fal.ai |
-| **AI Video Generation** | Animates images into videos using Kling Video via Fal.ai |
-| **Email Delivery** | Receive your finished video directly in your inbox |
-| **Premium UI** | Dark mode, glassmorphism effects, responsive design |
+| **AI Video Generation** | Transforms static images into dynamic videos using Kling Video |
+| **Automated Email Delivery** | Receive finished video directly in your inbox via Gmail API |
+| **Cloud Asset Storage** | Automatic backup of all uploads to Google Drive |
+| **Premium UI/UX** | Dark mode, glassmorphism effects, smooth animations, mobile-responsive |
 
-## Demo
+---
+
+## Live Demo
+
+**Production URL:** [https://ugc-creator-delta.vercel.app](https://ugc-creator-delta.vercel.app)
 
 <p align="center">
-  <img src="frontend/public/assets/skincare.png" width="200" alt="Skincare Demo"/>
-  <img src="frontend/public/assets/tech.png" width="200" alt="Tech Demo"/>
-  <img src="frontend/public/assets/fashion.png" width="200" alt="Fashion Demo"/>
+  <img src="frontend/public/assets/skincare.png" width="220" alt="Skincare Demo"/>
+  <img src="frontend/public/assets/tech.png" width="220" alt="Tech Demo"/>
+  <img src="frontend/public/assets/fashion.png" width="220" alt="Fashion Demo"/>
 </p>
+
+<p align="center"><em>Sample AI-generated UGC ads for skincare, tech, and fashion products</em></p>
+
+---
 
 ## Tech Stack
 
 ### Frontend
 | Technology | Purpose |
 |------------|---------|
-| ![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black) | UI Framework |
-| ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white) | Build Tool & Dev Server |
-| ![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=flat-square&logo=css3&logoColor=white) | Styling with CSS Variables |
-| ![Lucide](https://img.shields.io/badge/Lucide-F56565?style=flat-square) | Icon Library |
+| ![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black) | UI Framework with Hooks & Functional Components |
+| ![Vite](https://img.shields.io/badge/Vite_7-646CFF?style=flat-square&logo=vite&logoColor=white) | Next-gen Build Tool & Dev Server |
+| ![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=flat-square&logo=css3&logoColor=white) | Custom styling with CSS Variables & Glassmorphism |
+| ![Framer Motion](https://img.shields.io/badge/Framer_Motion-0055FF?style=flat-square&logo=framer&logoColor=white) | Smooth animations & transitions |
+| ![Lucide](https://img.shields.io/badge/Lucide_Icons-F56565?style=flat-square) | Modern icon library |
 
-### Backend (n8n Workflow)
+### Backend & Automation
 | Technology | Purpose |
 |------------|---------|
-| ![n8n](https://img.shields.io/badge/n8n-EA4B71?style=flat-square&logo=n8n&logoColor=white) | Workflow Automation |
-| ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) | Image Analysis & Prompt Generation |
-| ![Fal.ai](https://img.shields.io/badge/Fal.ai-FF6B6B?style=flat-square) | Image & Video Generation |
-| ![Google Drive](https://img.shields.io/badge/Google%20Drive-4285F4?style=flat-square&logo=googledrive&logoColor=white) | Asset Archival |
-| ![Gmail](https://img.shields.io/badge/Gmail-EA4335?style=flat-square&logo=gmail&logoColor=white) | Video Delivery |
+| ![n8n](https://img.shields.io/badge/n8n-EA4B71?style=flat-square&logo=n8n&logoColor=white) | Visual Workflow Automation Engine |
+| ![OpenAI](https://img.shields.io/badge/OpenAI_GPT--4o-412991?style=flat-square&logo=openai&logoColor=white) | Image Analysis & Intelligent Prompt Generation |
+| ![Fal.ai](https://img.shields.io/badge/Fal.ai-FF6B6B?style=flat-square) | Flux Schnell (Image) + Kling (Video) Generation |
+| ![Google Drive](https://img.shields.io/badge/Google_Drive-4285F4?style=flat-square&logo=googledrive&logoColor=white) | Cloud Asset Archival |
+| ![Gmail](https://img.shields.io/badge/Gmail_API-EA4335?style=flat-square&logo=gmail&logoColor=white) | Automated Video Delivery |
+
+### DevOps & Infrastructure
+| Technology | Purpose |
+|------------|---------|
+| ![Vercel](https://img.shields.io/badge/Vercel-000000?style=flat-square&logo=vercel&logoColor=white) | Frontend Hosting & CI/CD |
+| ![ngrok](https://img.shields.io/badge/ngrok-1F1E37?style=flat-square&logo=ngrok&logoColor=white) | Secure Tunnel for Local n8n to Production |
+| ![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white) | Version Control & Repository |
+
+---
 
 ## Architecture
 
+The application follows a modern JAMstack architecture with a decoupled frontend and webhook-based backend communication.
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              USER                                        │
-│                    Uploads Image + Defines Concept                       │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         REACT FRONTEND                                   │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────────────┐  │
-│  │    Hero     │  │   Samples   │  │         BuilderForm             │  │
-│  │  Component  │  │   Gallery   │  │  • Drag & Drop Upload           │  │
-│  │             │  │             │  │  • Platform/Tone Selection      │  │
-│  │             │  │             │  │  • Webhook Submission           │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────────────────┘  │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │ POST /webhook
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          N8N WORKFLOW                                    │
-│                                                                          │
-│  ┌──────────┐    ┌──────────────────────────────────────────────────┐   │
-│  │ Webhook  │───▶│              PARALLEL PROCESSING                  │   │
-│  │ Trigger  │    │  ┌─────────────┐       ┌─────────────────────┐   │   │
-│  └──────────┘    │  │Google Drive │       │  OpenAI GPT-4o      │   │   │
-│                  │  │  (Archive)  │       │  (Image Analysis)   │   │   │
-│                  │  └─────────────┘       └──────────┬──────────┘   │   │
-│                  └───────────────────────────────────┼──────────────┘   │
-│                                                      ▼                   │
-│  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │                    IMAGE GENERATION PIPELINE                       │  │
-│  │  ┌─────────────────┐         ┌─────────────────────────────────┐  │  │
-│  │  │ OpenAI GPT-4o   │────────▶│  Fal.ai Flux Schnell            │  │  │
-│  │  │ (Prompt Gen)    │         │  (Image Generation)             │  │  │
-│  │  └─────────────────┘         └───────────────┬─────────────────┘  │  │
-│  └──────────────────────────────────────────────┼────────────────────┘  │
-│                                                 ▼                        │
-│  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │                    VIDEO GENERATION PIPELINE                       │  │
-│  │  ┌─────────────────┐         ┌─────────────────────────────────┐  │  │
-│  │  │ OpenAI GPT-4o   │────────▶│  Fal.ai Kling Video             │  │  │
-│  │  │ (Motion Prompt) │         │  (Image-to-Video)               │  │  │
-│  │  └─────────────────┘         └───────────────┬─────────────────┘  │  │
-│  └──────────────────────────────────────────────┼────────────────────┘  │
-│                                                 ▼                        │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                         GMAIL DELIVERY                            │   │
-│  │                    Sends video URL to user                        │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                   USER                                       │
+│                      Uploads Image + Defines Ad Concept                      │
+└─────────────────────────────────────┬───────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           REACT FRONTEND (Vercel)                            │
+│  ┌───────────────┐  ┌───────────────┐  ┌─────────────────────────────────┐  │
+│  │     Hero      │  │    Samples    │  │          BuilderForm            │  │
+│  │   Component   │  │    Gallery    │  │   • Drag & Drop Image Upload    │  │
+│  │               │  │               │  │   • Platform/Tone Selection     │  │
+│  │   Animated    │  │   AI-Gen      │  │   • Email Input & Validation    │  │
+│  │   Thumbnails  │  │   Examples    │  │   • Real-time Form Feedback     │  │
+│  └───────────────┘  └───────────────┘  └─────────────────────────────────┘  │
+└─────────────────────────────────────┬───────────────────────────────────────┘
+                                      │ POST /webhook (multipart/form-data)
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         NGROK SECURE TUNNEL                                  │
+│                    Exposes local n8n to the internet                         │
+└─────────────────────────────────────┬───────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            N8N WORKFLOW ENGINE                               │
+│                                                                              │
+│  ┌────────────┐    ┌────────────────────────────────────────────────────┐   │
+│  │  Webhook   │───▶│              PARALLEL PROCESSING                    │   │
+│  │  Trigger   │    │  ┌──────────────┐      ┌──────────────────────┐    │   │
+│  └────────────┘    │  │ Google Drive │      │   OpenAI GPT-4o      │    │   │
+│                    │  │   (Archive)  │      │  (Image Analysis)    │    │   │
+│                    │  └──────────────┘      └──────────┬───────────┘    │   │
+│                    └───────────────────────────────────┼────────────────┘   │
+│                                                        ▼                     │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                    IMAGE GENERATION PIPELINE                          │   │
+│  │  ┌──────────────────┐         ┌────────────────────────────────┐     │   │
+│  │  │  OpenAI GPT-4o   │────────▶│    Fal.ai Flux Schnell         │     │   │
+│  │  │  (Prompt Gen)    │         │    (Image Generation)          │     │   │
+│  │  └──────────────────┘         └───────────────┬────────────────┘     │   │
+│  └───────────────────────────────────────────────┼──────────────────────┘   │
+│                                                  ▼                           │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                    VIDEO GENERATION PIPELINE                          │   │
+│  │  ┌──────────────────┐         ┌────────────────────────────────┐     │   │
+│  │  │  OpenAI GPT-4o   │────────▶│    Fal.ai Kling Video          │     │   │
+│  │  │  (Motion Prompt) │         │    (Image-to-Video)            │     │   │
+│  │  └──────────────────┘         └───────────────┬────────────────┘     │   │
+│  └───────────────────────────────────────────────┼──────────────────────┘   │
+│                                                  ▼                           │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                         GMAIL DELIVERY                                │   │
+│  │                   Sends video URL to user's email                     │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Data Flow
+1. **User Interaction** → User uploads product image and configures ad parameters
+2. **Form Submission** → Frontend sends multipart FormData to n8n webhook via ngrok tunnel
+3. **Parallel Processing** → Image archived to Google Drive + analyzed by GPT-4o
+4. **Image Generation** → AI creates UGC-style image prompt → Flux Schnell generates image
+5. **Video Generation** → AI creates motion prompt → Kling Video animates the image
+6. **Delivery** → Final video URL sent to user's email via Gmail API
+
+---
 
 ## Project Structure
 
 ```
 UGC-Ad-Builder/
-├── frontend/                    # React + Vite frontend
-│   ├── src/
-│   │   ├── components/         # Hero, Samples, BuilderForm
-│   │   ├── styles/             # Global CSS + Variables
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── public/
-│   │   └── assets/             # Sample images
-│   ├── package.json
-│   └── vite.config.js
 │
-├── UGC Ad Builder Workflow.json # n8n workflow (import this)
-├── context.md                   # Project documentation
-└── README.md
+├── frontend/                          # React + Vite Frontend Application
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Hero.jsx              # Landing section with animated thumbnails
+│   │   │   ├── Samples.jsx           # Gallery of AI-generated examples
+│   │   │   └── BuilderForm.jsx       # Main form with drag-drop & validation
+│   │   ├── styles/
+│   │   │   └── *.css                 # Component-specific styles
+│   │   ├── App.jsx                   # Root component
+│   │   ├── App.css                   # App-level styles
+│   │   ├── index.css                 # Global styles & CSS variables
+│   │   └── main.jsx                  # Application entry point
+│   ├── public/
+│   │   └── assets/                   # Static images (samples, thumbnails)
+│   ├── .env                          # Environment variables
+│   ├── package.json                  # Dependencies & scripts
+│   ├── vite.config.js                # Vite configuration
+│   └── index.html                    # HTML template
+│
+├── UGC Ad Builder Workflow.json      # n8n workflow (import this)
+├── context.md                        # Detailed project documentation
+├── CLAUDE.md                         # AI assistant guidelines
+├── README.md                         # This file
+└── LICENSE                           # MIT License
 ```
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-- **Node.js** 18+
-- **n8n** instance (self-hosted or cloud)
-- **API Keys**: OpenAI, Fal.ai, Google OAuth, Gmail OAuth
+| Requirement | Version | Purpose |
+|-------------|---------|---------|
+| Node.js | 18+ | JavaScript runtime |
+| npm | 9+ | Package manager |
+| n8n | Latest | Workflow automation |
+| ngrok | Latest | Tunnel for webhooks |
+
+### API Keys Required
+- **OpenAI API** - For GPT-4o image analysis and prompt generation
+- **Fal.ai API** - For Flux Schnell and Kling Video generation
+- **Google Cloud** - OAuth credentials for Drive and Gmail
 
 ### Frontend Setup
 
 ```bash
+# Clone the repository
+git clone https://github.com/Aimilios94/UGC-Creator.git
+cd UGC-Creator
+
 # Navigate to frontend directory
 cd frontend
 
 # Install dependencies
 npm install
+
+# Create environment file
+echo "VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook-test/ugc-ad-trigger" > .env
 
 # Start development server
 npm run dev
@@ -163,91 +251,134 @@ The frontend will be available at `http://localhost:5173`
 
 ### Backend Setup (n8n)
 
-1. **Start your n8n instance**
+1. **Start n8n instance**
    ```bash
    npx n8n
    ```
+   Open n8n at `http://localhost:5678`
 
 2. **Import the workflow**
-   - Open n8n at `http://localhost:5678`
    - Go to Workflows → Import from File
    - Select `UGC Ad Builder Workflow.json`
 
 3. **Configure credentials**
-   | Credential | Purpose |
-   |------------|---------|
-   | OpenAI API | Image analysis & prompt generation |
-   | Google Drive OAuth | Asset archival |
-   | Gmail OAuth | Video delivery |
-   | Fal.ai API Key | Image & video generation |
+   | Credential | Setup |
+   |------------|-------|
+   | OpenAI API | Add your API key in n8n credentials |
+   | Google Drive OAuth | Create OAuth app in Google Cloud Console |
+   | Gmail OAuth | Same OAuth app, enable Gmail API |
+   | Fal.ai API Key | Add as Header Auth credential |
 
 4. **Activate the workflow**
    - Toggle the workflow to "Active"
-   - Note the webhook URL (update frontend `.env` if needed)
+   - Note the webhook URL for production use
 
-### Environment Variables
+### ngrok Setup (for Production)
 
-Create `frontend/.env`:
+```bash
+# Install ngrok (if not installed)
+# Download from https://ngrok.com/download
 
-```env
-VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook-test/ugc-ad-trigger
+# Add your authtoken
+ngrok config add-authtoken YOUR_AUTH_TOKEN
+
+# Start tunnel to n8n
+ngrok http 5678
 ```
+
+Copy the generated URL (e.g., `https://xxxx.ngrok-free.app`) and update your Vercel environment variable.
+
+---
 
 ## Deployment
 
-### Frontend (Vercel)
+### Frontend Deployment (Vercel)
 
-1. Push your code to GitHub
-2. Import repository in [Vercel](https://vercel.com)
-3. Configure:
-   - **Framework Preset**: Vite
-   - **Root Directory**: `frontend`
-4. Add environment variables:
-   - `VITE_N8N_WEBHOOK_URL` → Your production n8n webhook URL
-5. Deploy
+1. **Push to GitHub**
+   ```bash
+   git add .
+   git commit -m "Deploy to production"
+   git push origin main
+   ```
 
-### Backend (n8n)
+2. **Import to Vercel**
+   - Go to [vercel.com](https://vercel.com) → Add New Project
+   - Import your GitHub repository
+   - Configure:
+     - **Framework Preset**: Vite
+     - **Root Directory**: `frontend`
 
-For production, your n8n instance must be publicly accessible:
-- **n8n Cloud**: [https://n8n.io](https://n8n.io)
-- **Self-hosted**: Deploy on a VPS with a public URL
-- Use the **Production webhook URL** (not Test URL)
+3. **Set Environment Variables**
+   - `VITE_N8N_WEBHOOK_URL` → Your ngrok URL + `/webhook/ugc-ad-trigger`
+
+4. **Deploy**
+   - Vercel auto-deploys on every push to main
+
+### Backend Deployment Options
+
+| Option | Pros | Cons |
+|--------|------|------|
+| **ngrok (Current)** | Free, easy setup | URL changes on restart |
+| **ngrok Paid** | Static subdomain | Monthly cost |
+| **n8n Cloud** | Fully managed, reliable | Subscription required |
+| **Self-hosted VPS** | Full control, static URL | Requires server management |
+
+---
 
 ## Design Principles
 
 | Principle | Implementation |
 |-----------|----------------|
-| **Premium Aesthetics** | High contrast, generous whitespace, subtle gradients |
-| **Interactivity** | Hover states, smooth animations, clear feedback |
-| **Responsiveness** | Mobile-first grid layouts |
-| **Dark Mode** | Native dark theme with glassmorphism effects |
+| **Premium Aesthetics** | High contrast dark theme, generous whitespace, subtle gradients |
+| **Glassmorphism** | Frosted glass effects with backdrop-blur and transparency |
+| **Micro-interactions** | Hover states, smooth transitions, loading feedback |
+| **Responsiveness** | Mobile-first CSS Grid layouts, fluid typography |
+| **Accessibility** | Semantic HTML, focus states, sufficient color contrast |
 
-## API Endpoints
+---
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/webhook/ugc-ad-trigger` | POST | Receives form data with image and parameters |
+## API Reference
 
-### Request Payload
+### Webhook Endpoint
 
-```json
-{
-  "image": "<binary>",
-  "email": "user@example.com",
-  "description": "Product description and ad concept",
-  "platform": "tiktok | instagram | youtube | facebook",
-  "tone": "energetic | calm | professional | playful",
-  "ratio": "9:16 | 1:1 | 16:9"
-}
-```
+| Property | Value |
+|----------|-------|
+| **URL** | `{base_url}/webhook/ugc-ad-trigger` |
+| **Method** | `POST` |
+| **Content-Type** | `multipart/form-data` |
+
+### Request Parameters
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `image` | File | Yes | Product image (PNG, JPG, WebP) |
+| `email` | String | Yes | Delivery email address |
+| `description` | String | Yes | Product description & ad concept |
+| `platform` | String | Yes | `tiktok` \| `instagram` \| `youtube` \| `facebook` |
+| `tone` | String | Yes | `energetic` \| `calm` \| `professional` \| `playful` |
+| `ratio` | String | Yes | `9:16` \| `1:1` \| `16:9` |
+
+### Response
+
+| Status | Description |
+|--------|-------------|
+| `200 OK` | Request accepted, processing started |
+| `400 Bad Request` | Invalid or missing parameters |
+| `500 Error` | Server/workflow error |
+
+---
 
 ## Roadmap
 
 - [ ] Multiple image upload support
-- [ ] Video preview before email delivery
+- [ ] Real-time video preview before email delivery
 - [ ] Custom branding/watermark options
 - [ ] Template library for different industries
-- [ ] Analytics dashboard
+- [ ] User dashboard with generation history
+- [ ] Analytics and usage tracking
+- [ ] A/B testing for ad variations
+
+---
 
 ## Contributing
 
@@ -259,12 +390,25 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
+---
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
+## Acknowledgments
+
+- [OpenAI](https://openai.com) for GPT-4o vision and language models
+- [Fal.ai](https://fal.ai) for Flux Schnell and Kling Video APIs
+- [n8n](https://n8n.io) for the powerful workflow automation platform
+- [Vercel](https://vercel.com) for seamless frontend deployment
+- [ngrok](https://ngrok.com) for secure tunneling solution
+
+---
+
 <p align="center">
-  Made with AI by <a href="https://github.com/aimilios944">@aimilios944</a>
+  <strong>Built with modern technologies and AI-powered automation</strong><br/>
+  <a href="https://github.com/Aimilios94">@Aimilios94</a>
 </p>
