@@ -12,7 +12,9 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 - **Database:** `db/schema.sql` (jobs, scenes, stage_runs, assets, media_cache, llm_calls) with pgvector, applied by `backend/scripts/apply_schema.py`; Neon connections retry while the database wakes up.
 - **Frontend:** a guided flow (Brief → Storyboard → Generate) with stage status, live cost and a player; an honest landing page; a privacy notice naming each provider; `lib/api.js`.
 - **Docker Compose** (postgres with pgvector, api, worker, frontend; mock providers by default) and **CI** (eslint + build, ruff + pytest on a Postgres service container with mock providers and blocked network, Docker build and start).
-- 60 backend tests, including the ten M1 guardrails of the plan.
+- 61 backend tests, including the ten M1 guardrails of the plan.
+- **Deployed:** Cloud Run API and worker job in europe-west4, private bucket with a 30-day rule on `jobs/`, secrets in Secret Manager with per-service access, Artifact Registry keeping the last 5 images ([D19](DECISIONS.md)).
+- **Live smoke test (18 Nov 2026):** one paid run on the v2 preview: storyboard → approval → reference image → 5 s video, finished with the browser closed; recorded cost 0.3425 EUR.
 - Project documents: DECISIONS, APP_OVERVIEW, problem statement, roadmap, setup and privacy docs, M1 design note.
 
 ### Changed

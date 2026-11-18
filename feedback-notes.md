@@ -8,5 +8,8 @@ Findings from real use and testing, by round. Each finding that changes the prod
 - Text-to-image lost the real product. → image editing from the uploaded photo, [D10](DECISIONS.md).
 - The landing page showed invented statistics. → honest landing page (M1).
 
-## Round 1 — M1 live smoke test
-*(to be filled after the first real run on the deployed site)*
+## Round 1 — M1 live smoke test (18 Nov 2026)
+- The full leg works on the deployed stack: storyboard in about 35 s, image and video in about 2 min, the job finished with the browser closed. Real recorded cost 0.3425 EUR (estimate 0.3391 EUR + 0.003 EUR of LLM).
+- Product fidelity is good on text and shape; the bottle's colour drifted lighter and more translucent. → input for the M3 judge rubric (colour fidelity).
+- The storyboard step takes about 35 s with a spinner and no progress detail. → consider a progress hint in the Brief step (M2 polish).
+- The landing page's sample images all show people, and `frontend/public/assets/user_upload.png` is a browser screenshot, not a product. → seeded demo ads replace them in M4.
