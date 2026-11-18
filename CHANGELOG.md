@@ -22,6 +22,11 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 - The v1 n8n frontend components, unused CSS and `framer-motion`.
 - `.agent/skills/` (two generic copied skills) and `context.md` (folded into `APP_OVERVIEW.md`).
 
+## Author identity (18 Nov 2026)
+
+### Changed
+- Every commit's author and committer rewritten from an unlinked `aimilios944` noreply address to `Aimilios94 <181588880+Aimilios94@users.noreply.github.com>` (`git filter-repo --mailmap`), so GitHub links them to the account. File contents, dates and messages (including the `Co-Authored-By` lines) are unchanged. Force-pushed on the owner's go.
+
 ## Step 0 — security clean-up (18 Nov 2026)
 
 ### Security

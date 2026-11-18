@@ -59,7 +59,7 @@ The schema file is idempotent; run it after every change to `db/schema.sql`.
 
 Project `ugc-ad-builder`, region `europe-west4`. No service-account key files: `gcloud auth login` locally, service accounts on Cloud Run ([D16](../DECISIONS.md), [D19](../DECISIONS.md)). These are the commands that were run on 18 Nov 2026.
 
-On this Windows machine the user environment sets `CURL_CA_BUNDLE=NUL`, which leaves gcloud's Python with no CA certificates. Run gcloud with that variable cleared (Git Bash: `env -u CURL_CA_BUNDLE gcloud ...`; PowerShell: `$env:CURL_CA_BUNDLE = $null`). gcloud is installed per user in `%LOCALAPPDATA%\google-cloud-sdk`.
+gcloud is installed per user in `%LOCALAPPDATA%\google-cloud-sdk` (on PATH). If gcloud fails with `NO_CERTIFICATE_OR_CRL_FOUND`, check for a `CURL_CA_BUNDLE` environment variable pointing to an empty file: Python's `requests` uses it as its only CA bundle (one was set to `NUL` on this machine and has been removed).
 
 ```bash
 gcloud config set project ugc-ad-builder
