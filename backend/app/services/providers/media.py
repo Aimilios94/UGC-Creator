@@ -220,6 +220,21 @@ def wait_for(
         sleep(interval_s)
 
 
+class UnavailableMedia:
+    """Stands in where rendering never happens (the API service): it holds no fal key."""
+
+    name = "unavailable"
+
+    def _refuse(self, *args, **kwargs):
+        raise ProviderNotConfigured("this process does not render; the worker does")
+
+    submit = status = result = download = _refuse
+
+
+def build_media_or_unavailable(settings: Settings) -> MediaProvider:
+    return build_media(settings) if settings.media_configured else UnavailableMedia()
+
+
 def build_media(settings: Settings) -> MediaProvider:
     if settings.media_provider == "mock":
         return MockMedia()

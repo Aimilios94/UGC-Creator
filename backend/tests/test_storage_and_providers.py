@@ -109,6 +109,15 @@ def test_fal_result_parsing():
     assert r.url.endswith("out.jpg") and (r.width, r.height) == (720, 1280)
 
 
+def test_api_without_a_fal_key_gets_a_media_stand_in_that_refuses_to_render():
+    from app.services.providers.media import UnavailableMedia, build_media_or_unavailable
+
+    m = build_media_or_unavailable(Settings(_env_file=None, media_provider="fal", fal_key=""))
+    assert isinstance(m, UnavailableMedia)
+    with pytest.raises(ProviderNotConfigured):
+        m.submit(None)
+
+
 def test_real_providers_refuse_to_start_without_keys():
     with pytest.raises(ProviderNotConfigured):
         build_media(Settings(_env_file=None, media_provider="fal", fal_key=""))

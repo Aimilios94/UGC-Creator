@@ -16,7 +16,7 @@ from fastapi import Depends, Header, HTTPException
 from .config import Settings, get_settings
 from .repository import Database
 from .services.pipeline import Context
-from .services.providers.media import build_media
+from .services.providers.media import build_media_or_unavailable
 from .services.providers.storage import build_storage
 
 SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")
@@ -26,7 +26,8 @@ SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{22,128}$")
 def _context() -> Context:
     s = get_settings()
     db = Database(s.database_url, connect_timeout_s=s.db_connect_timeout_s, retries=s.db_connect_retries)
-    return Context(settings=s, db=db, storage=build_storage(s), media=build_media(s))
+    # The API never renders, so in production it holds no fal key (least privilege).
+    return Context(settings=s, db=db, storage=build_storage(s), media=build_media_or_unavailable(s))
 
 
 def get_ctx() -> Context:
