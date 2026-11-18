@@ -43,7 +43,7 @@ function Footer() {
         </div>
       )}
       <p className="muted small">
-        UGC Ad Builder v2 · an engineering portfolio project · <a href="#/privacy">Privacy notice</a>
+        UGC Ad Builder v2 · <a href="#/privacy">Privacy notice</a>
       </p>
     </footer>
   );

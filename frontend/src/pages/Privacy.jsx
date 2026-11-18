@@ -37,7 +37,7 @@ export default function Privacy() {
   return (
     <div className="page prose">
       <h1>Privacy notice</h1>
-      <p className="muted">Last updated: 18 November 2026. This is a portfolio project in early access.</p>
+      <p className="muted">Last updated: 18 November 2026. The app is in early access.</p>
 
       <h2>What we collect</h2>
       <ul>

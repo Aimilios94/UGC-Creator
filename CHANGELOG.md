@@ -22,7 +22,16 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 
 ### Removed
 - The v1 n8n frontend components, unused CSS and `framer-motion`.
+- `frontend/public/assets/user_upload.png` (a browser screenshot, not a product photo; it stays in old history).
+- The "portfolio project" wording from the footer, the privacy notice and APP_OVERVIEW.
 - `.agent/skills/` (two generic copied skills) and `context.md` (folded into `APP_OVERVIEW.md`).
+
+## v1 preserved (18 Nov 2026)
+- Tag `v1-final` on `main` before the M1 merge and the GitHub release "v1 — n8n prototype".
+- `docs/before-after/v1/`: full-page screenshots of the v1 production site and its known issues; the build stays online at its permanent Vercel URL.
+
+### Security
+- The access code was rotated (new value in `backend/.env` and Secret Manager, old secret version disabled, old code refused).
 
 ## Author identity (18 Nov 2026)
 

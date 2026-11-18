@@ -6,7 +6,7 @@ A studio that turns one product photo and a short brief into a finished, ready-t
 **One line:** product photo + brief in → storyboard you approve → a video ad that keeps your real product in every frame, with the cost of every step shown.
 
 ## Who it's for
-Small brands and marketers who need short social video ads (TikTok, Instagram Reels, YouTube Shorts, Facebook) without a shoot. In this portfolio version there is no sign-in: each browser sees only the ads it created.
+Small brands and marketers who need short social video ads (TikTok, Instagram Reels, YouTube Shorts, Facebook) without a shoot. There is no sign-in: each browser sees only the ads it created.
 
 ## Core ideas
 - **The real product stays in the ad.** The uploaded photo is edited into each scene (image editing, not text-to-image), and each scene image is animated (image-to-video).
