@@ -30,17 +30,18 @@ Milestones: M1–M4 = MVP, M5–M6 = v2.1, week 7 = buffer (plan §17). Each mil
 - Python 3.12 via `uv`; Node for the frontend (`cd frontend && npm install`).
 - Still to come: Anthropic key (before M4), Sentry (M2, EU org), Resend (M3), LangSmith (M4).
 
-## Decisions agreed before M1 (to be recorded in `DECISIONS.md` in M1)
+## Decisions
 
-1. Milestone PRs go `v2` → `main`, merged only when "Done when" passes and the backend is deployed. If the deploy slips to M2, M1 is not merged until then.
-2. All user-facing money is in EUR, with a USD display option under Advanced settings. M1: `JOB_COST_CAP_EUR=1`, `DAILY_SPEND_LIMIT_EUR=3`; raise both in M2 for full 3-scene ads and record why. `DEMO_POT_EUR` from M4.
-3. OpenAI is the default text provider until the M4 eval decides.
-4. Removing `.agent/skills` and `context.md` and creating the project documents happens in M1.
-5. "Git history no longer holds the key" means this repo's history; the fork (jovimars) and GitHub's cache are out of reach.
-6. Cron every 15 minutes at an odd minute (recovery window about 15–30 min). GitHub disables scheduled workflows after 60 days without activity in public repos: documented.
+All decisions are in `DECISIONS.md` (D1–D6 are the ones agreed before M1). Read it before changing spend, queue, privacy or provider code.
 
-Verified facts (18 Nov 2026): fal `fal-ai/nano-banana/edit` 0.0398 USD per image; `fal-ai/kling-video/v2.5-turbo/pro/image-to-video` 0.07 USD per second (fal returns units as `images` / `seconds`). Use the `X-Fal-Store-IO: 0` header. Clip ratio comes from the reference image, so generate it at the master ratio. Cloud Run Job: `--task-timeout=45m`, `--max-retries=1`; the API's service account gets `roles/run.jobsExecutor` on the job only.
+## Working notes
+
+- Backend: `cd backend`, venv `.venv` (Python 3.12). Tests need a Postgres: `docker run -d --name ugc-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=ugc_test -p 55432:5432 pgvector/pgvector:pg18`, then `TEST_DATABASE_URL=postgresql://postgres:test@localhost:55432/ugc_test .venv/Scripts/python -m pytest` and `.venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .`.
+- Frontend: `cd frontend && npm run lint && npm run build`.
+- Whole stack, mock providers: `docker compose up --build` (http://localhost:5173).
+- Vercel project `ugc-creator` (ugc-creator-delta.vercel.app), root directory `frontend`.
+- Setup and deploy commands: `docs/SETUP.md`. Milestone design notes: `docs/notes/`.
 
 ## Current status
 
-2026-11-18: **Step 0 complete.** Old fal key revoked (401); workflow sanitised into `legacy/n8n/`; env examples added; history purged and force-pushed (`main` = `b1d69a4` on GitHub); a fresh clone scans clean (0 hits). Old SHAs remain reachable on GitHub's cache and in the jovimars fork (accepted, decision 5). Backups in `C:\dev\backups` (delete after M1 is merged). Now on branch `v2`: M1 started (plan §17). gcloud not installed yet: run `winget install --id Google.CloudSDK -e` without `--silent` so the user can approve the admin prompt.
+2026-11-18: Step 0 complete (key revoked, history purged, `main` = `b1d69a4`). **M1 in progress on `v2`**: backend (pipeline leg, job runner, spend limits, 60 tests), frontend flow, Compose, CI and project documents done and browser-tested locally with mock providers. Left for M1: CI green on GitHub, schema on Neon, deploy (gcloud not installed: run `winget install --id Google.CloudSDK -e` without `--silent` so the user approves the admin prompt; user signs in), Vercel env, one paid live smoke run (only with the user's go), then the M1 PR. Backups in `C:\devackups` (delete after M1 is merged).

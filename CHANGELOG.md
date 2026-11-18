@@ -1,0 +1,35 @@
+# Changelog
+
+All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https://keepachangelog.com). The *why* behind changes lives in [DECISIONS.md](DECISIONS.md).
+
+## [Unreleased] — v2, M1 (secure base and first pipeline leg)
+
+### Added
+- **Python backend** (`backend/`): FastAPI API and a worker that share one Docker image. A brief and one product photo produce a product analysis and a 3-scene storyboard with three tagged hooks; after approval, scene 1 gets a reference image of the real product (Nano Banana edit on fal) and a 5-second image-to-video clip (Kling 2.5 Turbo Pro on fal).
+- **Spend controls:** one price table for every billing unit, a per-job cost cap and a global daily spend limit checked before every paid stage, all in EUR at one fixed rate ([D2](DECISIONS.md), [D8](DECISIONS.md), [D9](DECISIONS.md)).
+- **Job runner:** idempotent Approve, `SKIP LOCKED` claim, resume from `stage_runs` (a submitted render is polled, never paid twice), max 2 attempts with the error stored and shown, empty queue exits 0.
+- **Privacy and access:** session-scoped jobs, signed expiring file URLs, an access-code gate that fails closed in production, an upload guard that strips EXIF/GPS, fal request storage off and fal outputs expiring after one hour.
+- **Database:** `db/schema.sql` (jobs, scenes, stage_runs, assets, media_cache, llm_calls) with pgvector, applied by `backend/scripts/apply_schema.py`; Neon connections retry while the database wakes up.
+- **Frontend:** a guided flow (Brief → Storyboard → Generate) with stage status, live cost and a player; an honest landing page; a privacy notice naming each provider; `lib/api.js`.
+- **Docker Compose** (postgres with pgvector, api, worker, frontend; mock providers by default) and **CI** (eslint + build, ruff + pytest on a Postgres service container with mock providers and blocked network, Docker build and start).
+- 60 backend tests, including the ten M1 guardrails of the plan.
+- Project documents: DECISIONS, APP_OVERVIEW, problem statement, roadmap, setup and privacy docs, M1 design note.
+
+### Changed
+- The page title is "UGC Ad Builder"; the landing page no longer shows invented statistics or view counts, and its illustrations are labelled as such.
+
+### Removed
+- The v1 n8n frontend components, unused CSS and `framer-motion`.
+- `.agent/skills/` (two generic copied skills) and `context.md` (folded into `APP_OVERVIEW.md`).
+
+## Step 0 — security clean-up (18 Nov 2026)
+
+### Security
+- The fal key that was public in the v1 workflow file was revoked (confirmed dead: HTTP 401).
+- The v1 workflow moved to `legacy/n8n/`, sanitised: placeholders for the key, the recipient address and credential IDs; instance, workflow and webhook IDs removed.
+- The key and the address were purged from this repo's git history with `git filter-repo --replace-text` and force-pushed. A fork and GitHub's cache of old commits are out of reach ([D5](DECISIONS.md)).
+- `backend/.env.example` and `frontend/.env.example` list every setting by name.
+
+## v1 — January 2026 (prototype, kept in `legacy/n8n/`)
+
+A React/Vite landing page posting to an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) through an ngrok tunnel. An audit in November 2026 found that it never worked end to end: the form's email field was never read, the frontend posted to n8n's test-only webhook path, and the text-to-image step meant the real product never appeared in the ad. The workflow's notes and the landing page named NanoBanana and Veo 3.1 while the nodes used Flux and Kling. v2 is the rebuild.
