@@ -33,3 +33,6 @@ __pycache__/
 
 # Local storage (uploads and generated media in dev)
 backend/data/
+
+# Local browser-test output
+.playwright-mcp/
