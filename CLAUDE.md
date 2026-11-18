@@ -43,4 +43,4 @@ Verified facts (18 Nov 2026): fal `fal-ai/nano-banana/edit` 0.0398 USD per image
 
 ## Current status
 
-2026-11-18: Old leaked fal key confirmed revoked (401). Step 0 in progress on `main` (backup done, CLAUDE.md rewritten); history purge awaiting verification and the user's separate go for the force push. Next: v2 branch and M1 (plan §17).
+2026-11-18: Old leaked fal key confirmed revoked (401). Step 0 done locally on `main`: backups in `C:\dev\backups`, workflow sanitised into `legacy/n8n/`, env examples added, history purged with `git filter-repo --replace-text` and verified (0 hits). **Force push not done yet: it needs the user's separate go.** After the push: verify a fresh clone, then create `v2` and start M1 (plan §17). gcloud not installed yet (installer needs an admin prompt).
