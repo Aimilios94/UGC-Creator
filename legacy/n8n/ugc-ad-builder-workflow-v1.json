@@ -14,8 +14,7 @@
       "position": [
         9280,
         3696
-      ],
-      "webhookId": "0d034abe-9725-4da6-8279-10f1fa7837d8"
+      ]
     },
     {
       "parameters": {
@@ -28,8 +27,7 @@
         "folderId": {
           "__rl": true,
           "mode": "list",
-          "value": "root",
-          "cachedResultName": "/ (Root folder)"
+          "value": "REPLACE_WITH_FOLDERID"
         },
         "options": {}
       },
@@ -43,7 +41,7 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "aOVjQqxzQRGHbem3",
+          "id": "REPLACE_ME",
           "name": "Google Drive account"
         }
       }
@@ -104,7 +102,7 @@
       ],
       "credentials": {
         "openAiApi": {
-          "id": "F6tNxjPR5tEnWhNQ",
+          "id": "REPLACE_ME",
           "name": "OpenAi account"
         }
       }
@@ -132,7 +130,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Key ***REMOVED-FAL-KEY***"
+              "value": "Key YOUR_FAL_KEY"
             }
           ]
         },
@@ -192,7 +190,7 @@
       ],
       "credentials": {
         "openAiApi": {
-          "id": "F6tNxjPR5tEnWhNQ",
+          "id": "REPLACE_ME",
           "name": "OpenAi account"
         }
       }
@@ -220,7 +218,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Key ***REMOVED-FAL-KEY***"
+              "value": "Key YOUR_FAL_KEY"
             }
           ]
         },
@@ -250,7 +248,7 @@
     },
     {
       "parameters": {
-        "sendTo": "***REMOVED-EMAIL***",
+        "sendTo": "you@example.com",
         "subject": "Your AI UGC Ad is ready!",
         "message": "=Check out your new ad video! Generated based on your concept: {{ $json.video.url }}",
         "options": {
@@ -265,10 +263,9 @@
         10416,
         4432
       ],
-      "webhookId": "cd6d3d63-d3f5-4467-bc27-2dcddca5f910",
       "credentials": {
         "gmailOAuth2": {
-          "id": "CwS5OPIM4cfUTFij",
+          "id": "REPLACE_ME",
           "name": "Gmail account"
         }
       }
@@ -451,11 +448,8 @@
     "availableInMCP": false,
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "versionId": "96f46413-ab91-4d1b-b480-0254d60964f5",
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "cc3d4cb8dc409222627047c4e903bfa4e8917a1787cc5104b10ac3bf498b9d60"
+    "templateCredsSetupCompleted": true
   },
-  "id": "XVSluPKKxsHJEoHO",
   "tags": []
 }

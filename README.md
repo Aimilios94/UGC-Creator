@@ -202,7 +202,7 @@ UGC-Ad-Builder/
 │   ├── vite.config.js                # Vite configuration
 │   └── index.html                    # HTML template
 │
-├── UGC Ad Builder Workflow.json      # n8n workflow (import this)
+├── legacy/n8n/                       # Sanitised v1 n8n workflow (import this)
 ├── context.md                        # Detailed project documentation
 ├── CLAUDE.md                         # AI assistant guidelines
 ├── README.md                         # This file
@@ -259,7 +259,8 @@ The frontend will be available at `http://localhost:5173`
 
 2. **Import the workflow**
    - Go to Workflows → Import from File
-   - Select `UGC Ad Builder Workflow.json`
+   - Select `legacy/n8n/ugc-ad-builder-workflow-v1.json`
+   - Add your own credentials: the file holds placeholders (`YOUR_FAL_KEY`, `REPLACE_ME`, `you@example.com`)
 
 #### n8n Workflow Preview
 
