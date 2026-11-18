@@ -95,3 +95,8 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 
 - **Problem:** On a Windows checkout with `core.autocrlf`, the Dockerfile's shell commands and YAML can get CRLF line endings.
 - **Decision:** `.gitattributes` pins `eol=lf` for text and marks media as binary.
+
+## D19 — Deploy: least privilege per service, cost guards, settings in files `[eng]` `[user]`
+
+- **Decision:** Two service accounts. `ugc-api` reads only the OpenAI key, the database URL and the access codes, and holds `roles/run.jobsExecutor` on the worker job only; it has no fal key, because it never renders (it gets a media stand-in that refuses). `ugc-worker` reads only the fal key and the database URL. Secrets live in Secret Manager in europe-west4. Cost guards (owner's request): the API scales to zero (min 0, max 2 instances); Artifact Registry keeps the last 5 images; the bucket deletes `jobs/*` after 30 days, matching `RETENTION_DAYS`, so future seeded demo ads under another prefix stay. Non-secret settings are in `deploy/gcp/*.env.yaml`.
+- **Result (18 Nov 2026):** an execution on the empty Neon queue exited 0; `/health/db` answers; generation without the access code gets 403; CORS allows only the listed site.
