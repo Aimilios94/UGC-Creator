@@ -50,12 +50,12 @@ See [DECISIONS.md](../../DECISIONS.md) D1–D18. The ones that shape the code mo
 | An asset URL stops working after it expires | Tested (403) |
 | A double-clicked Approve creates one job | Tested (API and browser double-click) |
 | Cost estimate correct for every billing unit | Tested |
-| CI is green | Pending first run on GitHub |
+| CI is green | Done: run on `v2` green (60 backend tests, none skipped; lint; build; Docker) |
 | Git history no longer holds the key or the address | Done (Step 0; fresh clone scans 0) |
 
 ## What is next
-1. CI green on GitHub.
-2. Apply the schema to Neon.
+1. ~~CI green on GitHub~~ (done).
+2. ~~Apply the schema to Neon~~ (done: 6 tables, pgvector 0.8.7, re-run is a no-op).
 3. Deploy: install gcloud (needs an admin prompt), create the Cloud Run service, job, bucket and secrets, connect Vercel.
 4. One live smoke run on the deployed site (paid, about 0.35 EUR) — only with the owner's go.
 5. M2: full 3-scene ads.
