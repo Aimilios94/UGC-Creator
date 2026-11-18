@@ -1,0 +1,18 @@
+target-version = "py312"
+line-length = 120
+extend-exclude = [".venv", "data"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE"]
+ignore = [
+    "S101",  # assert is how pytest checks
+    "S608",  # SQL is built only from constants; values are always bound parameters
+    "B008",  # FastAPI's Depends()/File() in argument defaults
+]
+
+[lint.isort]
+known-first-party = ["app", "scripts", "conftest", "helpers"]
+
+[lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "S311", "E402", "BLE001"]
+"scripts/*" = ["E402"]

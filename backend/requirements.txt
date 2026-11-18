@@ -1,0 +1,13 @@
+# Runtime dependencies (the Docker image installs only these). Python 3.12.
+fastapi>=0.165,<1
+uvicorn[standard]>=0.54
+pydantic>=2.14,<3
+pydantic-settings>=2.16
+python-multipart>=0.0.34
+psycopg[binary]>=3.3,<4
+httpx>=0.28
+Pillow>=13.0
+pydantic-ai-slim[openai,anthropic]>=2.70,<3
+fal-client>=1.0.3,<2
+google-cloud-storage>=3.17
+google-auth>=2.62
