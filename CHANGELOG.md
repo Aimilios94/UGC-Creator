@@ -6,6 +6,10 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 ### Security
 - The access code was rotated again (19 Nov 2026); old secret versions disabled.
 
+### Docs
+- README: M1 shown as live (docs-only PR #2, `f657691`).
+- README: a "Try it" line at the top with links to both v2 (current) and v1 (the original n8n prototype, frozen) (docs-only PR #3, `360cfbc`). APP_OVERVIEW links the v1 site too.
+
 M2 (full 3-scene ads) is next.
 
 ## [v2 M1] — 2026-11-19 (PR #1, merge commit `64156d1`)
