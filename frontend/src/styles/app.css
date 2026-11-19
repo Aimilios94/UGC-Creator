@@ -163,6 +163,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
   grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) minmax(170px, 250px);
   grid-template-areas: "socks copy phone" "hiker copy game";
 }
+/* Wide screens: side cards pushed out a little (owner, 19 Nov). To go back to the previous look, delete this rule (the hero used to sit inside the 1200px page width). */
+@media (min-width: 1360px) { .lp-hero { margin-inline: -48px; } .lp-copy h1 { max-width: 628px; } }
 .lp-copy { grid-area: copy; text-align: center; display: flex; flex-direction: column; align-items: center; }
 .lp-badge {
   display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; margin-bottom: 20px;

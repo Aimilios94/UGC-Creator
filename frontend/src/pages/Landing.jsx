@@ -112,7 +112,7 @@ function HeroCarousel({ className, slides }) {
   const [paused, setPaused] = useState(false);
   useEffect(() => {
     if (REDUCED_MOTION || paused) return undefined;
-    const t = setInterval(() => setI((n) => (n + 1) % slides.length), 4500);
+    const t = setInterval(() => setI((n) => (n + 1) % slides.length), 4000);
     return () => clearInterval(t);
   }, [paused, slides.length]);
   return (
