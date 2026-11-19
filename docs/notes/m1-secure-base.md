@@ -71,3 +71,4 @@ The estimate before approval was 0.3391 EUR for the render; the LLM steps cost 0
 - The smoke-test product photo was a drawn product (no people), because the repo's sample images all show people.
 - The owner's own manual test (also about 0.34 EUR) worked, but the model-rendered on-screen text came out garbled: captions must be burned in by `compose.py` (M2) and the M3 judge must check text fidelity.
 - CI annotations to fix in M2: update `actions/checkout` and `actions/setup-python` to their current major versions and pin the runner to a specific Ubuntu version instead of `ubuntu-latest`.
+- GitHub ruleset on `main` (M2, owner's request): block force pushes and deletion, require the CI checks `frontend`, `backend` and `docker` to pass before merging; no required reviews. It can be created with `gh api` (the owner's CLI login has admin rights), so no clicks are needed. After it exists, any history rewrite on `main` needs the ruleset lifted first, with the owner's go.

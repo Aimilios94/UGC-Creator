@@ -108,4 +108,4 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 
 ## D21 — The access code is rotated by adding a secret version and disabling the old one `[eng]`
 
-- **Decision:** A new code is generated into `backend/.env` and added as a new version of the `access-codes` secret; the API gets a new revision so it reads `latest`; the old version is disabled. The code is never printed or committed. Done once on 18 Nov 2026 (old code refused, new code accepted). Steps in `docs/SETUP.md`.
+- **Decision:** A new code is generated into `backend/.env` and added as a new version of the `access-codes` secret; the API gets a new revision so it reads `latest`; the old version is disabled. The code is never printed or committed. Done on 18 Nov 2026 and again on 19 Nov 2026 (each time: old code refused, new code accepted, old version disabled). Steps in `docs/SETUP.md`.

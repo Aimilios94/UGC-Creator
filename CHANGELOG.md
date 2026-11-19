@@ -3,7 +3,10 @@
 All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https://keepachangelog.com). The *why* behind changes lives in [DECISIONS.md](DECISIONS.md).
 
 ## [Unreleased]
-Nothing yet. M2 (full 3-scene ads) is next.
+### Security
+- The access code was rotated again (19 Nov 2026); old secret versions disabled.
+
+M2 (full 3-scene ads) is next.
 
 ## [v2 M1] — 2026-11-19 (PR #1, merge commit `64156d1`)
 
