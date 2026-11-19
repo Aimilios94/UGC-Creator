@@ -12,6 +12,8 @@
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT" />
 </p>
 
+> **Try it:** [v2, current](https://ugc-creator-delta.vercel.app) · [v1, the original n8n prototype (frozen)](https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app)
+>
 > **Status: v2, milestone M1 of 6 complete and live** at https://ugc-creator-delta.vercel.app (generation needs an access code while in early access). The first pipeline leg works end to end on the deployed stack: brief → storyboard you approve → a reference image of your product → a 5-second video clip, for about 0.34 EUR. Full ads with voiceover, captions and music arrive in M2; measured quality and the public demo in M4. The plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-plan.md).
 
 ## What it does
