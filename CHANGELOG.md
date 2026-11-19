@@ -5,7 +5,7 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 ## [Unreleased]
 ### Changed
 - Landing page refreshed in the v1 look with v2 content ([D24](DECISIONS.md)): centred headline with tilted example scenes (grip socks, herbal tea, game art marked "Coming soon") and a looping football clip in a phone frame; the four steps as one strip; "Create an ad" and "See how it works" buttons; footer links to GitHub, docs and v1; Open Graph and Twitter share tags with a 1200×630 image. The scenes are marked as examples. Example assets: Nano Banana Pro and Kling v3 Pro on fal, 7.33 USD ≈ 6.38 EUR, made once outside the app. Unused v1 images removed from `frontend/public/assets/`.
-- Spend limits raised for full 3-scene ads: per-job cap 1 → 1.75 EUR, daily limit 3 → 4 EUR (owner's decision, 19 Nov 2026; math in [D2](DECISIONS.md)). Set in `config.py`, `backend/.env.example` and `deploy/gcp/*.env.yaml`, and applied to the Cloud Run API and worker job.
+- Spend limits raised for full 3-scene ads: per-job cap 1 → 1.75 EUR, daily limit 3 → 4 EUR (owner's decision, 19 Nov 2026; math in [D2](DECISIONS.md)). Set in `config.py`, `backend/.env.example` and `deploy/gcp/*.env.yaml`, and applied to the Cloud Run API and worker job. The `/config` test now expects the 1.75 EUR cap (it still expected 1.0, so CI on `v2` was red from that commit until this fix).
 
 ### Security
 - The access code was rotated again (19 Nov 2026); old secret versions disabled.
