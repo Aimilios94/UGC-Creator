@@ -20,7 +20,7 @@ Brief → Storyboard → Generate → Review → Launch kit → Performance. Mil
 | Milestone | What ships |
 | --- | --- |
 | M1 ✅ (live since 19 Nov 2026) | Brief, storyboard, approval, scene 1 image + video, cost cap, privacy notice, CI, deploy |
-| M2 | Full 3-scene ads: voiceover, captions, music, end card, ratios; themes; History; Sentry; cleanup cron |
+| M2 (in progress) | Full 3-scene ads: voiceover, captions, music, end card, ratios; themes; History; Sentry; cleanup cron |
 | M3 | AI judge, Hook Lab, Post Kit (texts, checklist, ZIP), ad policy check |
 | M4 (MVP) | Self-fix loop, evaluation harness, model comparison, sample-product demo, public demo under limits |
 | v2.1 | Performance page, Ad Review, EU rules page, Ask assistant, batch runs |
@@ -31,7 +31,7 @@ React/Vite frontend (Vercel) → FastAPI API (Cloud Run service) → Postgres jo
 Live: site https://ugc-creator-delta.vercel.app, API https://ugc-api-1002867777166.europe-west4.run.app. Locally, Docker Compose runs the same pieces with mock providers.
 
 ## History
-v1 (January 2026) was a React page plus an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) reached through an ngrok tunnel, deployed at ugc-creator-delta.vercel.app (Vercel project `ugc-creator`). It depended on a laptop running n8n, never delivered an email to the user, and lost the real product because its image step was text-to-image. It is kept, sanitised, in `legacy/n8n/`; its code is tagged `v1-final`, and screenshots of the site are in `docs/before-after/v1/`. The v1 build stays online at https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app, linked next to v2 at the top of the README. v2 replaced it in production on 19 Nov 2026.
+v1 (January 2026) was a React page plus an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) reached through an ngrok tunnel, deployed at ugc-creator-delta.vercel.app (Vercel project `ugc-creator`). It depended on a laptop running n8n, never delivered an email to the user, and lost the real product because its image step was text-to-image. It is kept, sanitised, in `legacy/n8n/`; its code is tagged `v1-final`, and screenshots of the site are in `docs/before-after/v1/`. The v1 build stays online at https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app, linked next to v2 at the top of the README. v2 replaced it in production on 19 Nov 2026; the v2 landing page later took the v1 look with v2's own example scenes (D24).
 
 ## Out of scope
 Pasting a shop link, virtual creators, many languages, direct posting to TikTok/Instagram, live ad-platform APIs. See [roadmap.md](roadmap.md).

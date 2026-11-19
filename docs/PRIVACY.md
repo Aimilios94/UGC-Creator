@@ -1,6 +1,6 @@
 # Privacy: data flows
 
-The in-app notice is `frontend/src/pages/Privacy.jsx`. This page is the engineering view of the same flows. Last checked: 18 Nov 2026.
+The in-app notice is `frontend/src/pages/Privacy.jsx`. This page is the engineering view of the same flows. Last checked: 19 Nov 2026.
 
 | Data | Where it goes | Region | Kept |
 | --- | --- | --- | --- |
@@ -11,7 +11,7 @@ The in-app notice is `frontend/src/pages/Privacy.jsx`. This page is the engineer
 | Browser session ID | Browser localStorage; only its SHA-256 on the server | — | Until the user clears the browser |
 | IP address | Vercel and Cloud Run request logs | Vercel edge; Google europe-west4 | Provider log retention |
 
-Not collected: accounts, names, analytics, tracking cookies. The email address for the Post Kit arrives in M3 (stored only to send, then deleted); Sentry (M2, EU region, with a scrubber) and LangSmith (M4) are added to this table when they ship.
+Not collected: accounts, names, analytics, tracking cookies. The fields marked "Soon" on the Create page (email, logo, brand colours and the other previews) stay in the browser and are not sent to the API (D24). The email address for the Post Kit arrives in M3 (stored only to send, then deleted); Sentry (M2, EU region, with a scrubber) and LangSmith (M4) are added to this table when they ship.
 
 ## Rules in code
 - Upload guard: JPEG/PNG/WebP only, size cap, full decode, re-encode from pixels (no metadata survives) — `backend/app/services/uploads.py`.

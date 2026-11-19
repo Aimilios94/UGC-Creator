@@ -4,7 +4,7 @@ The milestone plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-p
 
 ## Now
 - **M1** ✅ secure base and first pipeline leg (merged and live, 19 Nov 2026).
-- **M2** (next): full 3-scene ads.
+- **M2** (in progress): full 3-scene ads. Done so far: CI on current action versions with a pinned runner, and a ruleset on `main` (D23). Before it: a landing-page refresh in the v1 look (D24, PR #4).
 - Then: M3 judge + Hook Lab + Post Kit, M4 measured public MVP, then v2.1 (M5–M6).
 
 ## Later extras

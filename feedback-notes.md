@@ -15,3 +15,12 @@ Findings from real use and testing, by round. Each finding that changes the prod
 - The landing page's sample images all show people, and `frontend/public/assets/user_upload.png` was a browser screenshot, not a product (deleted). → seeded demo ads replace the samples in M4; until then the landing page shows example scenes in the v1 look (D24, 19 Nov 2026).
 - **Owner's manual test on the v2 preview** (18 Nov 2026): the job finished, the video plays, 0.34 EUR shown against the cap. fal Usage matched the price table (about 0.78 USD for both runs together). The on-screen text in the generated scene came out **garbled** (AI-rendered lettering). → the M3 judge must score packaging and on-screen text fidelity and catch this; captions should be burned in by `compose.py` (M2), never left to the model.
 - Production check after the merge (19 Nov 2026): the site is v2, it reaches the API, CORS allows it, and the access-code gate refuses a wrong code.
+
+## Round 2 — making the landing example assets (19 Nov 2026)
+Made outside the app with Nano Banana Pro (image, edit) and Kling v3 Pro (image-to-video) on fal; lessons for the M2 video pipeline:
+- Kling's multi-shot prompt (three shots in one call) made the subject jump between places. → one continuous take with a start frame and an end frame keeps the person and the setting consistent; prefer it for scene clips.
+- Two 15-second takes both failed on ball physics: the ball vanished and no clear goal was shown. → storyboards should avoid beats that depend on object physics (a shot going in, a throw being caught); the M3 judge's drift check should sample the frames where they happen.
+- Background boards and signs came out with made-up lettering in every stadium and street scene. → confirms the M1 finding: on-screen text must come from `compose.py`, never from the model.
+- With the product photo as the reference, the edit model kept the product the same across scenes (basketball stripe, keyboard case, hoodie back print). → supports [D10](DECISIONS.md) (edit from the photo, not text-to-image).
+- An edit model keeps the style of its input (a stylised image stays stylised), and asking it for empty space at the top added a pasted band. → restyle with a fresh generation; leave room for text by cropping in code.
+- A highlight cut in ffmpeg (two segments with a 0.3 s dissolve) hid a failed moment at no cost. → `compose.py` can trim a weak span of a clip instead of paying for a re-render.

@@ -7,6 +7,10 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 - CI: `actions/checkout`, `actions/setup-python` and `actions/setup-node` moved to their current major version (v7), and every job runs on a pinned `ubuntu-24.04` runner instead of `ubuntu-latest` ([D23](DECISIONS.md)). The Node 20 deprecation warnings are gone.
 - GitHub ruleset "main protection" on `main`: force pushes and deletion blocked; the CI checks `frontend`, `backend` and `docker` must pass on an up-to-date branch; no required reviews, no bypass ([D23](DECISIONS.md), settings in `docs/SETUP.md`).
 
+### Docs
+- Privacy notice (in-app and `docs/PRIVACY.md`): the "Soon" fields on the Create page stay in the browser and are not sent.
+- M2 design note started (`docs/notes/m2-full-ads.md`); feedback round 2 records what the landing assets taught for the video pipeline; D24 records the project spend so far (about 8.9 EUR of the ~26 EUR API budget).
+
 M2 (full 3-scene ads) continues.
 
 ## [Landing refresh and spend limits] — 2026-11-19 (PR #4, merge commit `b9ee79e`, merged 23:39 UTC)

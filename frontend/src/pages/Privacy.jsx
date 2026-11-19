@@ -37,7 +37,7 @@ export default function Privacy() {
   return (
     <div className="page prose">
       <h1>Privacy notice</h1>
-      <p className="muted">Last updated: 18 November 2026. The app is in early access.</p>
+      <p className="muted">Last updated: 19 November 2026. The app is in early access.</p>
 
       <h2>What we collect</h2>
       <ul>
@@ -47,6 +47,10 @@ export default function Privacy() {
         <li>
           A random ID stored in your browser, so only this browser can open your ads. There is no account, no
           sign-in, no analytics and no tracking cookies.
+        </li>
+        <li>
+          Fields marked &ldquo;Soon&rdquo; on the Create page (such as email, logo and brand colours) are previews:
+          what you type or pick there stays in your browser and is not sent to us.
         </li>
       </ul>
 
