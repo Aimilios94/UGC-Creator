@@ -10,7 +10,7 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 
 - **Problem:** A milestone can look finished in code while it does not run where users are.
 - **Decision:** Work happens on `v2`; one PR per milestone goes `v2` → `main` and is merged only when that milestone's "Done when" list passes on the deployed backend. If the deploy slips to M2, M1 is not merged until then.
-- **Result:** `main` only ever holds deployed, verified milestones. M1: PR #1 merged by the owner on 19 Nov 2026 as a merge commit (`64156d1`) after every "Done when" item passed on the deployed stack; `v2` is kept and fast-forwarded to `main` after each merge.
+- **Result:** `main` only ever holds deployed, verified milestones. M1: PR #1 merged by the owner on 19 Nov 2026 as a merge commit (`64156d1`) after every "Done when" item passed on the deployed stack; `v2` is kept and fast-forwarded to `main` after each merge. One agreed exception: a docs-only PR (#2, 19 Nov 2026) right after M1, so the public README on `main` shows M1 as live instead of waiting for M2. It contains no code or deploy change.
 
 ## D2 — All user-facing money is in EUR `[user]`
 
