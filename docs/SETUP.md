@@ -130,6 +130,21 @@ Never print or commit the code.
 ### v1 site
 The v1 build stays online at https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app (tag `v1-final`; screenshots in `docs/before-after/v1/`).
 
+## GitHub: CI and the ruleset on `main`
+
+CI (`.github/workflows/ci.yml`) runs the jobs `frontend`, `backend` and `docker` on every push and PR, on a pinned `ubuntu-24.04` runner with `actions/checkout@v7`, `actions/setup-python@v7` and `actions/setup-node@v7` ([D23](../DECISIONS.md)). When GitHub announces a new runner image or action major, update them in one commit and check that the run has no annotations.
+
+The ruleset "main protection" (id `27687215`, created 19 Nov 2026 with `gh api`, [D23](../DECISIONS.md)) applies to `refs/heads/main` only:
+- force pushes blocked (`non_fast_forward`) and deletion blocked;
+- required status checks `frontend`, `backend` and `docker` from GitHub Actions (integration id 15368), and the branch must be up to date before merging (strict);
+- no required reviews and an empty bypass list, so it applies to the owner too.
+
+It was created with:
+```bash
+gh api -X POST repos/Aimilios94/UGC-Creator/rulesets --input ruleset.json
+```
+where `ruleset.json` holds `name`, `target: branch`, `enforcement: active`, `conditions.ref_name.include: ["refs/heads/main"]`, `bypass_actors: []` and the three rules above. Check it with `gh api repos/Aimilios94/UGC-Creator/rules/branches/main`. A history rewrite on `main` needs the ruleset lifted first (`gh api -X PUT repos/Aimilios94/UGC-Creator/rulesets/27687215 -f enforcement=disabled`), only with the owner's explicit go, and turned back on afterwards.
+
 ## Scheduled jobs (from M2)
 
 The cleanup and stale-job sweep run from a GitHub Actions cron every 15 minutes at an odd minute ([D6](../DECISIONS.md)). GitHub disables scheduled workflows in public repositories after 60 days without repository activity; re-enable it in the Actions tab if that happens.

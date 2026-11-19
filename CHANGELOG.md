@@ -5,6 +5,7 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 ## [Unreleased]
 ### Changed
 - CI: `actions/checkout`, `actions/setup-python` and `actions/setup-node` moved to their current major version (v7), and every job runs on a pinned `ubuntu-24.04` runner instead of `ubuntu-latest` ([D23](DECISIONS.md)). The Node 20 deprecation warnings are gone.
+- GitHub ruleset "main protection" on `main`: force pushes and deletion blocked; the CI checks `frontend`, `backend` and `docker` must pass on an up-to-date branch; no required reviews, no bypass ([D23](DECISIONS.md), settings in `docs/SETUP.md`).
 
 M2 (full 3-scene ads) continues.
 

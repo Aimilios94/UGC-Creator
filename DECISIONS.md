@@ -135,7 +135,7 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 
 - **Problem:** CI shows deprecation annotations (`actions/checkout@v4`, `actions/setup-python@v5`, `actions/setup-node@v4`, `ubuntu-latest`), and `main` has no protection: a force push or deletion would succeed. Neither is in plan §17.
 - **Decision (owner, 19 Nov 2026):** two tasks are added before the M2 plan items. (1) Update the actions to their current major versions and pin the runner to a specific Ubuntu version. (2) A GitHub ruleset on `main`, created with `gh api`: block force pushes and deletion, require the CI checks `frontend`, `backend` and `docker` with the branch up to date, no required reviews, no bypass list. After it exists, any history rewrite on `main` needs the ruleset lifted first, with the owner's explicit go.
-- **Result:** recorded here; the ruleset's exact settings are added to `docs/SETUP.md` when it is created.
+- **Result (19 Nov 2026):** (1) CI uses `actions/checkout@v7`, `actions/setup-python@v7` and `actions/setup-node@v7` on `ubuntu-24.04` (the image `ubuntu-latest` points to; 26.04 exists but would change the OS under the build); the first run was green with no annotations. (2) Ruleset "main protection" (id `27687215`) is active on `main` with exactly these settings; `v2` has no rules. Settings and commands are in `docs/SETUP.md`.
 
 ## D24 — The landing page is refreshed before M2, in the v1 look `[user]`
 
