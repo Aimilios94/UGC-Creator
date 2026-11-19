@@ -1,0 +1,37 @@
+# Roadmap
+
+The milestone plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-plan.md) §17. This file holds what comes after it.
+
+## Now
+- **M1** (in progress): secure base and first pipeline leg.
+- Next: M2 full ads, M3 judge + Hook Lab + Post Kit, M4 measured public MVP, then v2.1 (M5–M6).
+
+## Later extras
+- Product photo studio
+- Talking presenter
+- Shareable permalink
+- Before/after slider
+- Weekly summary PDF
+- Google and YouTube CSV presets for the Performance page
+- Signed content credentials (C2PA)
+- Post scheduling and publishing (needs each platform's API review and a small due-posts queue on the same cron)
+- Competitor ad tracker
+- Social content calendar
+- Comment and review sentiment
+- Budget reallocation suggestions
+- Live ad-platform APIs
+- Email and subject-line writer
+- Digital Fairness Act follow-up (M5 adds the "watching" line)
+
+## Insights (future section)
+- Performance aggregates by hook formula, theme and platform
+- Creative-fatigue alerts
+- "Your CTR vs typical for this theme" benchmarks
+- A cross-user hook library (needs user consent)
+- Possible paid ladder: usage tiers, higher-quality presets, batch volume, longer retention and history, API access, direct posting
+
+## Future list (not in v2)
+Paste a shop link, virtual creators, many languages, direct posting to TikTok/Instagram, match-data graphics, content calendar, loop-friendly cut, seasonal overlays, hook generation from competitor transcripts, native model audio.
+
+## Future ideas
+- **Design Lab (v3, not planned):** a conversational re-creation studio. Chat with ads already made ("change the hook", "make it more cinematic"), choose the model per re-creation from the model matrix, see the real cost estimate before confirming, attach reference images, and pick canvas ratio and resolution. Placeholder only: no design, tasks or milestones.

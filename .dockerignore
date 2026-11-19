@@ -1,0 +1,14 @@
+# Never send secrets or local data to the Docker build context.
+**/.env
+**/.env.*
+!**/.env.example
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+backend/data
+.git
+legacy
+docs
