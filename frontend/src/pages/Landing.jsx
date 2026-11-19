@@ -1,4 +1,14 @@
-import { ArrowRight, Camera, CheckCircle2, Film, PenLine, Sparkles } from 'lucide-react';
+import { useRef, useState } from 'react';
+import {
+  ArrowRight,
+  Camera,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Film,
+  PenLine,
+  Sparkles,
+} from 'lucide-react';
 import { recentJobs } from '../lib/api';
 
 const STEPS = [
@@ -7,6 +17,87 @@ const STEPS = [
   { icon: Film, title: 'Generate', text: 'Your real product edited into a new scene, then animated.' },
   { icon: CheckCircle2, title: 'Review', text: 'Watch the result, with the cost of every step shown.' },
 ];
+
+const GALLERY = [
+  {
+    key: 'basketball',
+    tag: 'Sport',
+    title: 'Game-day basketball',
+    text: 'A studio shot of the ball, turned into an arena dunk.',
+    product: 'An orange basketball with a thin blue stripe, studio photo',
+    scene: 'A player dunks the ball and the backboard glass shatters',
+  },
+  {
+    key: 'keyboard',
+    tag: 'Tech',
+    title: 'Translucent keyboard',
+    text: 'The keyboard on a desk at night, neon in the keys.',
+    product: 'A mechanical keyboard with translucent keys, studio photo',
+    scene: 'The keyboard on a desk by a rainy window with neon city light',
+  },
+  {
+    key: 'hoodie',
+    tag: 'Apparel',
+    title: 'Anime art hoodie',
+    text: 'A flat-lay of the print, worn on a neon street.',
+    product: 'A black hoodie with a dark-fantasy anime back print, flat-lay',
+    scene: 'Someone wearing the hoodie on a rain-wet neon street at night',
+  },
+];
+
+function GalleryCard({ item }) {
+  const [slide, setSlide] = useState(0);
+  const track = useRef(null);
+  const go = (i) => {
+    const el = track.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: REDUCED_MOTION ? 'auto' : 'smooth' });
+  };
+  const onScroll = () => {
+    const el = track.current;
+    if (el) setSlide(Math.round(el.scrollLeft / el.clientWidth));
+  };
+  const slides = [
+    { src: `/assets/landing/${item.key}-product.webp`, alt: item.product, label: 'Product photo' },
+    { src: `/assets/landing/${item.key}-scene.webp`, alt: item.scene, label: 'Ad scene' },
+  ];
+  return (
+    <article className="gal-card">
+      <div className="gal-media">
+        <div className="gal-track" ref={track} onScroll={onScroll}>
+          {slides.map((s) => (
+            <img key={s.src} src={s.src} alt={s.alt} loading="lazy" />
+          ))}
+        </div>
+        <span className="gal-tag">{item.tag}</span>
+        <button
+          type="button"
+          className="gal-next"
+          onClick={() => go(slide ? 0 : 1)}
+          aria-label={slide ? 'Show the product photo' : 'Show the ad scene'}
+        >
+          {slide ? <ChevronLeft size={18} aria-hidden="true" /> : <ChevronRight size={18} aria-hidden="true" />}
+        </button>
+      </div>
+      <div className="gal-steps" role="group" aria-label={`${item.title}: slides`}>
+        {slides.map((s, i) => (
+          <button
+            key={s.label}
+            type="button"
+            className={i === slide ? 'active' : ''}
+            aria-pressed={i === slide}
+            onClick={() => go(i)}
+          >
+            <span>{i + 1}</span> {s.label}
+          </button>
+        ))}
+      </div>
+      <div className="gal-body">
+        <h3>{item.title}</h3>
+        <p className="muted small">{item.text}</p>
+      </div>
+    </article>
+  );
+}
 
 const REDUCED_MOTION =
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -50,8 +141,12 @@ export default function Landing() {
         <figure className="lp-card lp-socks">
           <img src="/assets/landing/socks.webp" alt="A football team celebrating with a trophy, wearing grip socks" />
         </figure>
-        <figure className="lp-card lp-tea">
-          <img src="/assets/landing/tea.webp" alt="A woman drinking herbal tea on a herb farm" loading="lazy" />
+        <figure className="lp-card lp-hiker">
+          <img
+            src="/assets/landing/hiker.webp"
+            alt="A hiker with a green backpack beside a mountain river, fog over the peaks"
+            loading="lazy"
+          />
         </figure>
         <figure className="lp-phone">
           <video
@@ -74,6 +169,18 @@ export default function Landing() {
           />
           <figcaption className="lp-soon">Coming soon</figcaption>
         </figure>
+      </section>
+
+      <section className="lp-gallery" aria-labelledby="gal-title">
+        <h2 id="gal-title" className="lp-h2">
+          See what&apos;s possible
+        </h2>
+        <p className="muted lp-sub">One product photo in, an ad scene out. Swipe or tap to compare. Examples.</p>
+        <div className="gal-grid">
+          {GALLERY.map((item) => (
+            <GalleryCard key={item.key} item={item} />
+          ))}
+        </div>
       </section>
 
       <section id="how" className="lp-steps" aria-labelledby="how-title">
