@@ -15,8 +15,23 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 ## D2 — All user-facing money is in EUR `[user]`
 
 - **Problem:** Providers bill in USD; the budget and the user think in EUR.
-- **Decision:** Costs are stored in USD as billed and converted at one app-wide fixed rate (`USD_TO_EUR_RATE`, 0.87). Everything the user sets or sees is EUR, with a USD display option under Advanced settings. M1 limits: `JOB_COST_CAP_EUR=1`, `DAILY_SPEND_LIMIT_EUR=3`, raised in M2 for full 3-scene ads (the reason will be recorded here then). `DEMO_POT_EUR` from M4.
+- **Decision:** Costs are stored in USD as billed and converted at one app-wide fixed rate (`USD_TO_EUR_RATE`, 0.87). Everything the user sets or sees is EUR, with a USD display option under Advanced settings. M1 limits: `JOB_COST_CAP_EUR=1`, `DAILY_SPEND_LIMIT_EUR=3`. `DEMO_POT_EUR` from M4.
 - **Result:** The API returns both currencies, so the display switch is instant and no figure is converted twice.
+- **M2 raise (owner's decision, 19 Nov 2026): `JOB_COST_CAP_EUR=1.75`, `DAILY_SPEND_LIMIT_EUR=4`.** A full ad renders three scenes, which the M1 cap of 1 EUR cannot hold. Math from the price table (`llm_trace.py`, prices checked 18 Nov 2026), at 0.87 EUR/USD:
+
+  | Item | Math | USD |
+  | --- | --- | --- |
+  | 3 reference images | 3 × 0.0398 (Nano Banana edit) | 0.1194 |
+  | 3 clips | 3 × 5 s × 0.07 (Kling 2.5 Turbo Pro i2v) | 1.0500 |
+  | LLM | M1 measured 0.0039 for analyze + storyboard; about 8× that for M2's extra text work | 0.0300 |
+  | TTS voiceover | about 15 s, about 250 characters (tts-1 at 15 USD per 1M characters ≈ 0.004; gpt-4o-mini-tts similar) | 0.0100 |
+  | Music | licensed library, no per-ad charge | 0 |
+  | **Clean ad** | | **1.2094 ≈ 1.05 EUR** |
+  | One retry | one video re-render (0.35) + one image retry (0.0398) | 0.3898 |
+  | **With one retry** | | **1.5992 ≈ 1.39 EUR** |
+  | +15% margin | price drift and estimate error | **1.839 ≈ 1.60 EUR** |
+
+  The cap is that worst case rounded up to 1.75 EUR, so a normal ad never reaches it. The daily limit of 4 EUR allows two worst-case ads (or about three clean ones) on a test day, and keeps a runaway day under about 15% of the 26 EUR project budget. In M2 the retry headroom only covers a crash between submit and saving the prediction ID (the judge and self-fix arrive in M3–M4). To revisit: M3 (Hook Lab about 0.10 EUR, B/C videos about 0.45 EUR each, if counted against the same job's cap) and M4 (the public demo's 2 visitor ads per day). Set in `config.py`, `backend/.env.example` and `deploy/gcp/*.env.yaml`, and applied to the Cloud Run service and job.
 
 ## D3 — OpenAI is the default text provider until the M4 eval `[user]` `[verified 2026-11-18]`
 
@@ -109,3 +124,15 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 ## D21 — The access code is rotated by adding a secret version and disabling the old one `[eng]`
 
 - **Decision:** A new code is generated into `backend/.env` and added as a new version of the `access-codes` secret; the API gets a new revision so it reads `latest`; the old version is disabled. The code is never printed or committed. Done on 18 Nov 2026 and again on 19 Nov 2026 (each time: old code refused, new code accepted, old version disabled). Steps in `docs/SETUP.md`.
+
+## D22 — Account setup follows the milestone that first uses it `[user]`
+
+- **Problem:** Plan §19 lists the Anthropic API key (with spend limits) and the Sentry project under "Before M1", but M1 uses neither: OpenAI is the default text provider (D3), and Sentry arrives in M2 (plan §17).
+- **Decision (owner, 19 Nov 2026):** the Sentry project (EU/Frankfurt org) is set up for M2, and the Anthropic key with its spend limit before M4, when the model comparison first needs it. Until then the `anthropic` provider exists in code but is never called outside tests.
+- **Result:** the plan's §19 timing is superseded for these two items only; CLAUDE.md and the handoff list them under M2 and M4.
+
+## D23 — M2 starts with CI maintenance and a ruleset on `main` `[user]`
+
+- **Problem:** CI shows deprecation annotations (`actions/checkout@v4`, `actions/setup-python@v5`, `actions/setup-node@v4`, `ubuntu-latest`), and `main` has no protection: a force push or deletion would succeed. Neither is in plan §17.
+- **Decision (owner, 19 Nov 2026):** two tasks are added before the M2 plan items. (1) Update the actions to their current major versions and pin the runner to a specific Ubuntu version. (2) A GitHub ruleset on `main`, created with `gh api`: block force pushes and deletion, require the CI checks `frontend`, `backend` and `docker` with the branch up to date, no required reviews, no bypass list. After it exists, any history rewrite on `main` needs the ruleset lifted first, with the owner's explicit go.
+- **Result:** recorded here; the ruleset's exact settings are added to `docs/SETUP.md` when it is created.

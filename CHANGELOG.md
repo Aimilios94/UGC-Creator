@@ -3,12 +3,17 @@
 All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https://keepachangelog.com). The *why* behind changes lives in [DECISIONS.md](DECISIONS.md).
 
 ## [Unreleased]
+### Changed
+- Spend limits raised for full 3-scene ads: per-job cap 1 → 1.75 EUR, daily limit 3 → 4 EUR (owner's decision, 19 Nov 2026; math in [D2](DECISIONS.md)). Set in `config.py`, `backend/.env.example` and `deploy/gcp/*.env.yaml`, and applied to the Cloud Run API and worker job.
+
 ### Security
 - The access code was rotated again (19 Nov 2026); old secret versions disabled.
 
 ### Docs
 - README: M1 shown as live (docs-only PR #2, `f657691`).
 - README: a "Try it" line at the top with links to both v2 (current) and v1 (the original n8n prototype, frozen) (docs-only PR #3, `360cfbc`). APP_OVERVIEW links the v1 site too.
+
+- Consistency pass (19 Nov 2026): PRIVACY.md says bucket files are already deleted after 30 days (database rows from M2); the first access-code rotation has its own section below; merge times in UTC; DECISIONS [D22](DECISIONS.md) (Anthropic key before M4, Sentry in M2) and [D23](DECISIONS.md) (CI maintenance and a ruleset on `main` open M2).
 
 M2 (full 3-scene ads) is next.
 
@@ -42,8 +47,10 @@ Secure base and first pipeline leg. Live at https://ugc-creator-delta.vercel.app
 - Tag `v1-final` on `main` before the M1 merge and the GitHub release "v1 — n8n prototype".
 - `docs/before-after/v1/`: full-page screenshots of the v1 production site and its known issues; the build stays online at its permanent Vercel URL.
 
+## Access-code rotation (18 Nov 2026)
+
 ### Security
-- The access code was rotated (new value in `backend/.env` and Secret Manager, old secret version disabled, old code refused).
+- The access code was rotated for the first time (new value in `backend/.env` and Secret Manager, old secret version disabled, old code refused) ([D21](DECISIONS.md)).
 
 ## Author identity (18 Nov 2026)
 
