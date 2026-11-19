@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   Camera,
@@ -102,6 +102,46 @@ function GalleryCard({ item }) {
 const REDUCED_MOTION =
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+const HERO_SLIDES = [
+  { src: '/assets/landing/volley.webp', alt: 'A volleyball player leaps at the net to spike while her teammates watch' },
+  { src: '/assets/landing/socks.webp', alt: 'A football team celebrating with a trophy, wearing grip socks' },
+];
+
+function HeroCarousel({ className, slides }) {
+  const [i, setI] = useState(0);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (REDUCED_MOTION || paused) return undefined;
+    const t = setInterval(() => setI((n) => (n + 1) % slides.length), 4500);
+    return () => clearInterval(t);
+  }, [paused, slides.length]);
+  return (
+    <figure
+      className={`${className} hero-carousel`}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
+      {slides.map((s, n) => (
+        <img key={s.src} src={s.src} alt={s.alt} className={n === i ? 'on' : ''} aria-hidden={n !== i} />
+      ))}
+      <div className="hero-dots">
+        {slides.map((s, n) => (
+          <button
+            key={s.src}
+            type="button"
+            className={n === i ? 'active' : ''}
+            aria-label={`Show picture ${n + 1} of ${slides.length}`}
+            aria-pressed={n === i}
+            onClick={() => setI(n)}
+          />
+        ))}
+      </div>
+    </figure>
+  );
+}
+
 function showSteps() {
   document.getElementById('how')?.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth' });
 }
@@ -138,9 +178,7 @@ export default function Landing() {
           <p className="muted small">Early access: generating needs an access code. The scenes here are examples.</p>
         </div>
 
-        <figure className="lp-card lp-socks">
-          <img src="/assets/landing/socks.webp" alt="A football team celebrating with a trophy, wearing grip socks" />
-        </figure>
+        <HeroCarousel className="lp-card lp-socks" slides={HERO_SLIDES} />
         <figure className="lp-card lp-hiker">
           <img
             src="/assets/landing/hiker.webp"

@@ -201,9 +201,19 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
 }
 
+.hero-carousel img { position: absolute; inset: 0; opacity: 0; transition: opacity 0.8s ease; }
+.hero-carousel img.on { opacity: 1; }
+.hero-dots { position: absolute; left: 0; right: 0; bottom: 10px; z-index: 1; display: flex; justify-content: center; gap: 4px; }
+.hero-dots button { width: 24px; height: 24px; display: grid; place-items: center; }
+.hero-dots button::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transition: width 0.25s ease;
+}
+.hero-dots button.active::before { width: 18px; border-radius: 4px; background: #fff; }
+
 .lp-gallery { margin-top: 56px; }
 .lp-sub { text-align: center; margin: -10px 0 22px; }
-.gal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.gal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; max-width: 1000px; margin: 0 auto; }
 .gal-card {
   background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px; overflow: hidden;
   display: flex; flex-direction: column;
@@ -279,7 +289,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
   .lp-strip li + li { border-left: 0; border-top: 1px solid var(--card-border); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lp-card, .lp-phone { transition: none; }
+  .lp-card, .lp-phone, .hero-carousel img { transition: none; }
   .lp-card:hover, .lp-phone:hover { transform: rotate(var(--tilt, 0deg)); }
 }
 

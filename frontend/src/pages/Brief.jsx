@@ -210,11 +210,10 @@ export default function Brief() {
               <label htmlFor="offer">Offer or promo code (optional)</label>
               <input id="offer" value={form.offer} onChange={set('offer')} maxLength={200} />
             </div>
-            <div>
+            <div className="span-2">
               <label htmlFor="url">Landing page URL (optional)</label>
               <input id="url" type="url" value={form.landing_url} onChange={set('landing_url')} placeholder="https://" />
             </div>
-            <PreviewSelect id="goal" label="Goal" options={GOALS} />
             <div>
               <label htmlFor="platform">Platform</label>
               <select id="platform" value={form.platform} onChange={set('platform')}>
@@ -235,18 +234,10 @@ export default function Brief() {
                 ))}
               </select>
             </div>
+            <PreviewSelect id="goal" label="Goal" options={GOALS} />
             <PreviewSelect id="theme" label="Theme" options={THEMES} />
             <PreviewSelect id="adtype" label="Ad type" options={AD_TYPES} />
             <PreviewSelect id="preset" label="Model preset" options={PRESETS} />
-            <div>
-              <span className="label-like">
-                Hook Lab <Soon />
-              </span>
-              <label className="toggle" htmlFor="hooklab">
-                <input id="hooklab" type="checkbox" />
-                <span>Test three opening hooks and keep the best (about 0.10 EUR)</span>
-              </label>
-            </div>
           </div>
 
           <details className="advanced">
@@ -254,8 +245,15 @@ export default function Brief() {
               <Sparkles size={16} aria-hidden="true" /> Advanced options <Soon />
               <ChevronDown size={16} aria-hidden="true" className="chev" />
             </summary>
-            <p className="muted small">Brand kit, voice, music and captions. Set once and reused for every ad.</p>
+            <p className="muted small">Hook Lab, brand kit, voice, music and captions. The brand kit is set once and reused.</p>
             <div className="grid-2 tight">
+              <div className="span-2">
+                <span className="label-like">Hook Lab</span>
+                <label className="toggle" htmlFor="hooklab">
+                  <input id="hooklab" type="checkbox" />
+                  <span>Test three opening hooks and keep the best one (about 0.10 EUR more)</span>
+                </label>
+              </div>
               <div>
                 <label htmlFor="logo">Logo</label>
                 <input id="logo" type="file" accept="image/png,image/svg+xml" />
