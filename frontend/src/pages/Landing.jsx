@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Film,
   PenLine,
-  Sparkles,
 } from 'lucide-react';
 import { recentJobs } from '../lib/api';
 
@@ -152,9 +151,6 @@ export default function Landing() {
     <>
       <section className="lp-hero" aria-labelledby="lp-title">
         <div className="lp-copy">
-          <p className="lp-badge">
-            <Sparkles size={14} aria-hidden="true" /> Built on GPT-5 mini, Nano Banana and Kling 2.5
-          </p>
           <h1 id="lp-title">
             Turn one product photo into a <span className="text-gradient"><span className="nowrap">ready-to-post</span> <span className="nowrap">video ad</span></span>
           </h1>

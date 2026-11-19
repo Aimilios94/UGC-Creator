@@ -166,12 +166,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
 /* Wide screens: side cards pushed out a little (owner, 19 Nov). To go back to the previous look, delete this rule (the hero used to sit inside the 1200px page width). */
 @media (min-width: 1360px) { .lp-hero { margin-inline: -33px; } .lp-copy h1 { max-width: 628px; } }
 .lp-copy { grid-area: copy; text-align: center; display: flex; flex-direction: column; align-items: center; }
-.lp-badge {
-  display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; margin-bottom: 20px;
-  border: 1px solid var(--card-border); border-radius: var(--radius-full); background: var(--card-bg);
-  color: #cbd5e1; font-size: 0.82rem;
-}
-.lp-badge svg { color: #a5b4fc; }
 .lp-copy h1 { font-size: clamp(2rem, 4.6vw, 3.4rem); line-height: 1.08; letter-spacing: -0.03em; margin: 0 0 16px; text-wrap: balance; }
 .nowrap { white-space: nowrap; }
 .lp-lead { font-size: 1.12rem; color: var(--text-secondary); max-width: 34rem; margin-bottom: 28px; text-wrap: pretty; }
