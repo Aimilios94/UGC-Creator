@@ -10,13 +10,28 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 
 - **Problem:** A milestone can look finished in code while it does not run where users are.
 - **Decision:** Work happens on `v2`; one PR per milestone goes `v2` → `main` and is merged only when that milestone's "Done when" list passes on the deployed backend. If the deploy slips to M2, M1 is not merged until then.
-- **Result:** `main` only ever holds deployed, verified milestones. M1: PR #1 merged by the owner on 19 Nov 2026 as a merge commit (`64156d1`) after every "Done when" item passed on the deployed stack; `v2` is kept and fast-forwarded to `main` after each merge. One agreed exception: a docs-only PR (#2, 19 Nov 2026) right after M1, so the public README on `main` shows M1 as live instead of waiting for M2. It contains no code or deploy change.
+- **Result:** `main` only ever holds deployed, verified milestones. M1: PR #1 merged by the owner on 19 Nov 2026 as a merge commit (`64156d1`) after every "Done when" item passed on the deployed stack; `v2` is kept and fast-forwarded to `main` after each merge. One agreed exception: docs-only PRs right after M1 so the public README on `main` is current instead of waiting for M2: #2 (19 Nov 2026, `f657691`, M1 shown as live) and #3 (19 Nov 2026, `360cfbc`, links to both v2 and v1 at the top of the README). Neither contains a code or deploy change.
 
 ## D2 — All user-facing money is in EUR `[user]`
 
 - **Problem:** Providers bill in USD; the budget and the user think in EUR.
-- **Decision:** Costs are stored in USD as billed and converted at one app-wide fixed rate (`USD_TO_EUR_RATE`, 0.87). Everything the user sets or sees is EUR, with a USD display option under Advanced settings. M1 limits: `JOB_COST_CAP_EUR=1`, `DAILY_SPEND_LIMIT_EUR=3`, raised in M2 for full 3-scene ads (the reason will be recorded here then). `DEMO_POT_EUR` from M4.
+- **Decision:** Costs are stored in USD as billed and converted at one app-wide fixed rate (`USD_TO_EUR_RATE`, 0.87). Everything the user sets or sees is EUR, with a USD display option under Advanced settings. M1 limits: `JOB_COST_CAP_EUR=1`, `DAILY_SPEND_LIMIT_EUR=3`. `DEMO_POT_EUR` from M4.
 - **Result:** The API returns both currencies, so the display switch is instant and no figure is converted twice.
+- **M2 raise (owner's decision, 19 Nov 2026): `JOB_COST_CAP_EUR=1.75`, `DAILY_SPEND_LIMIT_EUR=4`.** A full ad renders three scenes, which the M1 cap of 1 EUR cannot hold. Math from the price table (`llm_trace.py`, prices checked 18 Nov 2026), at 0.87 EUR/USD:
+
+  | Item | Math | USD |
+  | --- | --- | --- |
+  | 3 reference images | 3 × 0.0398 (Nano Banana edit) | 0.1194 |
+  | 3 clips | 3 × 5 s × 0.07 (Kling 2.5 Turbo Pro i2v) | 1.0500 |
+  | LLM | M1 measured 0.0039 for analyze + storyboard; about 8× that for M2's extra text work | 0.0300 |
+  | TTS voiceover | about 15 s, about 250 characters (tts-1 at 15 USD per 1M characters ≈ 0.004; gpt-4o-mini-tts similar) | 0.0100 |
+  | Music | licensed library, no per-ad charge | 0 |
+  | **Clean ad** | | **1.2094 ≈ 1.05 EUR** |
+  | One retry | one video re-render (0.35) + one image retry (0.0398) | 0.3898 |
+  | **With one retry** | | **1.5992 ≈ 1.39 EUR** |
+  | +15% margin | price drift and estimate error | **1.839 ≈ 1.60 EUR** |
+
+  The cap is that worst case rounded up to 1.75 EUR, so a normal ad never reaches it. The daily limit of 4 EUR allows two worst-case ads (or about three clean ones) on a test day, and keeps a runaway day under about 15% of the 26 EUR project budget. In M2 the retry headroom only covers a crash between submit and saving the prediction ID (the judge and self-fix arrive in M3–M4). To revisit: M3 (Hook Lab about 0.10 EUR, B/C videos about 0.45 EUR each, if counted against the same job's cap) and M4 (the public demo's 2 visitor ads per day). Set in `config.py`, `backend/.env.example` and `deploy/gcp/*.env.yaml`, and applied to the Cloud Run service and job.
 
 ## D3 — OpenAI is the default text provider until the M4 eval `[user]` `[verified 2026-11-18]`
 
@@ -109,3 +124,23 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 ## D21 — The access code is rotated by adding a secret version and disabling the old one `[eng]`
 
 - **Decision:** A new code is generated into `backend/.env` and added as a new version of the `access-codes` secret; the API gets a new revision so it reads `latest`; the old version is disabled. The code is never printed or committed. Done on 18 Nov 2026 and again on 19 Nov 2026 (each time: old code refused, new code accepted, old version disabled). Steps in `docs/SETUP.md`.
+
+## D22 — Account setup follows the milestone that first uses it `[user]`
+
+- **Problem:** Plan §19 lists the Anthropic API key (with spend limits) and the Sentry project under "Before M1", but M1 uses neither: OpenAI is the default text provider (D3), and Sentry arrives in M2 (plan §17).
+- **Decision (owner, 19 Nov 2026):** the Sentry project (EU/Frankfurt org) is set up for M2, and the Anthropic key with its spend limit before M4, when the model comparison first needs it. Until then the `anthropic` provider exists in code but is never called outside tests.
+- **Result:** the plan's §19 timing is superseded for these two items only; CLAUDE.md and the handoff list them under M2 and M4.
+
+## D23 — M2 starts with CI maintenance and a ruleset on `main` `[user]`
+
+- **Problem:** CI shows deprecation annotations (`actions/checkout@v4`, `actions/setup-python@v5`, `actions/setup-node@v4`, `ubuntu-latest`), and `main` has no protection: a force push or deletion would succeed. Neither is in plan §17.
+- **Decision (owner, 19 Nov 2026):** two tasks are added before the M2 plan items. (1) Update the actions to their current major versions and pin the runner to a specific Ubuntu version. (2) A GitHub ruleset on `main`, created with `gh api`: block force pushes and deletion, require the CI checks `frontend`, `backend` and `docker` with the branch up to date, no required reviews, no bypass list. After it exists, any history rewrite on `main` needs the ruleset lifted first, with the owner's explicit go.
+- **Result:** recorded here; the ruleset's exact settings are added to `docs/SETUP.md` when it is created.
+
+## D24 — The landing page is refreshed before M2, in the v1 look `[user]`
+
+- **Problem:** Until the M4 showcase has real sample ads, the landing page showed three labelled illustrations and a plain layout, and did not look finished. Plan §17 has no landing work before M4.
+- **Evidence:** the v1 landing page (`docs/before-after/v1/`) had a stronger look (centred headline, tilted photo cards on a dark purple gradient) but also invented numbers (10x, 95%, 50k+, CTRs, views).
+- **Decision (owner, 19 Nov 2026):** a small pass before M2, in its own PR, to make the landing page presentable until M4. It keeps the v1 look with v2 content: our own example scenes (football grip socks, a hiker with a backpack, a game key art with "Coming soon" set in code) and an 11-second football clip in a phone frame; the four real steps instead of v1's numbers; no form on the landing page; a footer with GitHub, docs and v1 links; share tags with a 1200×630 image. The page says the scenes are examples. The assets were made once, outside the app, with Nano Banana Pro (images) and Kling v3 Pro (video) on fal, for 7.33 USD ≈ 6.38 EUR within the owner's 6.4 EUR limit; the clip was trimmed with ffmpeg at no cost.
+- **Second pass (owner, 19 Nov 2026):** a "See what's possible" section (three cards, each a two-slide carousel: the product photo, then the ad scene made from it with the photo as reference, which is how the app works) for a basketball, a translucent keyboard and a hoodie with an original dark-fantasy anime print; the hiker replaces the tea scene. The Create page takes the v1 "Start creating" layout and shows the planned brief options (goal, theme, ad type, model preset; Hook Lab and the brand kit, voiceover, music, captions, email) as clickable previews marked "Soon" that are not sent to the API; the access code moves to a slim bar at the top of the form and only the generate button is locked. The first hero card becomes a two-picture carousel (a volleyball spike, then the football trophy). Same models; 14 images for 2.10 USD ≈ 1.83 EUR within the owner's 3 EUR limit. All example assets together: 9.43 USD ≈ 8.20 EUR.
+- **Result:** the M4 showcase still replaces these examples with ads made by the app, with their real cost and scores (plan §17).

@@ -31,7 +31,7 @@ React/Vite frontend (Vercel) → FastAPI API (Cloud Run service) → Postgres jo
 Live: site https://ugc-creator-delta.vercel.app, API https://ugc-api-1002867777166.europe-west4.run.app. Locally, Docker Compose runs the same pieces with mock providers.
 
 ## History
-v1 (January 2026) was a React page plus an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) reached through an ngrok tunnel, deployed at ugc-creator-delta.vercel.app (Vercel project `ugc-creator`). It depended on a laptop running n8n, never delivered an email to the user, and lost the real product because its image step was text-to-image. It is kept, sanitised, in `legacy/n8n/`; its code is tagged `v1-final`, and screenshots of the site are in `docs/before-after/v1/`. v2 replaced it in production on 19 Nov 2026.
+v1 (January 2026) was a React page plus an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) reached through an ngrok tunnel, deployed at ugc-creator-delta.vercel.app (Vercel project `ugc-creator`). It depended on a laptop running n8n, never delivered an email to the user, and lost the real product because its image step was text-to-image. It is kept, sanitised, in `legacy/n8n/`; its code is tagged `v1-final`, and screenshots of the site are in `docs/before-after/v1/`. The v1 build stays online at https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app, linked next to v2 at the top of the README. v2 replaced it in production on 19 Nov 2026.
 
 ## Out of scope
 Pasting a shop link, virtual creators, many languages, direct posting to TikTok/Instagram, live ad-platform APIs. See [roadmap.md](roadmap.md).

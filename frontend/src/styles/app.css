@@ -90,6 +90,59 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
 .notice svg { flex-shrink: 0; margin-top: 2px; }
 .actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 20px; }
 
+/* Create (Brief) page: v1 "Start creating" look */
+.create-head { text-align: center; margin: 12px auto 24px; }
+.create-head h1 { font-size: clamp(1.9rem, 4vw, 2.6rem); margin-bottom: 6px; }
+.create-card { max-width: 820px; margin: 0 auto; padding: 24px; }
+.create-card .dropzone { min-height: 170px; border-color: rgba(165, 180, 252, 0.35); }
+.create-card .dropzone svg { color: #a5b4fc; }
+.access-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+  margin: -8px -8px 20px; padding: 10px 12px; border-radius: var(--radius-md);
+  background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(165, 180, 252, 0.22);
+}
+.access-bar p { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 0.88rem; color: #c7d2fe; }
+.access-bar-input { display: flex; gap: 8px; align-items: center; }
+.access-bar-input input { width: 170px; padding: 6px 10px; font-size: 16px; }
+.access-bar .error { flex-basis: 100%; margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.soon {
+  display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: var(--radius-full); vertical-align: 1px;
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  background: rgba(240, 171, 252, 0.14); color: #f5d0fe;
+}
+.label-like { display: block; font-size: 0.9rem; font-weight: 500; margin: 14px 0 6px; }
+.toggle {
+  display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 12px; font-weight: 400; cursor: pointer;
+  border: 1px solid var(--card-border); border-radius: var(--radius-sm); background: rgba(15, 23, 42, 0.6);
+  color: var(--text-secondary); font-size: 0.88rem;
+}
+.toggle input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--accent-primary); }
+.advanced { margin-top: 22px; border-top: 1px solid var(--card-border); padding-top: 14px; }
+.advanced summary {
+  display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-weight: 600; min-height: 36px;
+}
+.advanced summary::-webkit-details-marker { display: none; }
+.advanced summary .chev { margin-left: auto; transition: transform 0.2s ease; }
+.advanced[open] summary .chev { transform: rotate(180deg); }
+.advanced > p { margin: 6px 0 0; }
+.advanced input[type="file"] { padding: 7px 10px; font-size: 0.85rem; color: var(--text-secondary); }
+.advanced input[type="file"]::file-selector-button {
+  margin-right: 10px; padding: 5px 12px; border: 1px solid var(--card-border); border-radius: var(--radius-full);
+  background: var(--card-hover-bg); color: var(--text-primary); font: inherit; cursor: pointer;
+}
+.swatches { display: flex; gap: 8px; }
+.swatches input { width: 44px; height: 40px; padding: 3px; cursor: pointer; }
+.btn-wide { width: 100%; }
+.create-card .actions { align-items: stretch; }
+@media (max-width: 520px) {
+  .create-card { padding: 16px; }
+  .access-bar { margin: -4px -4px 16px; }
+  .access-bar-input { width: 100%; }
+  .access-bar-input input { flex: 1; width: auto; min-width: 0; }
+  .access-bar-input .btn { flex-shrink: 0; }
+}
+
 /* Stepper */
 .stepper { display: flex; gap: 8px; list-style: none; margin: 8px 0 16px; flex-wrap: wrap; }
 .stepper li {
@@ -104,13 +157,137 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
 .stepper li.current span { background: var(--accent-primary); color: #fff; }
 .stepper li.done span { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
 
-/* Landing */
-.hero { padding: 48px 0 8px; }
-.steps { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-.steps .card { position: relative; }
-.step-num { position: absolute; top: 16px; right: 18px; color: var(--text-secondary); font-weight: 600; }
-.examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px; }
-.examples img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: var(--radius-lg); border: 1px solid var(--card-border); }
+/* Landing: v1 look (centred headline, tilted cards around it), v2 content */
+.lp-hero {
+  display: grid; align-items: center; column-gap: 40px; row-gap: 28px; padding: 40px 0 24px;
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr) minmax(170px, 250px);
+  grid-template-areas: "socks copy phone" "hiker copy game";
+}
+/* Wide screens: side cards pushed out a little (owner, 19 Nov). To go back to the previous look, delete this rule (the hero used to sit inside the 1200px page width). */
+@media (min-width: 1360px) { .lp-hero { margin-inline: -33px; } .lp-copy h1 { max-width: 628px; } }
+.lp-copy { grid-area: copy; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.lp-copy h1 { font-size: clamp(2rem, 4.6vw, 3.4rem); line-height: 1.08; letter-spacing: -0.03em; margin: 0 0 16px; text-wrap: balance; }
+.nowrap { white-space: nowrap; }
+.lp-lead { font-size: 1.12rem; color: var(--text-secondary); max-width: 34rem; margin-bottom: 28px; text-wrap: pretty; }
+.lp-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 16px; }
+.lp-last { color: #c7d2fe; text-decoration: underline; font-size: 0.92rem; margin-bottom: 8px; }
+
+.lp-card, .lp-phone {
+  position: relative; margin: 0; overflow: hidden; border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: #0f172a;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.55);
+  transform: rotate(var(--tilt, 0deg)); transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lp-card:hover, .lp-phone:hover { transform: rotate(0deg) translateY(-4px); }
+.lp-card img, .lp-phone video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.lp-socks { grid-area: socks; --tilt: -7deg; aspect-ratio: 9 / 16; align-self: end; }
+.lp-hiker { grid-area: hiker; --tilt: 5deg; aspect-ratio: 9 / 16; width: 88%; justify-self: end; align-self: start; }
+.lp-phone {
+  grid-area: phone; --tilt: 4deg; aspect-ratio: 9 / 16; border-radius: 30px;
+  border: 6px solid #1e1b4b; outline: 1px solid rgba(255, 255, 255, 0.18);
+}
+.lp-game { grid-area: game; --tilt: -5deg; aspect-ratio: 3 / 4; width: 86%; align-self: start; }
+.lp-game::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(2, 6, 23, 0.85) 0%, rgba(2, 6, 23, 0.2) 45%, transparent 70%);
+}
+.lp-soon {
+  position: absolute; left: 0; right: 0; bottom: 14px; z-index: 1; text-align: center;
+  font-weight: 700; font-size: 0.95rem; letter-spacing: 0.22em; text-transform: uppercase; color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+
+.hero-carousel img { position: absolute; inset: 0; opacity: 0; transition: opacity 0.8s ease; }
+.hero-carousel img.on { opacity: 1; }
+.hero-dots { position: absolute; left: 0; right: 0; bottom: 10px; z-index: 1; display: flex; justify-content: center; gap: 4px; }
+.hero-dots button { width: 24px; height: 24px; display: grid; place-items: center; }
+.hero-dots button::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5); transition: width 0.25s ease;
+}
+.hero-dots button.active::before { width: 18px; border-radius: 4px; background: #fff; }
+
+.lp-gallery { margin-top: 56px; }
+.lp-sub { text-align: center; margin: -10px 0 22px; }
+.gal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; max-width: 1000px; margin: 0 auto; }
+.gal-card {
+  background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 20px; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.gal-media { position: relative; }
+.gal-track {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; aspect-ratio: 4 / 5;
+  overscroll-behavior-x: contain;
+}
+.gal-track::-webkit-scrollbar { display: none; }
+.gal-track img { flex: 0 0 100%; width: 100%; height: 100%; object-fit: cover; scroll-snap-align: start; }
+.gal-tag {
+  position: absolute; top: 12px; left: 12px; padding: 3px 10px; border-radius: var(--radius-full);
+  background: rgba(2, 6, 23, 0.7); backdrop-filter: blur(6px); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.gal-next {
+  position: absolute; right: 10px; top: 50%; translate: 0 -50%; display: grid; place-items: center;
+  width: 40px; height: 40px; border-radius: 50%; color: #fff;
+  background: rgba(2, 6, 23, 0.55); backdrop-filter: blur(6px); border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.gal-next:hover { background: rgba(2, 6, 23, 0.8); }
+.gal-steps { display: flex; gap: 6px; padding: 12px 14px 0; }
+.gal-steps button {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 5px; min-height: 32px;
+  border-radius: var(--radius-full); border: 1px solid var(--card-border); color: var(--text-secondary); font-size: 0.8rem;
+}
+.gal-steps button span {
+  display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--card-hover-bg); font-size: 0.72rem; font-weight: 600;
+}
+.gal-steps button.active { color: var(--text-primary); border-color: var(--accent-primary); }
+.gal-steps button.active span { background: var(--accent-primary); color: #fff; }
+.gal-body { padding: 10px 16px 16px; }
+.gal-body h3 { margin: 0 0 2px; }
+.gal-body p { margin: 0; }
+@media (max-width: 900px) {
+  .gal-grid { grid-template-columns: 1fr; max-width: 440px; margin: 0 auto; }
+}
+
+.lp-steps { margin-top: 48px; }
+.lp-h2 { justify-content: center; font-size: clamp(1.4rem, 3vw, 1.9rem); letter-spacing: -0.02em; margin-bottom: 20px; }
+.lp-strip {
+  list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 28px; backdrop-filter: blur(8px);
+}
+.lp-strip li { padding: 22px 22px 18px; text-align: center; }
+.lp-strip li + li { border-left: 1px solid var(--card-border); }
+.lp-strip h3 { margin: 10px 0 4px; }
+.lp-strip p { margin: 0; }
+.lp-step-icon {
+  display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(99, 102, 241, 0.18); color: #c7d2fe;
+}
+
+@media (max-width: 900px) {
+  .lp-hero {
+    grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 12px; padding-top: 24px;
+    grid-template-areas: "copy copy copy" "phone phone phone" "socks hiker game";
+  }
+  .lp-phone { width: min(280px, 72vw); justify-self: center; --tilt: 0deg; }
+  .lp-socks, .lp-hiker, .lp-game { width: 100%; aspect-ratio: 3 / 4; align-self: start; border-radius: 16px; }
+  .lp-socks { --tilt: -3deg; }
+  .lp-hiker { --tilt: 2deg; }
+  .lp-game { --tilt: -2deg; }
+  .lp-soon { font-size: 0.68rem; letter-spacing: 0.14em; bottom: 8px; }
+  .lp-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .lp-strip li:nth-child(3) { border-left: 0; }
+  .lp-strip li:nth-child(n + 3) { border-top: 1px solid var(--card-border); }
+}
+@media (max-width: 480px) {
+  .lp-strip { grid-template-columns: 1fr; }
+  .lp-strip li + li { border-left: 0; border-top: 1px solid var(--card-border); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-card, .lp-phone, .hero-carousel img { transition: none; }
+  .lp-card:hover, .lp-phone:hover { transform: rotate(var(--tilt, 0deg)); }
+}
 
 /* Storyboard */
 .scenes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
@@ -147,6 +324,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
   border-top: 1px solid var(--card-border); display: grid; gap: 8px;
 }
 .footer a { text-decoration: underline; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .footer > .btn { justify-self: start; }
 html { background: #2e1065; }
 .advanced-panel { max-width: 280px; }

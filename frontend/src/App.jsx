@@ -7,6 +7,8 @@ import Brief from './pages/Brief';
 import Job from './pages/Job';
 import Privacy from './pages/Privacy';
 
+const V1_URL = 'https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app';
+
 function Nav({ route }) {
   const active = (path) => (route === path || (path !== '/' && route.startsWith(path)) ? 'nav-link active' : 'nav-link');
   return (
@@ -42,8 +44,18 @@ function Footer() {
           <p className="muted small">Providers bill in USD; the app converts at one fixed rate.</p>
         </div>
       )}
-      <p className="muted small">
-        UGC Ad Builder v2 · <a href="#/privacy">Privacy notice</a>
+      <p className="muted small footer-links">
+        <span>UGC Ad Builder v2</span>
+        <a href="https://github.com/Aimilios94/UGC-Creator" target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+        <a href="https://github.com/Aimilios94/UGC-Creator/tree/main/docs" target="_blank" rel="noreferrer">
+          Docs
+        </a>
+        <a href={V1_URL} target="_blank" rel="noreferrer">
+          v1 (n8n prototype)
+        </a>
+        <a href="#/privacy">Privacy notice</a>
       </p>
     </footer>
   );

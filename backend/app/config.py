@@ -77,8 +77,8 @@ class Settings(BaseSettings):
     fal_output_expiry_s: int = 3600  # fal keeps outputs forever by default; we copy them first
 
     # --- Money: everything the user sets or sees is in EUR ---
-    job_cost_cap_eur: float = 1.0
-    daily_spend_limit_eur: float = 3.0
+    job_cost_cap_eur: float = 1.75  # M2: a 3-scene ad plus one retry and 15% margin (D2)
+    daily_spend_limit_eur: float = 4.0  # M2: two worst-case ads per day (D2)
     usd_to_eur_rate: float = 0.87
     display_currency: str = "EUR"  # EUR | USD
     demo_pot_eur: float = 0.0  # M4
