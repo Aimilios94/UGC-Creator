@@ -112,7 +112,23 @@ A new release: build and push a new tag, then `gcloud run jobs update ugc-worker
 
 API: https://ugc-api-1002867777166.europe-west4.run.app (docs at `/docs`).
 
-Frontend: the Vercel project `ugc-creator` (root directory `frontend`) with `VITE_API_BASE_URL` set to the API URL. Every site that calls the API must be listed in `CORS_ORIGINS` in `deploy/gcp/api.env.yaml`.
+Frontend: the Vercel project `ugc-creator` (root directory `frontend`, Vite). Settings as of 19 Nov 2026:
+- `VITE_API_BASE_URL` = the API URL, set for **Production** and for **Preview on the `v2` branch**. `VITE_` values are baked in at build time: after changing one, redeploy without build cache.
+- `VITE_N8N_WEBHOOK_URL` (v1) deleted in all environments.
+- Vercel Authentication (deployment protection) is off, so previews are public; generation still needs the access code.
+- Production: https://ugc-creator-delta.vercel.app. Stable `v2` preview: https://ugc-creator-git-v2-aimilios-projects-21450502.vercel.app.
+
+Every site that calls the API must be listed in `CORS_ORIGINS` in `deploy/gcp/api.env.yaml` (today: production and the `v2` preview), then applied with `gcloud run services update ugc-api --env-vars-file=deploy/gcp/api.env.yaml` plus the same `--set-secrets` as above.
+
+### Rotate the access code
+Never print or commit the code.
+1. Generate a new random code and write it as `ACCESS_CODES=` in `backend/.env` (a script, not by hand on screen).
+2. `python backend/scripts/put_secrets.py` adds it as a new version of the `access-codes` secret.
+3. `gcloud run services update ugc-api --region=europe-west4 --update-secrets=ACCESS_CODES=access-codes:latest --revision-suffix=<new>` so the API reads the new version.
+4. Check that `POST /access/check` accepts the new code and refuses the old one, then disable the old version: `gcloud secrets versions disable <old> --secret=access-codes`.
+
+### v1 site
+The v1 build stays online at https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app (tag `v1-final`; screenshots in `docs/before-after/v1/`).
 
 ## Scheduled jobs (from M2)
 

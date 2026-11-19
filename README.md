@@ -5,14 +5,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Aimilios94/UGC-Creator/actions/workflows/ci.yml"><img src="https://github.com/Aimilios94/UGC-Creator/actions/workflows/ci.yml/badge.svg?branch=v2" alt="CI" /></a>
+  <a href="https://github.com/Aimilios94/UGC-Creator/actions/workflows/ci.yml"><img src="https://github.com/Aimilios94/UGC-Creator/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/FastAPI-Pydantic%20AI-009688" alt="FastAPI + Pydantic AI" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT" />
 </p>
 
-> **Status: v2 in progress (milestone M1 of 6).** The first pipeline leg works end to end locally: brief → storyboard you approve → a reference image of your product → a 5-second video clip. Full ads with voiceover, captions and music arrive in M2; measured quality and the public demo in M4. The plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-plan.md).
+> **Status: v2, milestone M1 of 6 complete and live** at https://ugc-creator-delta.vercel.app (generation needs an access code while in early access). The first pipeline leg works end to end on the deployed stack: brief → storyboard you approve → a reference image of your product → a 5-second video clip, for about 0.34 EUR. Full ads with voiceover, captions and music arrive in M2; measured quality and the public demo in M4. The plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-plan.md).
 
 ## What it does
 
@@ -62,7 +62,7 @@ curl -X POST http://localhost:8000/jobs \
 
 v1 (January 2026) was a React page posting to an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) through an ngrok tunnel on a laptop. An audit found it never worked end to end: the form's email field was never read, the page posted to n8n's test-only webhook, and the text-to-image step meant the real product never appeared in the ad. Its notes and landing page named NanoBanana and Veo 3.1 while the nodes used Flux and Kling, and an API key sat in the public workflow file (now revoked and purged from this repo's history).
 
-v2 rebuilds it as an engineered system. The sanitised v1 workflow is kept in [legacy/n8n/](legacy/n8n/).
+v2 rebuilds it as an engineered system. The sanitised v1 workflow is kept in [legacy/n8n/](legacy/n8n/); the v1 code is tagged [`v1-final`](https://github.com/Aimilios94/UGC-Creator/releases/tag/v1-final), and screenshots of the v1 site with its known issues are in [docs/before-after/v1/](docs/before-after/v1/).
 
 <p align="center">
   <img src="frontend/public/assets/workflow-screenshot.png" width="700" alt="The v1 n8n workflow" />

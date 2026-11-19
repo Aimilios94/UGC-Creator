@@ -10,7 +10,7 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 
 - **Problem:** A milestone can look finished in code while it does not run where users are.
 - **Decision:** Work happens on `v2`; one PR per milestone goes `v2` → `main` and is merged only when that milestone's "Done when" list passes on the deployed backend. If the deploy slips to M2, M1 is not merged until then.
-- **Result:** `main` only ever holds deployed, verified milestones.
+- **Result:** `main` only ever holds deployed, verified milestones. M1: PR #1 merged by the owner on 19 Nov 2026 as a merge commit (`64156d1`) after every "Done when" item passed on the deployed stack; `v2` is kept and fast-forwarded to `main` after each merge. One agreed exception: a docs-only PR (#2, 19 Nov 2026) right after M1, so the public README on `main` shows M1 as live instead of waiting for M2. It contains no code or deploy change.
 
 ## D2 — All user-facing money is in EUR `[user]`
 
@@ -100,3 +100,12 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 
 - **Decision:** Two service accounts. `ugc-api` reads only the OpenAI key, the database URL and the access codes, and holds `roles/run.jobsExecutor` on the worker job only; it has no fal key, because it never renders (it gets a media stand-in that refuses). `ugc-worker` reads only the fal key and the database URL. Secrets live in Secret Manager in europe-west4. Cost guards (owner's request): the API scales to zero (min 0, max 2 instances); Artifact Registry keeps the last 5 images; the bucket deletes `jobs/*` after 30 days, matching `RETENTION_DAYS`, so future seeded demo ads under another prefix stay. Non-secret settings are in `deploy/gcp/*.env.yaml`.
 - **Result (18 Nov 2026):** an execution on the empty Neon queue exited 0; `/health/db` answers; generation without the access code gets 403; CORS allows only the listed site.
+
+## D20 — v1 is preserved as a tag, a release and screenshots `[user]`
+
+- **Problem:** The M1 merge replaces the v1 site, but a later before/after comparison needs v1 as it was.
+- **Decision:** Tag `v1-final` on `main` before the merge (`2404369`), a GitHub release "v1 — n8n prototype", full-page screenshots and a list of known issues in `docs/before-after/v1/`, and the v1 build's permanent Vercel URL recorded there. The v1 code is not kept on `main`.
+
+## D21 — The access code is rotated by adding a secret version and disabling the old one `[eng]`
+
+- **Decision:** A new code is generated into `backend/.env` and added as a new version of the `access-codes` secret; the API gets a new revision so it reads `latest`; the old version is disabled. The code is never printed or committed. Done on 18 Nov 2026 and again on 19 Nov 2026 (each time: old code refused, new code accepted, old version disabled). Steps in `docs/SETUP.md`.

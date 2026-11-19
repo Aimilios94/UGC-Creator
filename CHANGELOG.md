@@ -2,7 +2,15 @@
 
 All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https://keepachangelog.com). The *why* behind changes lives in [DECISIONS.md](DECISIONS.md).
 
-## [Unreleased] — v2, M1 (secure base and first pipeline leg)
+## [Unreleased]
+### Security
+- The access code was rotated again (19 Nov 2026); old secret versions disabled.
+
+M2 (full 3-scene ads) is next.
+
+## [v2 M1] — 2026-11-19 (PR #1, merge commit `64156d1`)
+
+Secure base and first pipeline leg. Live at https://ugc-creator-delta.vercel.app (API on Cloud Run, europe-west4). Production checked after the merge: the site reaches the API, CORS allows it, and the access-code gate refuses a wrong code.
 
 ### Added
 - **Python backend** (`backend/`): FastAPI API and a worker that share one Docker image. A brief and one product photo produce a product analysis and a 3-scene storyboard with three tagged hooks; after approval, scene 1 gets a reference image of the real product (Nano Banana edit on fal) and a 5-second image-to-video clip (Kling 2.5 Turbo Pro on fal).

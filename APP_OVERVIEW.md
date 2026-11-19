@@ -19,7 +19,7 @@ Brief → Storyboard → Generate → Review → Launch kit → Performance. Mil
 
 | Milestone | What ships |
 | --- | --- |
-| M1 | Brief, storyboard, approval, scene 1 image + video, cost cap, privacy notice, CI, deploy |
+| M1 ✅ (live since 19 Nov 2026) | Brief, storyboard, approval, scene 1 image + video, cost cap, privacy notice, CI, deploy |
 | M2 | Full 3-scene ads: voiceover, captions, music, end card, ratios; themes; History; Sentry; cleanup cron |
 | M3 | AI judge, Hook Lab, Post Kit (texts, checklist, ZIP), ad policy check |
 | M4 (MVP) | Self-fix loop, evaluation harness, model comparison, sample-product demo, public demo under limits |
@@ -28,10 +28,10 @@ Brief → Storyboard → Generate → Review → Launch kit → Performance. Mil
 ## Architecture
 React/Vite frontend (Vercel) → FastAPI API (Cloud Run service) → Postgres jobs table (Neon, Frankfurt) as the queue → worker (Cloud Run Job, same image) → fal (image and video models), OpenAI (vision and text) → private Google Cloud Storage bucket (europe-west4), served through signed expiring URLs.
 
-Locally, Docker Compose runs the same pieces with mock providers.
+Live: site https://ugc-creator-delta.vercel.app, API https://ugc-api-1002867777166.europe-west4.run.app. Locally, Docker Compose runs the same pieces with mock providers.
 
 ## History
-v1 (January 2026) was a React page plus an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) reached through an ngrok tunnel, deployed at ugc-creator-delta.vercel.app (Vercel project `ugc-creator`). It depended on a laptop running n8n, never delivered an email to the user, and lost the real product because its image step was text-to-image. It is kept, sanitised, in `legacy/n8n/`. v2 is the rebuild.
+v1 (January 2026) was a React page plus an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) reached through an ngrok tunnel, deployed at ugc-creator-delta.vercel.app (Vercel project `ugc-creator`). It depended on a laptop running n8n, never delivered an email to the user, and lost the real product because its image step was text-to-image. It is kept, sanitised, in `legacy/n8n/`; its code is tagged `v1-final`, and screenshots of the site are in `docs/before-after/v1/`. v2 replaced it in production on 19 Nov 2026.
 
 ## Out of scope
 Pasting a shop link, virtual creators, many languages, direct posting to TikTok/Instagram, live ad-platform APIs. See [roadmap.md](roadmap.md).

@@ -18,8 +18,26 @@ Milestones: M1–M4 = MVP, M5–M6 = v2.1, week 7 = buffer (plan §17). Each mil
 - Receipt-Ghostbuster is read-only reference: cloned at `C:\dev\Receipt-Ghostbuster-ref` (outside this repo) with `git remote set-url --push origin DISABLED`. Never modify it or add it inside this repo.
 - Record decisions in `DECISIONS.md`, changes in `CHANGELOG.md`, and a design note per milestone in `docs/notes/`.
 - If something is unclear, wrong or blocked: stop and ask the user.
-- Backups in `C:\dev\backups` hold pre-purge history: never upload them; delete them after M1 is merged and verified.
-- Update the "Current status" line below at the end of every session.
+- Backups in `C:\dev\backups` hold pre-purge history: never upload them; delete them only on the owner's confirmation (M1 is merged and verified).
+- `local-handoff/` (project root) is local-only: excluded via `.git/info/exclude`, never committed or pushed, never contains secrets.
+
+## Standing rule: end-of-session update (every session, every agent, no exceptions)
+
+At the end of every session, before telling the user you are done:
+1. Update every product and project document that the session touched or that is now out of date. Check each one, one by one, even if you think nothing changed:
+   - README.md
+   - APP_OVERVIEW.md
+   - problem-statement.md
+   - roadmap.md
+   - feedback-notes.md
+   - DECISIONS.md
+   - CHANGELOG.md
+   - the design note for the current milestone in docs/notes/
+   - docs/SETUP.md and docs/PRIVACY.md
+   - CLAUDE.md (the "Current status" line)
+2. Double-check consistency: the same facts (milestone status, decisions, costs, URLs, model names, what's live) must say the same thing in every file and match the plan. Fix any mismatch.
+3. Refresh the three local-handoff files (`local-handoff/next-agent-prompt.md`, `local-handoff/HANDOFF.md`, `local-handoff/previous_chat.md`) with the new state and this session's ID and summary.
+4. Commit and push the repo files, confirm the local-handoff files are still untracked, and give the user a checklist of every file above marked "updated" or "checked, no change needed".
 
 ## Environment
 
@@ -32,17 +50,21 @@ Milestones: M1–M4 = MVP, M5–M6 = v2.1, week 7 = buffer (plan §17). Each mil
 
 ## Decisions
 
-All decisions are in `DECISIONS.md` (D1–D6 are the ones agreed before M1). Read it before changing spend, queue, privacy or provider code.
+All decisions are in `DECISIONS.md` (D1–D21; D1–D6 are the ones agreed before M1). Read it before changing spend, queue, privacy or provider code.
 
 ## Working notes
 
 - Backend: `cd backend`, venv `.venv` (Python 3.12). Tests need a Postgres: `docker run -d --name ugc-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=ugc_test -p 55432:5432 pgvector/pgvector:pg18`, then `TEST_DATABASE_URL=postgresql://postgres:test@localhost:55432/ugc_test .venv/Scripts/python -m pytest` and `.venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .`.
 - Frontend: `cd frontend && npm run lint && npm run build`.
 - Whole stack, mock providers: `docker compose up --build` (http://localhost:5173).
-- Vercel project `ugc-creator` (ugc-creator-delta.vercel.app), root directory `frontend`. The `v2` preview is https://ugc-creator-git-v2-aimilios-projects-21450502.vercel.app with `VITE_API_BASE_URL` set for Preview on `v2` only.
+- Live: site https://ugc-creator-delta.vercel.app, API https://ugc-api-1002867777166.europe-west4.run.app (Cloud Run service `ugc-api`, job `ugc-worker`, bucket `ugc-ad-builder-media`, europe-west4).
+- Vercel project `ugc-creator`, root directory `frontend`. `VITE_API_BASE_URL` is set for Production and for Preview on `v2`; the stable `v2` preview is https://ugc-creator-git-v2-aimilios-projects-21450502.vercel.app. Vercel Authentication is off.
+- After each milestone merge (a merge commit by the owner), fast-forward `v2` to `main` (`git merge --ff-only origin/main`) and push; no rewrite.
+- v1 is preserved: tag `v1-final`, release "v1 — n8n prototype", `docs/before-after/v1/`.
+- gcloud: installed per user, on PATH; active account is the project owner's.
 - Git identity: `Aimilios94 <181588880+Aimilios94@users.noreply.github.com>` (global and repo). Commits must use it so GitHub links them.
 - Setup and deploy commands: `docs/SETUP.md`. Milestone design notes: `docs/notes/`.
 
 ## Current status
 
-2026-11-18: **M1 complete; PR `v2` → `main` open for the owner's review (do not merge it yourself).** Every M1 "Done when" item passed on the deployed stack (v2 Vercel preview + Cloud Run API/worker in europe-west4); one paid smoke run cost 0.3425 EUR (recorded). Job cap is back to 1 EUR. Author identity rewritten to Aimilios94 and force-pushed earlier today. gcloud is installed per user and on PATH; only the project owner's account is signed in. Next: the owner merges after the PR's merge checklist (Vercel Production `VITE_API_BASE_URL`, delete `VITE_N8N_WEBHOOK_URL`), then check the production site; then M2 (plan §17). Backups in `C:\dev\backups` (delete after M1 is merged and verified).
+2026-11-19: **M1 complete, merged and live.** PR #1 merged by the owner (merge commit `64156d1`); `main` = `v2` = `64156d1`; production checked (reaches the API, CORS, access-code gate). Smoke test 0.3425 EUR (recorded; fal Usage matched). Access code rotated twice (latest 19 Nov; secret version 3 enabled, 1–2 disabled); job cap 1 EUR, daily limit 3 EUR. **Next: M2 on `v2` (plan §17)** — first fix the CI annotations (current major versions of `actions/checkout` and `actions/setup-python`, a pinned Ubuntu runner), then add a GitHub ruleset on `main` (block force pushes, block deletion, require the CI checks `frontend`, `backend`, `docker`; no required reviews; `gh api` can do it, no clicks), raise the cap and daily limit for 3-scene ads and record why, ask the owner before any paid call. Backups in `C:\dev\backups` await the owner's confirmation to delete. Handoff: `local-handoff/` (local only).

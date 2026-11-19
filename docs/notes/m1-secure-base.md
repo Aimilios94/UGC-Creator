@@ -1,6 +1,6 @@
 # M1 design note: secure base and first pipeline leg
 
-Status: complete pending review (18 Nov 2026). Branch `v2`, PR to `main`.
+Status: **complete.** Merged into `main` by the owner on 19 Nov 2026 (PR #1, merge commit `64156d1`); live at https://ugc-creator-delta.vercel.app, production checked after the merge (reaches the API, CORS, access-code gate). The v1 site is preserved as tag `v1-final` and in `docs/before-after/v1/`.
 
 ## How it works
 
@@ -28,7 +28,7 @@ Cost before approval is a few cents of LLM; the render costs 0.0398 USD (image) 
 - Docker Compose; CI (eslint, build, ruff, pytest with a Postgres service container, Docker build and start).
 
 ## What was decided
-See [DECISIONS.md](../../DECISIONS.md) D1–D19. The ones that shape the code most: one `jobs` row as draft, queue and record (D7); spend reservations under an advisory lock (D8); no price means no call (D9); fal request storage off and outputs expiring after one hour (D10).
+See [DECISIONS.md](../../DECISIONS.md) D1–D21. The ones that shape the code most: one `jobs` row as draft, queue and record (D7); spend reservations under an advisory lock (D8); no price means no call (D9); fal request storage off and outputs expiring after one hour (D10).
 
 ## Verified at the start of M1 (plan §20)
 | Item | Result |
@@ -69,3 +69,6 @@ The estimate before approval was 0.3391 EUR for the render; the LLM steps cost 0
 ## What is next
 - M2: full 3-scene ads (compose, voiceover, captions, music, ratios), themes, History, Sentry, the cleanup and sweep cron. The cost cap and daily limit go up for 3-scene ads (to be recorded in DECISIONS.md with the reason).
 - The smoke-test product photo was a drawn product (no people), because the repo's sample images all show people.
+- The owner's own manual test (also about 0.34 EUR) worked, but the model-rendered on-screen text came out garbled: captions must be burned in by `compose.py` (M2) and the M3 judge must check text fidelity.
+- CI annotations to fix in M2: update `actions/checkout` and `actions/setup-python` to their current major versions and pin the runner to a specific Ubuntu version instead of `ubuntu-latest`.
+- GitHub ruleset on `main` (M2, owner's request): block force pushes and deletion, require the CI checks `frontend`, `backend` and `docker` to pass before merging; no required reviews. It can be created with `gh api` (the owner's CLI login has admin rights), so no clicks are needed. After it exists, any history rewrite on `main` needs the ruleset lifted first, with the owner's go.
