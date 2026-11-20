@@ -24,6 +24,8 @@ Status: **in progress** on `v2`. Started 19 Nov 2026. The plan is [§17, M2](../
   - *Checks:* 120 tests pass (20 new: compose on real ffmpeg, AI-metadata guardrail, safe zones, voice spend rules); the full flow checked in a browser on the Docker mock stack (4 ratios in about 26 s).
   - *Deploy notes:* the worker needs the OpenAI key; schema, `RENDER_SCENES=3` and a paid smoke run (SETUP, "M2 deploy").
 
+- **After the owner's first manual test: the user steers the storyboard, images first ([D27](../../DECISIONS.md), 20 Nov 2026; on `v2`):** two steps (Approve → images; "Make the video" → voice, clips, compose), own scene images, own story, hook choice, 5/10 s clips with live prices and an up-front cap check, visual style, detailed image prompts and timed motion shot lists, clickable steps with Back, hover help. 129 tests pass. Local note: the Docker stack prices mock renders like real ones (D14), so a day of local testing can reach the 4 EUR daily limit in the local database; clear it with `docker compose exec -T postgres psql -U postgres -d ugc -c "delete from llm_calls where provider = 'mock'"` (local only). Vite in Docker does not see file changes on a Windows bind mount: `docker compose restart frontend` after frontend edits.
+
 ## Next (plan §17, M2)
 1. ~~Campaign brief and brand kit; 3 scenes; testimonial rule~~ (done above). Still "Soon" on the Create page: model preset (M4), Hook Lab (M3), email (M3).
 2. ~~`compose.py`, voiceover, music~~ (done above).

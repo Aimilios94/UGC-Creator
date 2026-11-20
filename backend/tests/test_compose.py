@@ -21,7 +21,7 @@ from app.services.providers.media import MOCK_CLIP
 from app.services.providers.voice import MockVoice, VoiceRequest
 from app.services.voice import instructions_for, plan_voice, usage_for
 from conftest import BRIEF
-from helpers import approve, create_job
+from helpers import create_job, to_video
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
@@ -196,14 +196,15 @@ def test_voice_cost_is_estimated_high_and_recorded_from_the_real_length():
 
 def test_a_voice_failure_stops_the_job_before_any_video_is_paid(client, ctx, session_id, photo_bytes):
     job = create_job(client, session_id, photo_bytes).json()
-    approve(client, session_id, job["id"])
+    to_video(client, ctx, session_id, job["id"])
+    images = len(ctx.media.submits)
 
     def broken(req):
         raise RuntimeError("tts model not allowed for this project")
 
     ctx.voice.synthesize = broken
     worker.run_once(ctx)
-    assert ctx.media.submits == []  # nothing rendered
+    assert len(ctx.media.submits) == images  # no clip was rendered after the voice failed
     with ctx.db.tx() as c:
         rows = c.execute("select kind, status from llm_calls where job_id = %s", (job["id"],)).fetchall()
     assert [r["status"] for r in rows if r["kind"] == "tts"] == ["released"]
@@ -211,12 +212,12 @@ def test_a_voice_failure_stops_the_job_before_any_video_is_paid(client, ctx, ses
 
 def test_voice_lines_are_paid_once_and_reused_from_the_cache(client, ctx, session_id, photo_bytes):
     first = create_job(client, session_id, photo_bytes).json()
-    approve(client, session_id, first["id"])
+    to_video(client, ctx, session_id, first["id"])
     worker.run_once(ctx)
     assert len(ctx.voice.requests) == 3
     # The same brief again: the same lines with the same voice come from the media cache.
     second = create_job(client, session_id, photo_bytes).json()
-    approve(client, session_id, second["id"])
+    to_video(client, ctx, session_id, second["id"])
     worker.run_once(ctx)
     assert len(ctx.voice.requests) == 3
     with ctx.db.tx() as c:
@@ -229,7 +230,7 @@ def test_voice_lines_are_paid_once_and_reused_from_the_cache(client, ctx, sessio
 def test_brief_choices_reach_compose(client, ctx, session_id, photo_bytes):
     brief = {**BRIEF, "voice": "onyx", "music": "none", "captions": "clean", "theme": "tech"}
     job = create_job(client, session_id, photo_bytes, brief=brief).json()
-    approve(client, session_id, job["id"])
+    to_video(client, ctx, session_id, job["id"])
     worker.run_once(ctx)
     assert {r.voice for r in ctx.voice.requests} == {"onyx"}
     view = client.get(f"/jobs/{job['id']}", headers={"X-Session-Id": session_id}).json()

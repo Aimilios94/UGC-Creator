@@ -135,6 +135,17 @@ def set_analysis(db: Database, job_id: str, analysis: dict) -> None:
         c.execute("update jobs set analysis = %s, updated_at = now() where id = %s", (Jsonb(analysis), job_id))
 
 
+def set_brief(db: Database, job_id: str, brief: dict) -> bool:
+    """The brief changes only while the job is a draft (for example the user's own story)."""
+    with db.tx() as c:
+        row = _one(
+            c,
+            "update jobs set brief = %s, updated_at = now() where id = %s and status = 'draft' returning id",
+            (Jsonb(brief), job_id),
+        )
+        return row is not None
+
+
 def set_storyboard(db: Database, job_id: str, storyboard: dict) -> bool:
     """Storyboards are editable only while the job is a draft."""
     with db.tx() as c:
@@ -156,7 +167,7 @@ def approve_job(db: Database, job_id: str, session_hash: str) -> tuple[dict | No
     with db.tx() as c:
         row = _one(
             c,
-            """update jobs set status = 'queued', approved_at = now(), updated_at = now()
+            """update jobs set status = 'queued', phase = 'images', approved_at = now(), updated_at = now()
                where id = %s and session_hash = %s and status = 'draft' and storyboard is not null
                returning *""",
             (job_id, session_hash),
@@ -169,12 +180,35 @@ def approve_job(db: Database, job_id: str, session_hash: str) -> tuple[dict | No
                    on conflict (job_id, idx) do nothing""",
                 (job_id, idx, scene["role"], Jsonb(scene)),
             )
-        # Variant A uses the first hook; B and C come from Hook Lab on request (M3).
+        # Variant A uses the hook the user picked (or the first); B and C come from Hook Lab (M3).
         c.execute(
-            """insert into variants (job_id, label, hook_idx) values (%s, 'A', 0)
+            """insert into variants (job_id, label, hook_idx) values (%s, 'A', %s)
                on conflict (job_id, label) do nothing""",
-            (job_id,),
+            (job_id, row["storyboard"].get("hook_choice") or 0),
         )
+        return row, True
+
+
+def start_video(db: Database, job_id: str, session_hash: str, storyboard: dict) -> tuple[dict | None, bool]:
+    """Step 2: a job whose images are done is queued again to make the video, once.
+
+    The storyboard's video fields (voiceover, text, motion, clip length) may have been edited
+    after the images; the scenes are refreshed from it. A repeat finds the job no longer in
+    the images phase and changes nothing. Attempts restart; spend so far still counts.
+    """
+    with db.tx() as c:
+        row = _one(
+            c,
+            """update jobs set status = 'queued', phase = 'video', storyboard = %s, attempts = 0,
+                      last_error = null, finished_at = null, approved_at = now(), updated_at = now()
+               where id = %s and session_hash = %s and status = 'done' and phase = 'images'
+               returning *""",
+            (Jsonb(storyboard), job_id, session_hash),
+        )
+        if row is None:
+            return _one(c, "select * from jobs where id = %s and session_hash = %s", (job_id, session_hash)), False
+        for idx, scene in enumerate(storyboard["scenes"]):
+            c.execute("update scenes set data = %s where job_id = %s and idx = %s", (Jsonb(scene), job_id, idx))
         return row, True
 
 
@@ -223,10 +257,10 @@ def finish_job(db: Database, job_id: str) -> None:
         row = _one(
             c,
             """update jobs set status = 'done', finished_at = now(), last_error = null, updated_at = now()
-               where id = %s and status = 'running' returning id""",
+               where id = %s and status = 'running' returning phase""",
             (job_id,),
         )
-        if row:
+        if row and row["phase"] == "video":
             _set_variants(c, job_id, "done")
 
 

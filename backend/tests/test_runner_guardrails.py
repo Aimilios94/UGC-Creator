@@ -7,12 +7,19 @@ import pytest
 from app import repository as repo
 from app import worker
 from app.services.pipeline import run_media_stage
-from helpers import approve, create_job
+from helpers import approve, create_job, to_video
 
 
 def _approved_job(client, session_id, photo_bytes) -> str:
     job = create_job(client, session_id, photo_bytes).json()
     assert approve(client, session_id, job["id"]).status_code == 202
+    return job["id"]
+
+
+def _video_job(client, ctx, session_id, photo_bytes) -> str:
+    """A job whose images are done and whose video step is queued."""
+    job = create_job(client, session_id, photo_bytes).json()
+    to_video(client, ctx, session_id, job["id"])
     return job["id"]
 
 
@@ -30,7 +37,7 @@ def test_empty_queue_exits_zero(ctx, monkeypatch):
 def test_retried_job_resumes_and_never_pays_twice(client, ctx, session_id, photo_bytes):
     """A crash while polling the video: the next attempt polls the same render (no new submit)
     and does not redo the finished image stage."""
-    job_id = _approved_job(client, session_id, photo_bytes)
+    job_id = _video_job(client, ctx, session_id, photo_bytes)
     real_status = ctx.media.status
     calls = {"n": 0}
 
@@ -44,14 +51,14 @@ def test_retried_job_resumes_and_never_pays_twice(client, ctx, session_id, photo
     ctx.media.status = crash_on_video
     worker.run_once(ctx)
     job = _job(ctx, job_id)
-    assert job["status"] == "queued" and job["attempts"] == 1
+    assert job["status"] == "queued" and job["attempts"] == 1 and job["phase"] == "video"
     assert repo.get_stage_run(ctx.db, job_id, "image", 0)["status"] == "done"
     assert repo.get_stage_run(ctx.db, job_id, "video", 0)["status"] == "submitted"
 
     worker.run_once(ctx)
     job = _job(ctx, job_id)
     assert job["status"] == "done" and job["attempts"] == 2
-    assert [r.kind for r in ctx.media.submits] == ["image", "video"] * 3  # each scene's renders paid once
+    assert [r.kind for r in ctx.media.submits] == ["image"] * 3 + ["video"] * 3  # each render paid once
     with ctx.db.tx() as c:
         billed = c.execute(
             "select kind, count(*) as n from llm_calls where job_id = %s and kind in ('image','video') group by kind",
@@ -89,18 +96,19 @@ def _calls(ctx, job_id):
 
 
 def test_no_paid_stage_starts_past_the_job_cap(client, ctx, session_id, photo_bytes):
-    """Cap 0.20 EUR: the image (0.035 EUR) fits, the 5 s video (0.30 EUR) does not."""
-    job_id = _approved_job(client, session_id, photo_bytes)
+    """The worker's own check: the cap drops to 0.20 EUR after "Make the video" was accepted.
+    The images (3 x 0.035 EUR) are paid; the first 5 s clip (0.30 EUR) does not fit."""
+    job_id = _video_job(client, ctx, session_id, photo_bytes)
     ctx.settings = ctx.settings.model_copy(update={"job_cost_cap_eur": 0.20})
     worker.run_once(ctx)
     job = _job(ctx, job_id)
     assert job["status"] == "failed" and "cost cap" in job["last_error"]
-    assert [r.kind for r in ctx.media.submits] == ["image"]  # the video was never submitted
+    assert [r.kind for r in ctx.media.submits] == ["image"] * 3  # no video was ever submitted
     assert repo.job_spend_usd(ctx.db, job_id) * ctx.settings.usd_to_eur_rate <= 0.20
 
 
 def test_try_again_still_counts_spend_from_earlier_tries(client, ctx, session_id, photo_bytes):
-    job_id = _approved_job(client, session_id, photo_bytes)
+    job_id = _video_job(client, ctx, session_id, photo_bytes)
     ctx.settings = ctx.settings.model_copy(update={"job_cost_cap_eur": 0.20})
     worker.run_once(ctx)
     spent_before = repo.job_spend_usd(ctx.db, job_id)
@@ -112,7 +120,7 @@ def test_try_again_still_counts_spend_from_earlier_tries(client, ctx, session_id
     worker.run_once(ctx)
     job = _job(ctx, job_id)
     assert job["status"] == "failed" and "cost cap" in job["last_error"]
-    assert [r.kind for r in ctx.media.submits] == ["image"]  # finished image reused, video still refused
+    assert [r.kind for r in ctx.media.submits] == ["image"] * 3  # finished images reused, video still refused
 
 
 def test_no_paid_stage_starts_past_the_daily_limit(client, ctx, session_id, photo_bytes):
@@ -155,7 +163,7 @@ def test_open_reservations_count_toward_the_limit(client, ctx, session_id, photo
 
 
 def test_media_cache_hit_costs_nothing(client, ctx, session_id, photo_bytes):
-    job_id = _approved_job(client, session_id, photo_bytes)
+    job_id = _video_job(client, ctx, session_id, photo_bytes)
     worker.run_once(ctx)
     assert len(ctx.media.submits) == 6  # 3 scenes x (image + video)
     # the same render again (same model, prompt, seed, input, settings) is served from the cache

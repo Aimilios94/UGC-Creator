@@ -64,7 +64,10 @@ function Footer() {
 export default function App() {
   const route = useHashRoute();
   let page;
-  if (route.startsWith('/job/')) page = <Job key={route} jobId={route.slice(5)} />;
+  if (route.startsWith('/job/')) {
+    const [jobId, view] = route.slice(5).split('/');
+    page = <Job key={route} jobId={jobId} view={view || ''} />;
+  }
   else if (route === '/create') page = <Brief />;
   else if (route === '/privacy') page = <Privacy />;
   else page = <Landing />;

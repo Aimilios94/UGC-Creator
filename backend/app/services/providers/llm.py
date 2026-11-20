@@ -20,6 +20,7 @@ from ...config import Settings
 from ...errors import ProviderNotConfigured
 
 BRIEF_RE = re.compile(r"<brief>(.*?)</brief>", re.S)
+STORY_RE = re.compile(r"<story>(.*?)</story>", re.S)
 
 
 @dataclass
@@ -30,18 +31,30 @@ class LlmHandle:
     settings: dict
 
 
-def _brief_from(messages) -> dict:
+def _texts(messages):
     for m in messages:
         for part in getattr(m, "parts", []):
             content = getattr(part, "content", None)
-            texts = content if isinstance(content, list) else [content]
-            for t in texts:
-                if isinstance(t, str) and (match := BRIEF_RE.search(t)):
-                    try:
-                        return json.loads(match.group(1))
-                    except json.JSONDecodeError:
-                        return {}
-    return {}
+            for t in content if isinstance(content, list) else [content]:
+                if isinstance(t, str):
+                    yield t
+
+
+def _brief_from(messages) -> dict:
+    """The brief (and the user's story, if any) from the prompt, for the mock outputs."""
+    brief: dict = {}
+    for t in _texts(messages):
+        if not brief and (match := BRIEF_RE.search(t)):
+            try:
+                brief = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                brief = {}
+        if match := STORY_RE.search(t):
+            try:
+                brief["story"] = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+    return brief
 
 
 def mock_analysis(brief: dict) -> dict:
@@ -55,38 +68,89 @@ def mock_analysis(brief: dict) -> dict:
     }
 
 
+def _story_lines(story: str) -> list[str] | None:
+    """The story split into three spoken lines, kept word for word (mock only)."""
+    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", story.strip()) if x.strip()]
+    if not sentences:
+        return None
+    thirds = [sentences[i * len(sentences) // 3 : (i + 1) * len(sentences) // 3] for i in range(3)]
+    return [" ".join(t)[:220] if t else sentences[-1][:220] for t in thirds]
+
+
 def mock_storyboard(brief: dict) -> dict:
+    """A detailed, schema-valid storyboard built from the brief, as the real model is asked to write."""
     name = brief.get("product_name", "the product")
     offer = brief.get("offer") or ""
-    keep = f"Keep {name} exactly as in the reference photo."
+    keep = f"Keep {name} exactly as in the reference photo: same shape, colours, logo and packaging text."
+    lines = _story_lines(brief.get("story") or "") or [
+        f"Stop scrolling: this is {name}.",
+        "Here is how it works, in one step.",
+        f"Get yours today. {offer}".strip(),
+    ]
+    scenes = [
+        {
+            "role": "hook",
+            "description": f"Close-up of {name} on a bright kitchen counter, filmed like a phone video.",
+            "image_prompt": (
+                f"A close-up of {name} standing upright on a light oak kitchen counter, slightly left of centre, "
+                "with a ceramic mug and a folded linen towel softly out of focus behind it. Morning in a small "
+                "city apartment. Medium close-up from chest height, a 26 mm phone lens, slight downward angle, "
+                "the product filling about a third of the frame. Soft window light from the left, warm 4,500 K, "
+                "gentle shadows to the right. Palette of cream, oak and soft green; calm, fresh mood. " + keep
+            ),
+            "motion_prompt": (
+                "0-1 s: the phone camera holds on the product with a slight natural handheld sway, sunlight "
+                "flickering softly through the window. 1-3 s: a slow push-in toward the product, about 20 percent "
+                "closer, focus staying on the logo while the mug behind blurs further. 3-5 s: the camera eases "
+                "to a stop, a hand enters from the right and rests next to the product; final frame is a tight, "
+                "well-lit close-up of the product, ready to cut to the demo."
+            ),
+            "voiceover": lines[0],
+            "on_screen_text": f"Meet {name}"[:80],
+        },
+        {
+            "role": "demo",
+            "description": f"Hands showing {name} in use at home.",
+            "image_prompt": (
+                f"Two hands holding {name} at chest height in a cosy living room, the product turned three "
+                "quarters toward the camera. A sofa with a knitted throw and a plant in the soft background. "
+                "Medium shot, eye level, 26 mm phone lens, product centred. Soft daylight from a large window "
+                "behind the camera, slight warm fill from a lamp. Palette of warm neutrals with one green accent; "
+                "relaxed, practical mood. " + keep
+            ),
+            "motion_prompt": (
+                "0-1 s: static handheld framing on the hands and product. 1-3 s: the hands slowly turn the "
+                "product to show its front, then its side, while the camera follows with a gentle pan of a few "
+                "degrees. 3-4 s: a short tilt down as the hands demonstrate the main feature, focus following "
+                "the product. 4-5 s: the hands bring the product back to face the camera and pause; final frame "
+                "shows the front of the product clearly, centred."
+            ),
+            "voiceover": lines[1],
+            "on_screen_text": "How it works",
+        },
+        {
+            "role": "cta",
+            "description": f"{name} centred on a clean background with space for the call to action.",
+            "image_prompt": (
+                f"{name} centred on a clean, softly lit seamless background in a pale warm grey, a subtle shadow "
+                "under the product. Product shot, straight on at product height, 50 mm lens look, the product "
+                "filling half the frame with empty space above and below for text added later. Large soft key "
+                "light from the upper left, a faint rim light from behind. Palette of warm grey and the "
+                "product's own colours; confident, premium mood. " + keep
+            ),
+            "motion_prompt": (
+                "0-2 s: a slow, smooth orbit of about 15 degrees around the product from left to right, the "
+                "product staying centred and sharp. 2-4 s: the camera settles and makes a gentle push-in, the "
+                "rim light adding a soft glint on the product's edge. 4-5 s: hold still on a clean, centred "
+                "frame with empty space above the product for the call to action."
+            ),
+            "voiceover": lines[2],
+            "on_screen_text": offer[:80],
+        },
+    ]
     return {
         "title": f"{name}: quick UGC ad",
-        "scenes": [
-            {
-                "role": "hook",
-                "description": f"Close-up of {name} on a kitchen counter, phone-camera look.",
-                "image_prompt": f"Smartphone photo of {name} on a bright kitchen counter, natural light. {keep}",
-                "motion_prompt": "Slow handheld push-in toward the product.",
-                "voiceover": f"Stop scrolling: this is {name}.",
-                "on_screen_text": f"Meet {name}",
-            },
-            {
-                "role": "demo",
-                "description": f"Hands using {name}.",
-                "image_prompt": f"Hands holding {name} in a casual home setting, UGC style. {keep}",
-                "motion_prompt": "Hands turn the product to show the label.",
-                "voiceover": "Here is how it works, in one step.",
-                "on_screen_text": "How it works",
-            },
-            {
-                "role": "cta",
-                "description": f"{name} centred with space for the call to action.",
-                "image_prompt": f"{name} centred on a clean background with empty space above. {keep}",
-                "motion_prompt": "Gentle orbit around the product.",
-                "voiceover": f"Get yours today. {offer}".strip(),
-                "on_screen_text": offer[:80],
-            },
-        ],
+        "scenes": scenes,
         "hooks": [
             {"formula": "pov", "text": f"POV: you finally found {name}"},
             {"formula": "problem_first", "text": f"Tired of the old way? Try {name}"},

@@ -12,10 +12,11 @@ from ..models import Scene
 from .llm_trace import Usage
 from .media_cache import cache_key
 from .providers.media import InputImage, MediaRequest
+from .styles import IMAGE as IMAGE_STYLE
 
 FIDELITY = (
     " Keep the product from the reference photo exactly the same: same shape, proportions, colours, logo"
-    " and packaging text, with no extra text added. Realistic smartphone photo, natural light."
+    " and packaging text. Add no other text, letters, signs or captions anywhere in the image."
 )
 
 
@@ -27,9 +28,16 @@ class PlannedRender:
 
 
 def plan_scene_image(
-    *, model: str, scene: Scene, aspect_ratio: str, seed: int, product: InputImage, product_sha256: str
+    *,
+    model: str,
+    scene: Scene,
+    aspect_ratio: str,
+    seed: int,
+    product: InputImage,
+    product_sha256: str,
+    style: str = "realistic",
 ) -> PlannedRender:
-    prompt = scene.image_prompt.strip() + FIDELITY
+    prompt = scene.image_prompt.strip() + FIDELITY + " " + IMAGE_STYLE.get(style, IMAGE_STYLE["realistic"])
     arguments = {
         "prompt": prompt,
         "num_images": 1,

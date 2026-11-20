@@ -102,6 +102,14 @@ export const api = {
   saveStoryboard: (id, storyboard) =>
     request(`/jobs/${encodeURIComponent(id)}/storyboard`, { method: 'PUT', json: storyboard }),
   approve: (id) => request(`/jobs/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
+  story: (id, story) => request(`/jobs/${encodeURIComponent(id)}/story`, { method: 'POST', json: { story } }),
+  uploadSceneImage: (id, idx, file) => {
+    const form = new FormData();
+    form.append('image', file);
+    return request(`/jobs/${encodeURIComponent(id)}/scenes/${idx}/image`, { method: 'POST', form });
+  },
+  makeVideo: (id, storyboard) =>
+    request(`/jobs/${encodeURIComponent(id)}/video`, { method: 'POST', json: storyboard ?? null }),
   retry: (id) => request(`/jobs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
 };
 

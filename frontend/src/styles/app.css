@@ -353,3 +353,45 @@ input.flagged, textarea.flagged { border-color: #fca5a5; box-shadow: 0 0 0 1px #
 .extras h3 { margin: 6px 0; font-size: 0.95rem; }
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
 .thumbs img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #000; border-radius: var(--radius-sm); display: block; }
+
+/* Hover help */
+.help { position: relative; display: inline-flex; align-items: center; margin-left: 4px; color: var(--text-secondary); cursor: help; vertical-align: middle; }
+.help:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; border-radius: 50%; }
+.help .tip { position: absolute; z-index: 30; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); width: max-content; max-width: 280px; padding: 8px 10px; border-radius: var(--radius-sm); background: #0b1020; border: 1px solid var(--card-border); color: var(--text-primary); font-size: 0.8rem; font-weight: 400; line-height: 1.4; text-transform: none; letter-spacing: 0; white-space: normal; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); opacity: 0; pointer-events: none; transition: opacity 0.12s ease; }
+.help:hover .tip, .help:focus .tip, .help:focus-within .tip { opacity: 1; }
+@media (max-width: 640px) { .help .tip { left: auto; right: -8px; transform: none; } }
+
+/* Clickable steps and Back */
+.stepper .step-link { all: unset; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.stepper .step-link:hover { color: var(--text-primary); text-decoration: underline; }
+.stepper .step-link:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; border-radius: 4px; }
+.back { margin-bottom: 8px; }
+
+/* Choices on the Storyboard and Images steps */
+.choice-group { display: grid; gap: 8px; margin: 8px 0 4px; }
+.choice { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--card-border); border-radius: var(--radius-md); cursor: pointer; background: rgba(255, 255, 255, 0.02); }
+.choice:hover { border-color: rgba(99, 102, 241, 0.6); }
+.choice.selected { border-color: var(--accent-primary); background: rgba(99, 102, 241, 0.12); }
+.choice input[type="radio"] { margin-top: 3px; accent-color: var(--accent-primary); flex-shrink: 0; width: 16px; height: 16px; }
+.choice .choice-body { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.choice .choice-title { font-weight: 600; }
+.choice input[type="text"], .choice textarea { width: 100%; }
+.choice-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.choice-row .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--card-border); border-radius: var(--radius-full); font-size: 0.85rem; cursor: pointer; }
+.choice-row .chip.selected { border-color: var(--accent-primary); background: rgba(99, 102, 241, 0.15); }
+.choice-row .chip input { accent-color: var(--accent-primary); margin: 0; }
+.scene .scene-image { width: 100%; border-radius: var(--radius-md); background: #000; object-fit: contain; max-height: 340px; }
+.scene .field-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.scene .field-row select { width: auto; }
+.cost-box { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--card-border); border-radius: var(--radius-md); background: rgba(255, 255, 255, 0.03); }
+.cost-box .row { display: flex; justify-content: space-between; gap: 12px; }
+.cost-box .over { color: #fca5a5; }
+label .help, .label-like .help { margin-left: 6px; }
+.upload-btn { margin-top: 6px; width: fit-content; cursor: pointer; }
+
+/* radio buttons inside chips and choices keep their own size (the form styles stretch inputs) */
+.chip input[type="radio"], .choice input[type="radio"] { width: 16px; min-width: 16px; height: 16px; padding: 0; margin: 0; flex: 0 0 auto; }
+.choice-row .chip { white-space: nowrap; }
+.choice-row.stack { flex-direction: column; align-items: stretch; }
+.choice-row.stack .chip { justify-content: space-between; border-radius: var(--radius-md); }
+.choice-row.stack .chip .muted { margin-left: auto; }

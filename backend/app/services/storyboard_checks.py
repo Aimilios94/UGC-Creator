@@ -132,7 +132,7 @@ def claim_reason(sentence: str) -> str | None:
 
 
 def _brief_claims(brief: Brief) -> list[str]:
-    text = "\n".join([brief.description, brief.audience, brief.offer])
+    text = "\n".join([brief.description, brief.audience, brief.offer, brief.story])
     return [s for s in _sentences(text) if claim_reason(s)]
 
 
@@ -164,7 +164,7 @@ def flag_testimonials(board: Storyboard, brief: Brief) -> list[StoryboardFlag]:
     that the brief does not supply. Prompts sent to the image and video models are not
     checked: they are never shown or spoken."""
     claims = _brief_claims(brief)
-    numbers = set(_NUMBER.findall("\n".join([brief.description, brief.audience, brief.offer])))
+    numbers = set(_NUMBER.findall("\n".join([brief.description, brief.audience, brief.offer, brief.story])))
     flags: list[StoryboardFlag] = []
     for field, text in _fields(board):
         for sentence in _sentences(text):

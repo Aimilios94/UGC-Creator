@@ -18,6 +18,8 @@ Font = Literal["Inter", "Montserrat", "Bebas Neue", "Playfair Display"]  # bundl
 Voice = Literal["marin", "cedar", "coral", "onyx"]  # gpt-4o-mini-tts built-in voices offered
 Music = Literal["theme", "none"]
 CaptionStyle = Literal["bold", "clean", "off"]
+VisualStyle = Literal["realistic", "cinematic", "3d", "2d"]
+ImageSource = Literal["generate", "product", "upload"]
 HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
 
 
@@ -37,8 +39,10 @@ class Brief(BaseModel):
     voice: Voice = "marin"
     music: Music = "theme"
     captions: CaptionStyle = "bold"
+    visual_style: VisualStyle = "realistic"
+    story: str = Field(default="", max_length=4000)  # the user's own story or script, if any
 
-    @field_validator("product_name", "description", "audience", "offer", mode="before")
+    @field_validator("product_name", "description", "audience", "offer", "story", mode="before")
     @classmethod
     def _strip(cls, v):
         return v.strip() if isinstance(v, str) else v
@@ -58,16 +62,31 @@ class ProductAnalysis(BaseModel):
     people_in_photo: bool = Field(description="True if a person or a face is visible in the photo")
 
 
-class Scene(BaseModel):
+class SceneDraft(BaseModel):
+    """A scene as the AI writes it."""
+
     role: SceneRole
-    description: str = Field(max_length=500, description="What the viewer sees in this scene")
+    description: str = Field(max_length=800, description="What the viewer sees in this scene, in plain words")
     image_prompt: str = Field(
-        max_length=1200,
-        description="Prompt for the scene's reference image, built around the real product from the photo",
+        max_length=2500,
+        description="Detailed prompt for the scene's reference image (subject, setting, composition, camera, "
+        "lighting, colours, style), built around the real product from the photo",
     )
-    motion_prompt: str = Field(max_length=600, description="Camera and subject motion for the image-to-video clip")
+    motion_prompt: str = Field(
+        max_length=2200,
+        description="Timed shot list for the image-to-video clip: what happens in each beat, camera and subject "
+        "motion, lighting, focus, and how the shot ends",
+    )
     voiceover: str = Field(max_length=220, description="Voiceover line, about 5 seconds when spoken")
     on_screen_text: str = Field(default="", max_length=80)
+
+
+class Scene(SceneDraft):
+    """A scene with the user's choices: clip length and where its image comes from."""
+
+    duration_s: Literal[5, 10] = 5
+    image_source: ImageSource = "generate"
+    image_upload_key: str | None = None  # set by the server when the user uploads an image; never by the client
 
 
 class Hook(BaseModel):
@@ -75,13 +94,34 @@ class Hook(BaseModel):
     text: str = Field(max_length=160)
 
 
+def _roles_in_order(scenes):
+    if [s.role for s in scenes] != ["hook", "demo", "cta"]:
+        raise ValueError("scenes must be hook, demo, cta in that order")
+    return scenes
+
+
+class StoryboardDraft(BaseModel):
+    """Three scenes (hook, demo, call to action) and three alternative hooks, as the AI writes them."""
+
+    title: str = Field(max_length=100)
+    scenes: list[SceneDraft] = Field(min_length=3, max_length=3)
+    hooks: list[Hook] = Field(min_length=3, max_length=3)
+    cta_text: str = Field(max_length=60)
+
+    @field_validator("scenes")
+    @classmethod
+    def _draft_roles(cls, scenes):
+        return _roles_in_order(scenes)
+
+
 class Storyboard(BaseModel):
-    """Three scenes (hook, demo, call to action) and three alternative hooks."""
+    """The storyboard the user edits and approves."""
 
     title: str = Field(max_length=100)
     scenes: list[Scene] = Field(min_length=3, max_length=3)
     hooks: list[Hook] = Field(min_length=3, max_length=3)
     cta_text: str = Field(max_length=60)
+    hook_choice: int | None = Field(default=None, ge=0, le=2)  # the hook idea used for scene 1, if any
 
     @field_validator("scenes")
     @classmethod
@@ -158,6 +198,13 @@ class CampaignView(BaseModel):
     created_at: str
 
 
+class Estimate(BaseModel):
+    images: Money  # reference images still to generate (own images are free)
+    video: Money  # clips (by each scene's length) and voiceover
+    total: Money
+    fits_cap: bool
+
+
 class VariantView(BaseModel):
     label: str
     hook_idx: int
@@ -174,8 +221,10 @@ class JobView(BaseModel):
     brief: Brief
     campaign_id: str | None = None
     brand: BrandKit | None = None
+    phase: str = "video"  # images (step 1) | video (step 2)
     flags: list[StoryboardFlag] = []
     variants: list[VariantView] = []
+    estimate: Estimate | None = None
     analysis: ProductAnalysis | None = None
     storyboard: Storyboard | None = None
     attempts: int

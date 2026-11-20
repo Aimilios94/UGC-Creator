@@ -12,6 +12,9 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 - Five CC0 music beds (one per theme) cut by `scripts/make_music_beds.py`, with their sources and the CC0 legal code in `docs/MUSIC.md` and `docs/music/`. Four caption fonts with their OFL licences in `backend/app/fonts/`.
 - Create page: voiceover, music and captions are live (Soon tags removed). Generate step: the finished ad with a tab per format, download links, cover, stills and carousel, and a note to turn on the platform's AI label.
 
+- You steer the story, images and clips ([D27](DECISIONS.md)): images first, then "Make the video" (with a last chance to edit voiceover, text, motion and clip length); per scene "Generate", "My product photo" or "Upload my own" image; your own story (Create page or Storyboard step), kept word for word; a ticked opening hook (as written, one of three ideas, or your own); 5 or 10 s per scene with live prices and the cap checked before rendering; a visual style (realistic, cinematic, 3D, 2D); clickable step pills and Back buttons; hover help on every field and option.
+- Detailed prompts: image prompts describe subject, setting, framing, camera, light, colours and style; motion prompts are a timed shot list for one continuous take; Kling gets a negative prompt against lettering.
+
 ### Changed
 - The Docker image installs ffmpeg; CI installs it for the compose tests. PyYAML added.
 - Every ad renders three scenes in code and tests (`RENDER_SCENES=3`, estimate 1.17 USD ≈ 1.02 EUR). Cloud Run stays pinned to 1 scene (`RENDER_SCENES: "1"` in `deploy/gcp/*.env.yaml`) until the M2 deploy, which sets 3 with the owner's go.

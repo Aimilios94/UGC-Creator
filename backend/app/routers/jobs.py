@@ -11,8 +11,8 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import ValidationError
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field, ValidationError
 
 from .. import repository as repo
 from ..deps import get_ctx, require_access_code, session_hash
@@ -22,6 +22,7 @@ from ..models import (
     BrandKit,
     BrandSnapshot,
     Brief,
+    Estimate,
     JobView,
     Money,
     ProductAnalysis,
@@ -31,7 +32,7 @@ from ..models import (
 )
 from ..services import job_trigger
 from ..services.llm_trace import money
-from ..services.pipeline import Context, prepare_storyboard
+from ..services.pipeline import Context, estimate_board_usd, prepare_storyboard, storyboard_from_story
 from ..services.storyboard_checks import flag_testimonials
 from ..services.uploads import sanitise_image
 
@@ -70,9 +71,12 @@ def job_view(ctx: Context, job: dict) -> JobView:
         )
     brief = Brief.model_validate(job["brief"])
     board = Storyboard.model_validate(job["storyboard"]) if job.get("storyboard") else None
+    spent = repo.job_spend_usd(ctx.db, job_id)
     return JobView(
         id=job_id,
         status=job["status"],
+        phase=job.get("phase") or "video",
+        estimate=_estimate(ctx, board, spent, job) if board is not None else None,
         brief=brief,
         campaign_id=str(job["campaign_id"]) if job.get("campaign_id") else None,
         brand=BrandKit.model_validate(job["brand"]) if job.get("brand") else None,
@@ -90,15 +94,76 @@ def job_view(ctx: Context, job: dict) -> JobView:
             for v in repo.list_variants(ctx.db, job_id)
         ],
         analysis=ProductAnalysis.model_validate(job["analysis"]) if job.get("analysis") else None,
-        storyboard=board,
+        storyboard=public_board(board) if board is not None else None,
         attempts=job["attempts"],
         last_error=job.get("last_error"),
         stages=stages,
         assets=assets,
-        spend=Money(**money(repo.job_spend_usd(ctx.db, job_id), s.usd_to_eur_rate)),
+        spend=Money(**money(spent, s.usd_to_eur_rate)),
         cost_cap=Money(usd=round(s.job_cost_cap_usd, 4), eur=s.job_cost_cap_eur),
         created_at=job["created_at"].isoformat(),
     )
+
+
+def public_board(board: Storyboard) -> Storyboard:
+    """Storage keys stay on the server: the browser only sees where each image comes from."""
+    return board.model_copy(
+        update={"scenes": [sc.model_copy(update={"image_upload_key": None}) for sc in board.scenes]}
+    )
+
+
+def _estimate(ctx: Context, board: Storyboard, spent_usd: float, job: dict) -> Estimate:
+    s = ctx.settings
+    rate = s.usd_to_eur_rate
+    images, video = estimate_board_usd(s, board)
+    if job["status"] != "draft":
+        images = 0.0  # already made
+    if job["status"] != "draft" and (job.get("phase") or "video") == "video":
+        video = 0.0
+    total = images + video
+    return Estimate(
+        images=Money(**money(images, rate)),
+        video=Money(**money(video, rate)),
+        total=Money(**money(total, rate)),
+        fits_cap=spent_usd + total <= s.job_cost_cap_usd + 1e-9,
+    )
+
+
+def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool) -> Storyboard:
+    """Apply the user's edits, but never from the browser: storage keys (set only by the upload
+    route) and, once the images exist, everything that made them."""
+    scenes = []
+    for n, o in zip(new.scenes, old.scenes, strict=True):
+        keep = {"image_upload_key": o.image_upload_key, "role": o.role}
+        if lock_images:
+            keep |= {"image_prompt": o.image_prompt, "image_source": o.image_source}
+        sc = n.model_copy(update=keep)
+        if sc.image_source == "upload" and not sc.image_upload_key:
+            raise HTTPException(
+                status_code=422, detail="Upload an image for that scene first, or choose another source."
+            )
+        scenes.append(sc)
+    return new.model_copy(update={"scenes": scenes})
+
+
+def _check_ready(ctx: Context, job: dict, board: Storyboard, *, phase: str) -> None:
+    """Refuse a step that breaks the testimonial rule or cannot fit the cost cap."""
+    flags = flag_testimonials(board, Brief.model_validate(job["brief"]))
+    if flags:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Edit the {len(flags)} flagged line(s) first: claims of use, results or reviews "
+            "need to come from your brief.",
+        )
+    s = ctx.settings
+    images, video = estimate_board_usd(s, board)
+    need = (images + video) if phase == "images" else video
+    if repo.job_spend_usd(ctx.db, str(job["id"])) + need > s.job_cost_cap_usd + 1e-9:
+        raise HTTPException(
+            status_code=409,
+            detail=f"This ad would cost more than the cap of {s.job_cost_cap_eur:.2f} EUR. "
+            "Use shorter clips (5 s) or your own images for some scenes.",
+        )
 
 
 def _own_job(ctx: Context, job_id: str, sess: str) -> dict:
@@ -213,8 +278,75 @@ def edit_storyboard(
     job_id: str, board: Storyboard, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)
 ) -> JobView:
     job = _own_job(ctx, job_id, sess)
-    if not repo.set_storyboard(ctx.db, str(job["id"]), board.model_dump(mode="json")):
+    if job["status"] != "draft" or not job.get("storyboard"):
         raise HTTPException(status_code=409, detail="The storyboard is locked once approved.")
+    merged = merge_board(board, Storyboard.model_validate(job["storyboard"]), lock_images=False)
+    if not repo.set_storyboard(ctx.db, str(job["id"]), merged.model_dump(mode="json")):
+        raise HTTPException(status_code=409, detail="The storyboard is locked once approved.")
+    return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+class StoryIn(BaseModel):
+    story: str = Field(min_length=20, max_length=4000)
+
+
+@router.post("/{job_id}/story", dependencies=[Depends(require_access_code)])
+def from_story(
+    job_id: str, body: StoryIn, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)
+) -> JobView:
+    """ "My own story": the storyboard is written again from the user's story (a few cents)."""
+    job = _own_job(ctx, job_id, sess)
+    if job["status"] != "draft" or not job.get("analysis"):
+        raise HTTPException(status_code=409, detail="The story can be changed only before you approve.")
+    try:
+        storyboard_from_story(ctx, job, body.story.strip())
+    except BudgetExceeded as e:
+        raise HTTPException(status_code=409, detail=e.message) from None
+    except Exception:  # noqa: BLE001 - details go to the log
+        log.exception("storyboard from story failed for job %s", job_id)
+        raise HTTPException(
+            status_code=502, detail="Writing the storyboard from your story failed. Try again."
+        ) from None
+    return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+@router.post("/{job_id}/scenes/{idx}/image", dependencies=[Depends(require_access_code)])
+def upload_scene_image(
+    job_id: str,
+    idx: int,
+    image: UploadFile = File(...),
+    sess: str = Depends(session_hash),
+    ctx: Context = Depends(get_ctx),
+) -> JobView:
+    """Use the user's own image for a scene instead of generating one (free)."""
+    job = _own_job(ctx, job_id, sess)
+    if job["status"] != "draft" or not job.get("storyboard"):
+        raise HTTPException(status_code=409, detail="Scene images can be changed only before you approve.")
+    board = Storyboard.model_validate(job["storyboard"])
+    if not 0 <= idx < len(board.scenes):
+        raise HTTPException(status_code=404, detail="Scene not found.")
+    s = ctx.settings
+    raw = image.file.read(s.max_upload_bytes + 1)
+    try:
+        clean = sanitise_image(raw, max_bytes=s.max_upload_bytes, max_side=s.max_image_side_px)
+    except UploadRejected as e:
+        raise HTTPException(status_code=422, detail=str(e)) from None
+    key = f"jobs/{job['id']}/scene-{idx}/own-{uuid.uuid4().hex[:8]}.{clean.ext}"
+    ctx.storage.put(key, clean.data, clean.content_type)
+    repo.add_asset(
+        ctx.db,
+        job_id=str(job["id"]),
+        kind="upload",
+        storage_key=key,
+        content_type=clean.content_type,
+        size=len(clean.data),
+        sha256=clean.sha256,
+        width=clean.width,
+        height=clean.height,
+    )
+    scenes = list(board.scenes)
+    scenes[idx] = scenes[idx].model_copy(update={"image_source": "upload", "image_upload_key": key})
+    repo.set_storyboard(ctx.db, str(job["id"]), board.model_copy(update={"scenes": scenes}).model_dump(mode="json"))
     return job_view(ctx, repo.get_job(ctx.db, job_id))
 
 
@@ -235,20 +367,39 @@ def approve(job_id: str, sess: str = Depends(session_hash), ctx: Context = Depen
     Refused while the storyboard has lines that break the testimonial rule."""
     current = _own_job(ctx, job_id, sess)
     if current["status"] == "draft" and current.get("storyboard"):
-        flags = flag_testimonials(
-            Storyboard.model_validate(current["storyboard"]), Brief.model_validate(current["brief"])
-        )
-        if flags:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Edit the {len(flags)} flagged line(s) first: claims of use, results or reviews "
-                "need to come from your brief.",
-            )
+        _check_ready(ctx, current, Storyboard.model_validate(current["storyboard"]), phase="images")
     job, _ = repo.approve_job(ctx.db, job_id, sess)
     if job["status"] == "draft":
         raise HTTPException(status_code=409, detail="There is no storyboard to approve yet.")
     if job["status"] == "queued":
         _start_worker(ctx)  # also on a repeat click: an extra execution finds nothing and exits 0
+    return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+@router.post("/{job_id}/video", status_code=202, dependencies=[Depends(require_access_code)])
+def make_video(
+    job_id: str,
+    board: Storyboard | None = Body(default=None),
+    sess: str = Depends(session_hash),
+    ctx: Context = Depends(get_ctx),
+) -> JobView:
+    """Step 2: make the video from the finished images. The video fields of the storyboard
+    (voiceover, on-screen text, motion, clip length, hook) may be edited first. Idempotent."""
+    job = _own_job(ctx, job_id, sess)
+    if job["status"] == "draft":
+        raise HTTPException(status_code=409, detail="Approve the storyboard first: the images come before the video.")
+    if (job.get("phase") or "video") == "video" or job["status"] in ("queued", "running"):
+        if job["status"] in ("queued", "running"):
+            _start_worker(ctx)
+        return job_view(ctx, job)
+    if job["status"] != "done":
+        raise HTTPException(status_code=409, detail="Make the images first.")
+    old = Storyboard.model_validate(job["storyboard"])
+    merged = merge_board(board, old, lock_images=True) if board is not None else old
+    _check_ready(ctx, job, merged, phase="video")
+    job, changed = repo.start_video(ctx.db, job_id, sess, merged.model_dump(mode="json"))
+    if changed or job["status"] == "queued":
+        _start_worker(ctx)
     return job_view(ctx, repo.get_job(ctx.db, job_id))
 
 

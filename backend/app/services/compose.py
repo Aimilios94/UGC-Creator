@@ -446,7 +446,7 @@ def write_ass(layout: Layout, w: int, h: int, dst: Path) -> None:
 
 
 # --- images: end card, stills, carousel, cover ------------------------------------------------
-def _fit_into(img: Image.Image, w: int, h: int, mode: str) -> Image.Image:
+def fit_into(img: Image.Image, w: int, h: int, mode: str) -> Image.Image:
     """mode crop: fill and centre-crop; pad: fit inside a blurred, filled copy."""
     img = img.convert("RGB")
     cover = max(w / img.width, h / img.height)
@@ -717,7 +717,7 @@ def compose(spec: ComposeSpec, work: Path) -> ComposeResult:
     mode = "master" if spec.master_ratio == "4:5" else derive_mode(spec.master_ratio, "4:5")
     carousel: list[Path] = []
     for i, (scene, frame) in enumerate(zip(spec.scenes, raw_frames, strict=True)):
-        slide = _fit_into(frame, cw, ch, "crop" if mode in ("master", "crop") else "pad")
+        slide = fit_into(frame, cw, ch, "crop" if mode in ("master", "crop") else "pad")
         carousel.append(save_jpeg(draw_headline(slide, scene.headline, spec, czone), work / f"carousel_{i + 1}.jpg"))
     end_slide, ok, _ = render_end_card(spec, cw, ch, czone)
     if ok:

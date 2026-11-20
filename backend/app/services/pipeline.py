@@ -30,11 +30,12 @@ from ..errors import BudgetExceeded
 from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Storyboard
 from ..repository import Database
 from . import analyze, storyboard
-from .compose import Branding, ComposeSpec, SceneInput, compose
+from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into
 from .image_gen import PlannedRender, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
 from .music import bed_for
 from .output_checks import check_compose
+from .platform_specs import MIN_CROP_KEEP, frame_size
 from .providers.llm import LlmHandle, build_llm
 from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
@@ -149,24 +150,23 @@ def _run_llm_stage(ctx: Context, job_id: str, stage: str, llm: LlmHandle, call, 
     return output
 
 
-def prepare_storyboard(ctx: Context, job: dict, photo: bytes, content_type: str) -> tuple[ProductAnalysis, Storyboard]:
-    """Analyze the photo and write the storyboard. Cheap LLM calls only; nothing renders.
+def write_board(
+    ctx: Context, job_id: str, brief: Brief, analysis: ProductAnalysis, brand: BrandKit | None, attempt: int = 1
+) -> Storyboard:
+    """Write (or rewrite, for example from the user's own story) the storyboard and save it.
 
     Testimonial rule: if the code check flags lines, the storyboard is written once more
     with those lines as feedback. Lines still flagged after that are left for the user to
     edit on the Storyboard step (Approve is refused while any remain).
     """
-    job_id = str(job["id"])
-    brief = Brief.model_validate(job["brief"])
-    brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
-    llm = ctx.llm_factory("analyze")
-    analysis = _run_llm_stage(
-        ctx, job_id, "analyze", llm, lambda: analyze.analyze_product(llm, brief, photo, content_type)
-    )
-    repo.set_analysis(ctx.db, job_id, analysis.model_dump(mode="json"))
-    llm2 = ctx.llm_factory("storyboard")
+    llm = ctx.llm_factory("storyboard")
     board = _run_llm_stage(
-        ctx, job_id, "storyboard", llm2, lambda: storyboard.write_storyboard(llm2, brief, analysis, brand=brand)
+        ctx,
+        job_id,
+        "storyboard",
+        llm,
+        lambda: storyboard.write_storyboard(llm, brief, analysis, brand=brand),
+        attempt=attempt,
     )
     flags = flag_testimonials(board, brief)
     if flags:
@@ -177,17 +177,41 @@ def prepare_storyboard(ctx: Context, job: dict, photo: bytes, content_type: str)
                 ctx,
                 job_id,
                 "storyboard",
-                llm2,
-                lambda: storyboard.write_storyboard(llm2, brief, analysis, brand=brand, feedback=feedback),
-                attempt=2,
+                llm,
+                lambda: storyboard.write_storyboard(llm, brief, analysis, brand=brand, feedback=feedback),
+                attempt=attempt + 1,
             )
         except Exception:  # noqa: BLE001 - keep the first storyboard; its flagged lines go to the user
             log.exception("storyboard rewrite failed for job %s; keeping the first version", job_id)
             sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
             if sr:
-                repo.stage_done(ctx.db, sr["id"], {"model": llm2.model_name, "rewrite_failed": True})
+                repo.stage_done(ctx.db, sr["id"], {"model": llm.model_name, "rewrite_failed": True})
     repo.set_storyboard(ctx.db, job_id, board.model_dump(mode="json"))
-    return analysis, board
+    return board
+
+
+def prepare_storyboard(ctx: Context, job: dict, photo: bytes, content_type: str) -> tuple[ProductAnalysis, Storyboard]:
+    """Analyze the photo and write the storyboard. Cheap LLM calls only; nothing renders."""
+    job_id = str(job["id"])
+    brief = Brief.model_validate(job["brief"])
+    brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
+    llm = ctx.llm_factory("analyze")
+    analysis = _run_llm_stage(
+        ctx, job_id, "analyze", llm, lambda: analyze.analyze_product(llm, brief, photo, content_type)
+    )
+    repo.set_analysis(ctx.db, job_id, analysis.model_dump(mode="json"))
+    return analysis, write_board(ctx, job_id, brief, analysis, brand)
+
+
+def storyboard_from_story(ctx: Context, job: dict, story: str) -> Storyboard:
+    """The user's own story leads: the storyboard is written again from it (one cheap LLM call)."""
+    job_id = str(job["id"])
+    brief = Brief.model_validate({**job["brief"], "story": story})
+    repo.set_brief(ctx.db, job_id, brief.model_dump(mode="json"))
+    analysis = ProductAnalysis.model_validate(job["analysis"])
+    brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
+    sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
+    return write_board(ctx, job_id, brief, analysis, brand, attempt=(sr["attempt"] + 1) if sr else 1)
 
 
 # --- after approval (worker) ----------------------------------------------------------
@@ -512,17 +536,50 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
     repo.stage_done(ctx.db, sr["id"], {k: output[k] for k in ("duration_s", "ratios", "skipped")})
 
 
+def use_own_image(ctx: Context, job: dict, idx: int, scene: Scene, ratio: str) -> dict:
+    """A scene image the user already has (their upload, or the product photo): free, no render.
+
+    It is fitted to the ad's master ratio first (crop, or a blurred fill when a crop would cut
+    too much), because the video model takes the clip's shape from its input image."""
+    job_id = str(job["id"])
+    sr = repo.get_stage_run(ctx.db, job_id, "image", idx)
+    if sr and sr["status"] == "done":
+        return repo.get_asset(ctx.db, sr["output"]["asset_id"])
+    source_key = job["upload_key"] if scene.image_source == "product" else scene.image_upload_key
+    if not source_key:
+        raise RuntimeError(f"scene {idx + 1} has no uploaded image")
+    sr = repo.start_stage(ctx.db, job_id, "image", idx, provider="own", model=f"own-{scene.image_source}", attempt=1)
+    from PIL import Image
+
+    w, h = frame_size(ratio)
+    with Image.open(io.BytesIO(ctx.storage.get(source_key))) as im:
+        mode = "crop" if crop_keep_image(im.width / im.height, w / h) >= MIN_CROP_KEEP else "pad"
+        fitted = fit_into(im, w, h, mode)
+    buf = io.BytesIO()
+    fitted.save(buf, "JPEG", quality=92)
+    asset = _store_output(ctx, job_id, "image", idx, buf.getvalue(), "image/jpeg")
+    repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "own": scene.image_source, "fit": mode})
+    return asset
+
+
+def crop_keep_image(a: float, b: float) -> float:
+    return min(a, b) / max(a, b)
+
+
 def run_job(ctx: Context, job: dict) -> None:
-    """Voice, render and compose the approved scenes. Safe to call again after a crash: it resumes."""
+    """Run the job's current phase. Safe to call again after a crash: it resumes.
+
+    Phase "images" (after Approve): one reference image per scene, generated or the user's own.
+    Phase "video" (after "Make the video"): the voiceover lines first (cheap, so a voice problem
+    stops the job before any video is paid), then one clip per scene, then compose.
+    """
     s = ctx.settings
     job_id = str(job["id"])
     brief = Brief.model_validate(job["brief"])
     board = Storyboard.model_validate(job["storyboard"])
     brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
     tone = brand.tone if brand else None
-    for row in repo.list_scenes(ctx.db, job_id)[: s.render_scenes]:
-        scene = Scene.model_validate(row["data"])
-        run_voice_stage(ctx, job, row["idx"], scene.voiceover, brief.voice, tone)
+    rows = repo.list_scenes(ctx.db, job_id)[: s.render_scenes]
     photo = ctx.storage.get(job["upload_key"])
     product = InputImage(
         data=photo,
@@ -530,24 +587,40 @@ def run_job(ctx: Context, job: dict) -> None:
         url=ctx.storage.provider_url(job["upload_key"], 3600),
     )
     seed = job_seed(job_id)
-    for row in repo.list_scenes(ctx.db, job_id)[: s.render_scenes]:
+    images: dict[int, dict] = {}
+    for row in rows:
+        idx = row["idx"]
+        scene = Scene.model_validate(row["data"])
+        if scene.image_source != "generate":
+            image = use_own_image(ctx, job, idx, scene, brief.aspect_ratio)
+        else:
+
+            def plan_image(scene=scene):
+                return plan_scene_image(
+                    model=s.image_model,
+                    scene=scene,
+                    aspect_ratio=brief.aspect_ratio,
+                    seed=seed,
+                    product=product,
+                    product_sha256=job["upload_sha256"],
+                    style=brief.visual_style,
+                )
+
+            image = run_media_stage(ctx, job, "image", idx, plan_image)
+        repo.set_scene_asset(ctx.db, job_id, idx, "image", str(image["id"]))
+        images[idx] = image
+    if job.get("phase", "video") == "images":
+        repo.finish_job(ctx.db, job_id)
+        return
+
+    for row in rows:
+        scene = Scene.model_validate(row["data"])
+        run_voice_stage(ctx, job, row["idx"], scene.voiceover, brief.voice, tone)
+    for row in rows:
         idx = row["idx"]
         scene = Scene.model_validate(row["data"])
 
-        def plan_image(scene=scene):
-            return plan_scene_image(
-                model=s.image_model,
-                scene=scene,
-                aspect_ratio=brief.aspect_ratio,
-                seed=seed,
-                product=product,
-                product_sha256=job["upload_sha256"],
-            )
-
-        image = run_media_stage(ctx, job, "image", idx, plan_image)
-        repo.set_scene_asset(ctx.db, job_id, idx, "image", str(image["id"]))
-
-        def plan_video(image=image, scene=scene):
+        def plan_video(image=images[idx], scene=scene):
             ref = InputImage(
                 data=ctx.storage.get(image["storage_key"]),
                 content_type=image["content_type"],
@@ -556,9 +629,10 @@ def run_job(ctx: Context, job: dict) -> None:
             return plan_scene_video(
                 model=s.video_model,
                 scene=scene,
-                duration_s=s.video_duration_s,
+                duration_s=scene.duration_s,
                 reference=ref,
                 reference_sha256=image["sha256"],
+                style=brief.visual_style,
             )
 
         video = run_media_stage(ctx, job, "video", idx, plan_video)
@@ -570,12 +644,25 @@ def run_job(ctx: Context, job: dict) -> None:
 VOICE_EST_WORDS = 14  # a voiceover line is about 12 words; a little more for the estimate
 
 
+def voice_est_usd(s: Settings, text: str | None = None) -> float:
+    words = text if text and text.strip() else " ".join(["word"] * VOICE_EST_WORDS)
+    return cost_usd(s.tts_model, plan_voice(model=s.tts_model, text=words, voice=s.tts_voice, tone=None).usage)
+
+
 def estimate_job_usd(s: Settings) -> float:
-    """Full estimate for one approved job under the current settings (shown before approval)."""
+    """Default estimate for a full ad (3 generated images, 5 s clips, voiceover), shown before a brief."""
     per_scene = cost_usd(s.image_model, Usage(images=1)) + cost_usd(s.video_model, Usage(seconds=s.video_duration_s))
-    voice = plan_voice(model=s.tts_model, text=" ".join(["word"] * VOICE_EST_WORDS), voice=s.tts_voice, tone=None)
-    per_scene += cost_usd(s.tts_model, voice.usage)
+    per_scene += voice_est_usd(s)
     return round(per_scene * s.render_scenes, 6)
+
+
+def estimate_board_usd(s: Settings, board: Storyboard) -> tuple[float, float]:
+    """(images, video) estimate for this storyboard: own images are free; clips by each scene's length."""
+    scenes = board.scenes[: s.render_scenes]
+    images = sum(cost_usd(s.image_model, Usage(images=1)) for sc in scenes if sc.image_source == "generate")
+    video = sum(cost_usd(s.video_model, Usage(seconds=sc.duration_s)) for sc in scenes)
+    video += sum(voice_est_usd(s, sc.voiceover) for sc in scenes if sc.voiceover.strip())
+    return round(images, 6), round(video, 6)
 
 
 def estimate_job_eur(s: Settings) -> float:

@@ -186,3 +186,10 @@ alter table assets add constraint assets_kind_check
 alter table media_cache drop constraint if exists media_cache_kind_check;
 alter table media_cache add constraint media_cache_kind_check check (kind in ('image', 'video', 'audio'));
 alter table variants add column if not exists output jsonb;  -- compose summary: duration, ratios, checks
+
+-- Two steps (D27): Approve makes the reference images (phase 'images'); "Make the video" then
+-- renders voice, clips and the composed ad from them (phase 'video'). Jobs made before have
+-- rendered everything at once, so the default is 'video'.
+alter table jobs add column if not exists phase text not null default 'video';
+alter table jobs drop constraint if exists jobs_phase_check;
+alter table jobs add constraint jobs_phase_check check (phase in ('images', 'video'));

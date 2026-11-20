@@ -8,8 +8,8 @@ from .. import __version__
 from ..config import ASPECT_RATIOS, PLATFORMS, Settings, get_settings
 from ..deps import access_ok, get_ctx
 from ..models import Money
-from ..services.llm_trace import money
-from ..services.pipeline import Context, estimate_job_usd
+from ..services.llm_trace import Usage, cost_usd, money
+from ..services.pipeline import Context, estimate_job_usd, voice_est_usd
 
 router = APIRouter(tags=["health"])
 
@@ -55,6 +55,13 @@ def public_config(settings: Settings = Depends(get_settings)) -> dict:
         "job_estimate": Money(**money(estimate_job_usd(settings), rate)),
         "job_cost_cap": Money(usd=round(settings.job_cost_cap_usd, 4), eur=settings.job_cost_cap_eur),
         "models": {"llm": settings.llm_model, "image": settings.image_model, "video": settings.video_model},
+        # Unit prices for live estimates on the Storyboard step (same price table as the server).
+        "prices": {
+            "image": Money(**money(cost_usd(settings.image_model, Usage(images=1)), rate)),
+            "video_per_second": Money(**money(cost_usd(settings.video_model, Usage(seconds=1)), rate)),
+            "voice_line": Money(**money(voice_est_usd(settings), rate)),
+        },
+        "clip_lengths": [5, 10],
     }
 
 

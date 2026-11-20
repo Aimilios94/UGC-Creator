@@ -9,7 +9,7 @@ import httpx
 
 from app import worker
 from conftest import BRIEF, new_session
-from helpers import approve, create_job
+from helpers import approve, create_job, make_video
 
 
 def test_brief_to_storyboard_to_playable_video(client, ctx, session_id, photo_bytes):
@@ -25,8 +25,20 @@ def test_brief_to_storyboard_to_playable_video(client, ctx, session_id, photo_by
     assert ctx.media.submits == []  # nothing paid renders before approval
 
     r = approve(client, session_id, job["id"])
-    assert r.status_code == 202 and r.json()["status"] == "queued"
+    assert r.status_code == 202 and r.json()["status"] == "queued" and r.json()["phase"] == "images"
 
+    # Step 1: the images only, then the job waits for "Make the video".
+    assert worker.run_once(ctx) is True
+    step1 = client.get(f"/jobs/{job['id']}", headers={"X-Session-Id": session_id}).json()
+    assert (step1["status"], step1["phase"]) == ("done", "images")
+    assert {a["kind"] for a in step1["assets"]} == {"upload", "image"}
+    assert [r.kind for r in ctx.media.submits] == ["image"] * 3
+    assert step1["variants"][0]["status"] == "queued"
+    assert step1["estimate"]["images"]["eur"] == 0 and step1["estimate"]["video"]["eur"] > 0
+
+    # Step 2: voice, clips and the composed ad.
+    r = make_video(client, session_id, job["id"])
+    assert r.status_code == 202 and r.json()["status"] == "queued" and r.json()["phase"] == "video"
     assert worker.run_once(ctx) is True
     done = client.get(f"/jobs/{job['id']}", headers={"X-Session-Id": session_id}).json()
     assert done["status"] == "done", done["last_error"]
@@ -93,7 +105,13 @@ def test_double_clicked_approve_creates_one_job(client, ctx, session_id, photo_b
     assert rows == 1 and scenes == 3
     assert worker.run_once(ctx) is True
     assert worker.run_once(ctx) is False  # only one job was ever queued
-    assert len([r for r in ctx.media.submits if r.kind == "video"]) == 3  # one clip per scene, once
+    assert [r.kind for r in ctx.media.submits] == ["image"] * 3  # step 1 only
+    # "Make the video", double-clicked: one more run, one clip per scene, once.
+    assert make_video(client, session_id, job["id"]).status_code == 202
+    assert make_video(client, session_id, job["id"]).status_code == 202
+    assert worker.run_once(ctx) is True
+    assert worker.run_once(ctx) is False
+    assert len([r for r in ctx.media.submits if r.kind == "video"]) == 3
 
 
 def test_storyboard_is_editable_until_approved(client, session_id, photo_bytes):

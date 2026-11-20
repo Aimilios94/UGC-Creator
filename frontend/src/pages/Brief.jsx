@@ -3,6 +3,9 @@ import { AlertTriangle, ChevronDown, ImageUp, KeyRound, Loader2, Lock, Sparkles 
 import { api, getAccessCode, rememberJob, setAccessCode } from '../lib/api';
 import { navigate, useCurrency } from '../lib/hooks';
 import { formatMoney } from '../lib/money';
+import { Help } from '../components/Help';
+import { HELP } from '../lib/help';
+import Stepper from '../components/Stepper';
 
 const PLATFORMS = {
   tiktok: 'TikTok',
@@ -26,6 +29,12 @@ const FONTS = ['Inter', 'Montserrat', 'Bebas Neue', 'Playfair Display'];
 const VOICES = { marin: 'Marin (recommended)', cedar: 'Cedar', coral: 'Coral', onyx: 'Onyx' };
 const MUSIC = { theme: "The theme's track", none: 'No music' };
 const CAPTIONS = { bold: 'Bold, a few words at a time', clean: 'Clean subtitles', off: 'Off' };
+const STYLES = {
+  realistic: 'Realistic phone video (UGC)',
+  cinematic: 'Cinematic',
+  '3d': '3D animation',
+  '2d': '2D illustration / anime',
+};
 const DEFAULT_COLORS = { primary: '#6366f1', secondary: '#f0abfc', background: '#0f172a' };
 
 // Planned options (plan §7–§10). Shown so visitors can see what is coming; not sent to the API yet.
@@ -35,10 +44,13 @@ function Soon() {
   return <span className="soon">Soon</span>;
 }
 
-function Select({ id, label, value, onChange, options }) {
+function Select({ id, label, value, onChange, options, help }) {
   return (
     <div>
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {help && <Help text={help} />}
+      </label>
       <select id={id} value={value} onChange={onChange}>
         {Object.entries(options).map(([k, v]) => (
           <option key={k} value={k}>
@@ -201,12 +213,25 @@ function AccessBar({ onUnlocked }) {
   );
 }
 
+// "Back to the brief" from a storyboard fills the form with that brief (the photo is picked again).
+function readPrefill() {
+  try {
+    const raw = sessionStorage.getItem('ugc.prefill');
+    if (!raw) return {};
+    sessionStorage.removeItem('ugc.prefill');
+    const b = JSON.parse(raw);
+    return { ...b, landing_url: b.landing_url || '', theme: b.theme || '', goal: b.goal || 'sales', story: b.story || '' };
+  } catch {
+    return {};
+  }
+}
+
 export default function Brief() {
   const currency = useCurrency();
   const [config, setConfig] = useState(null);
   const [unlocked, setUnlocked] = useState(Boolean(getAccessCode()));
   const [photo, setPhoto] = useState(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     product_name: '',
     description: '',
     audience: '',
@@ -220,7 +245,10 @@ export default function Brief() {
     voice: 'marin',
     music: 'theme',
     captions: 'bold',
-  });
+    visual_style: 'realistic',
+    story: '',
+    ...readPrefill(),
+  }));
   const [campaigns, setCampaigns] = useState([]);
   const [campaignId, setCampaignId] = useState('');
   const [campaignName, setCampaignName] = useState('');
@@ -296,7 +324,7 @@ export default function Brief() {
     }
     setBusy(true);
     setError('');
-    const brief = { ...form, landing_url: form.landing_url.trim() || null, theme: form.theme || null };
+    const brief = { ...form, landing_url: form.landing_url.trim() || null, theme: form.theme || null, story: form.story.trim() };
     try {
       const job = await api.createJob(brief, photo, {
         campaignId,
@@ -419,9 +447,24 @@ export default function Brief() {
                 ))}
               </select>
             </div>
-            <Select id="goal" label="Goal" value={form.goal} onChange={set('goal')} options={GOALS} />
-            <Select id="theme" label="Theme" value={form.theme} onChange={set('theme')} options={THEMES} />
-            <Select id="adtype" label="Ad type" value={form.ad_type} onChange={set('ad_type')} options={AD_TYPES} />
+            <Select id="goal" label="Goal" value={form.goal} onChange={set('goal')} options={GOALS} help={HELP.goal} />
+            <Select id="theme" label="Theme" value={form.theme} onChange={set('theme')} options={THEMES} help={HELP.theme} />
+            <Select id="adtype" label="Ad type" value={form.ad_type} onChange={set('ad_type')} options={AD_TYPES} help={HELP.ad_type} />
+            <Select id="style" label="Visual style" value={form.visual_style} onChange={set('visual_style')} options={STYLES} help={HELP.visual_style} />
+            <div className="span-2">
+              <label htmlFor="story">
+                Your own story or script (optional)
+                <Help text={HELP.story} />
+              </label>
+              <textarea
+                id="story"
+                rows={4}
+                value={form.story}
+                onChange={set('story')}
+                maxLength={4000}
+                placeholder="Leave empty and the AI writes the story from your brief. Or paste yours: your spoken lines are kept word for word."
+              />
+            </div>
             <PreviewSelect id="preset" label="Model preset" options={PRESETS} />
           </div>
 
@@ -461,9 +504,9 @@ export default function Brief() {
                   <span>Test three opening hooks and keep the best one (about 0.10 EUR more)</span>
                 </label>
               </div>
-              <Select id="voice" label="Voiceover (AI voice)" value={form.voice} onChange={set('voice')} options={VOICES} />
-              <Select id="music" label="Music" value={form.music} onChange={set('music')} options={MUSIC} />
-              <Select id="captions" label="Captions" value={form.captions} onChange={set('captions')} options={CAPTIONS} />
+              <Select id="voice" label="Voiceover (AI voice)" value={form.voice} onChange={set('voice')} options={VOICES} help={HELP.voice} />
+              <Select id="music" label="Music" value={form.music} onChange={set('music')} options={MUSIC} help={HELP.music} />
+              <Select id="captions" label="Captions" value={form.captions} onChange={set('captions')} options={CAPTIONS} help={HELP.captions} />
               <div className="span-2">
                 <label htmlFor="email">
                   Email me when it is ready <Soon />
@@ -503,18 +546,5 @@ export default function Brief() {
         </form>
       </div>
     </div>
-  );
-}
-
-export function Stepper({ step }) {
-  const steps = ['Brief', 'Storyboard', 'Generate'];
-  return (
-    <ol className="stepper" aria-label="Progress">
-      {steps.map((s, i) => (
-        <li key={s} className={i + 1 === step ? 'current' : i + 1 < step ? 'done' : ''} aria-current={i + 1 === step ? 'step' : undefined}>
-          <span>{i + 1}</span> {s}
-        </li>
-      ))}
-    </ol>
   );
 }
