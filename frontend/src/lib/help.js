@@ -16,7 +16,7 @@ export const HELP = {
   motion_prompt:
     'Shot list for the video model: what happens second by second, how the camera moves, and the final frame. More detail gives a better clip.',
   clip: 'How long this scene is on screen: 2 to 10 seconds. The video model makes 5 s or 10 s clips (paid per second of clip); a shorter scene is cut from its clip.',
-  ad_length: 'Type the total length of the scenes; it is split over the scenes (2 to 10 s each). The 2-second end card comes after.',
+  ad_length: 'How long the whole finished video is, including the 2-second end card with your offer and button. It is split evenly over the scenes (each 2 to 10 s); you can still set each scene in Scenes.',
   scenes: 'Each scene: what we see, the spoken line, the headline, where its image comes from, its length and the prompts. Open it only if you want to check or change something.',
   make: 'Images first: you check the pictures and can still edit before paying for video. Video: images and video in one go, for when everything is ready.',
   image_source:

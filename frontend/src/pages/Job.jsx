@@ -229,6 +229,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
   );
   const [ownHook, setOwnHook] = useState('');
   const [mode, setMode] = useState('video');
+  const [lengthText, setLengthText] = useState(null); // the length box while typing
   const [sound, setSound] = useState({ voice: job.brief.voice, music: job.brief.music, captions: job.brief.captions });
   const n = board?.scenes.length ?? 3;
   const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice), [board, config, n, sound.voice]);
@@ -258,9 +259,17 @@ function StoryboardStep({ job, onChange, readOnly }) {
     change({ ...board, scenes: board.scenes.map((s, j) => (j === i ? { ...s, [field]: value } : s)) });
   const onScene = (i, field) => (e) => editScene(i, field, e.target.value);
   const editTop = (field) => (e) => change({ ...board, [field]: e.target.value });
-  const adLength = board.scenes.slice(0, n).reduce((t, s) => t + s.duration_s, 0);
-  const setAdLength = (total) => {
-    const parts = splitLength(total, n);
+  // The whole video: the scenes plus the end card. Typed freely, applied on Enter or when leaving the box.
+  const endCard = config?.end_card_s ?? 2;
+  const scenesLength = board.scenes.slice(0, n).reduce((t, s) => t + s.duration_s, 0);
+  const videoLength = scenesLength + endCard;
+  const minVideo = MIN_SCENE_S * n + endCard;
+  const maxVideo = MAX_SCENE_S * n + endCard;
+  const applyVideoLength = (text) => {
+    const total = Math.max(minVideo, Math.min(maxVideo, Math.round(Number(text) || videoLength)));
+    setLengthText(null);
+    if (total === videoLength) return;
+    const parts = splitLength(total - endCard, n);
     change({ ...board, scenes: board.scenes.map((s, i) => (i < n ? { ...s, duration_s: parts[i] } : s)) });
   };
 
@@ -453,23 +462,28 @@ function StoryboardStep({ job, onChange, readOnly }) {
           </div>
           <div>
             <label htmlFor="adlen">
-              Ad length (seconds) <Help text={HELP.ad_length} />
+              Total video length (seconds) <Help text={HELP.ad_length} />
             </label>
             <input
               id="adlen"
               type="number"
-              min={MIN_SCENE_S * n}
-              max={MAX_SCENE_S * n}
-              value={adLength}
-              onChange={(e) => setAdLength(Number(e.target.value))}
+              min={minVideo}
+              max={maxVideo}
+              value={lengthText ?? videoLength}
+              onChange={(e) => setLengthText(e.target.value)}
+              onBlur={(e) => applyVideoLength(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && applyVideoLength(e.currentTarget.value)}
               disabled={disabled}
             />
             <p className="muted small">
+              Your video: {n} {n === 1 ? 'scene' : 'scenes'} (
               {board.scenes
                 .slice(0, n)
                 .map((s) => `${s.duration_s} s`)
-                .join(' + ')}{' '}
-              + {config?.end_card_s ?? 2} s end card. Up to {MAX_SCENE_S * n} s.
+                .join(' + ')}
+              ) + {endCard} s end card = <strong>{videoLength} s</strong>.
+              <br />
+              With {n} {n === 1 ? 'scene' : 'scenes'} you can choose {minVideo} to {maxVideo} s (each scene 2–10 s).
             </p>
           </div>
         </div>
