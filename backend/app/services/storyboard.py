@@ -48,6 +48,7 @@ lead naturally into the next scene. Keep the product fully visible and unchanged
 on object physics (a ball going in, a throw being caught, liquid poured precisely): they render badly.
 
 Other rules:
+- title: the product name only (no words like "ad" or "UGC").
 - description: one or two plain sentences saying what the viewer sees; with a <story>, the story's own
   text for this scene, word for word.
 - voiceover: one short spoken line per scene that fits its duration_s (about 2.5 words per second).

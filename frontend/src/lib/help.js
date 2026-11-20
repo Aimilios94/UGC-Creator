@@ -32,6 +32,7 @@ export const HELP = {
   theme: 'Sets the settings, props, pace and the music track.',
   ad_type: 'The format of the story. Testimonial uses only quotes and claims you write yourself.',
   voice: 'The AI voice that reads the voiceover. Viewers must be told it is AI: turn on the AI label when you post.',
+  ratio: 'The shape of the video. Choosing the platform picks its best shape for you: 9:16 (full-screen vertical) for TikTok, Reels and Shorts, 4:5 for the Facebook feed. You can still change it.',
   music: 'A licensed background track for the theme, lowered while the voice speaks.',
   captions: 'The voiceover as burned-in text, for people watching with the sound off.',
   sound: 'The voice, music and captions of the whole ad. Press the list icon to listen before you choose. You can change them until the video is made.',

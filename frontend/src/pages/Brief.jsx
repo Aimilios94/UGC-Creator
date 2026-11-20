@@ -14,6 +14,8 @@ const PLATFORMS = {
   facebook: 'Facebook',
 };
 const RATIOS = { '9:16': '9:16 vertical', '1:1': '1:1 square', '4:5': '4:5 portrait', '16:9': '16:9 landscape' };
+// The shape each platform shows best (full-screen vertical for the short-video apps, 4:5 in the Facebook feed).
+const BEST_RATIO = { tiktok: '9:16', instagram_reels: '9:16', youtube_shorts: '9:16', facebook: '4:5' };
 
 // Brief options sent to the API (values match backend/app/models.py).
 const GOALS = { sales: 'Sales', awareness: 'Awareness', traffic: 'Website visits' };
@@ -437,7 +439,11 @@ export default function Brief() {
             </div>
             <div>
               <label htmlFor="platform">Platform</label>
-              <select id="platform" value={form.platform} onChange={set('platform')}>
+              <select
+                id="platform"
+                value={form.platform}
+                onChange={(e) => setForm({ ...form, platform: e.target.value, aspect_ratio: BEST_RATIO[e.target.value] })}
+              >
                 {Object.entries(PLATFORMS).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
@@ -446,14 +452,19 @@ export default function Brief() {
               </select>
             </div>
             <div>
-              <label htmlFor="ratio">Aspect ratio</label>
+              <label htmlFor="ratio">
+                Shape (aspect ratio)
+                <Help text={HELP.ratio} />
+              </label>
               <select id="ratio" value={form.aspect_ratio} onChange={set('aspect_ratio')}>
                 {Object.entries(RATIOS).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
+                    {k === BEST_RATIO[form.platform] ? ` (recommended for ${PLATFORMS[form.platform]})` : ''}
                   </option>
                 ))}
               </select>
+              <p className="muted small">The other shapes are made too, when your text fits them.</p>
             </div>
             <Select id="goal" label="Goal" value={form.goal} onChange={set('goal')} options={GOALS} help={HELP.goal} />
             <Select id="theme" label="Theme" value={form.theme} onChange={set('theme')} options={THEMES} help={HELP.theme} />

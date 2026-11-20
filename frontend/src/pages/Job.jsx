@@ -157,6 +157,24 @@ function Chip({ name, value, checked, onChange, children, disabled }) {
   );
 }
 
+// What each scene's clip starts from, said plainly (the video AI animates one picture per scene).
+function pictureNote(scenes) {
+  const count = (src) => scenes.filter((s) => s.image_source === src).length;
+  const [gen, product, own] = [count('generate'), count('product'), count('upload')];
+  const word = (k) => (k === 1 ? 'scene' : 'scenes');
+  const parts = [];
+  if (gen) parts.push(`${gen === scenes.length ? 'Every scene' : `${gen} ${word(gen)}`} ${gen === 1 && gen !== scenes.length ? 'gets' : 'get'} a new picture made from your product photo, showing your product in that scene's setting`);
+  if (product)
+    parts.push(
+      product === scenes.length
+        ? `all ${product} ${word(product)} start from your same product photo: each clip animates that photo differently, and no new pictures are made`
+        : `${product} ${word(product)} ${product === 1 ? 'starts' : 'start'} from your product photo itself`,
+    );
+  if (own) parts.push(`${own} ${word(own)} ${own === 1 ? 'starts' : 'start'} from the picture you uploaded for ${own === 1 ? 'it' : 'them'}`);
+  const text = parts.join('; ');
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}. The video AI animates one picture per scene.`.replace('Every scene get ', 'Every scene gets ');
+}
+
 function CostBox({ rows, spend, cap, currency, total: shownTotal = null, note = '' }) {
   const total = rows.reduce((acc, [, m]) => add(acc, m), ZERO);
   const over = spend.eur + total.eur > cap.eur + 1e-9;
@@ -286,13 +304,20 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const videoLength = scenesLength + endCard;
   const minVideo = MIN_SCENE_S * n + endCard;
   const maxVideo = MAX_SCENE_S * n + endCard;
+  // Which number of scenes allows a video this short (each scene 2 s or more, plus the end card).
+  const fewerScenesHint = (wanted) => {
+    const fit = Math.floor((wanted - endCard) / MIN_SCENE_S);
+    if (fit < 1) return ` The shortest possible video is ${MIN_SCENE_S + endCard} s (1 scene of ${MIN_SCENE_S} s).`;
+    return ` For ${wanted} s, keep ${fit} ${fit === 1 ? 'scene' : 'scenes'}: remove the others with "Remove" in Scenes below.`;
+  };
   const applyVideoLength = (text) => {
     const wanted = Math.round(Number(text) || videoLength);
     const total = Math.max(minVideo, Math.min(maxVideo, wanted));
+    if (lengthText === null && wanted === videoLength) return; // nothing new typed: keep the page still
     setLengthText(null);
     setLengthNote(
       wanted < minVideo
-        ? `${wanted} s is too short for ${n} ${n === 1 ? 'scene' : 'scenes'}: each scene needs at least 2 s, plus the ${endCard} s end card, so the shortest is ${minVideo} s. For a shorter video, remove a scene in Scenes below.`
+        ? `${wanted} s is too short for ${n} ${n === 1 ? 'scene' : 'scenes'}. Each scene is at least 2 s, and the ${endCard} s end card comes on top, so with ${n} ${n === 1 ? 'scene' : 'scenes'} the shortest video is ${minVideo} s.${fewerScenesHint(wanted)}`
         : wanted > maxVideo
           ? `${wanted} s is too long for ${n} ${n === 1 ? 'scene' : 'scenes'}: each scene can be at most 10 s, so the longest is ${maxVideo} s. For a longer video, add a scene in Scenes below.`
           : '',
@@ -715,11 +740,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 [`Video: ${n} ${n === 1 ? 'clip' : 'clips'}${sound.voice !== 'none' ? ' and voiceover' : ''}${mode === 'images' && newImages > 0 ? ' (later, only if you choose it)' : ''}`, estimate.video],
               ]}
               total={mode === 'video' || newImages === 0 ? estimate.total : null}
-              note={
-                newImages > 0
-                  ? 'The video model animates a picture, so each scene without your own picture first gets a starting picture made from your product photo.'
-                  : 'Every scene starts from your own picture, so no pictures are made.'
-              }
+              note={pictureNote(board.scenes.slice(0, n))}
               spend={job.spend}
               cap={job.cost_cap}
               currency={currency}

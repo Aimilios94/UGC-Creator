@@ -199,7 +199,7 @@ def mock_storyboard(brief: dict) -> dict:
     else:
         for scene, line in zip(scenes, lines, strict=True):
             scene["voiceover"] = line
-    return {"title": f"{name}: quick UGC ad", "scenes": scenes, "hooks": hooks, "cta_text": "Shop now"}
+    return {"title": name, "scenes": scenes, "hooks": hooks, "cta_text": "Shop now"}
 
 
 MOCK_TASKS: dict[str, Callable[[dict], dict]] = {"analyze": mock_analysis, "storyboard": mock_storyboard}
