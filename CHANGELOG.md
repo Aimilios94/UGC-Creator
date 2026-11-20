@@ -14,6 +14,7 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 
 - You steer the story, images and clips ([D27](DECISIONS.md)): images first, then "Make the video" (with a last chance to edit voiceover, text, motion and clip length); per scene "Generate", "My product photo" or "Upload my own" image; your own story (Create page or Storyboard step), kept word for word; a ticked opening hook (as written, one of three ideas, or your own); 5 or 10 s per scene with live prices and the cap checked before rendering; a visual style (realistic, cinematic, 3D, 2D); clickable step pills and Back buttons; hover help on every field and option.
 - Storyboard, second pass ([D27](DECISIONS.md)): your story drives scenes, prompts, lengths and hooks; Scenes and Opening hook fold away when you have a story; scene length 2–10 s and a typed ad length (up to 30 s); a neutral Continue with "What to make": images first, or images and video in one go.
+- 1 to 5 scenes following your story, add or remove scenes; a Sound card (voice with ▶ previews or no voiceover, any of the five music tracks or none, captions) on the Storyboard and Images steps; "Next" in plain words; text boxes that show all their text ([D28](DECISIONS.md)). Voice previews made once with the real voice model (about 0.006 EUR).
 - Detailed prompts: image prompts describe subject, setting, framing, camera, light, colours and style; motion prompts are a timed shot list for one continuous take; Kling gets a negative prompt against lettering.
 
 ### Changed

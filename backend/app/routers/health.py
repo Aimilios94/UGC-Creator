@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from .. import __version__
 from ..config import ASPECT_RATIOS, PLATFORMS, Settings, get_settings
 from ..deps import access_ok, get_ctx
-from ..models import Money
+from ..models import MAX_SCENES, Money
 from ..services.llm_trace import Usage, cost_usd, money
 from ..services.pipeline import Context, estimate_job_usd, voice_est_usd
 
@@ -52,6 +52,7 @@ def public_config(settings: Settings = Depends(get_settings)) -> dict:
         "platforms": list(PLATFORMS),
         "aspect_ratios": list(ASPECT_RATIOS),
         "render_scenes": settings.render_scenes,
+        "max_scenes": min(MAX_SCENES, settings.render_scenes),
         "job_estimate": Money(**money(estimate_job_usd(settings), rate)),
         "job_cost_cap": Money(usd=round(settings.job_cost_cap_usd, 4), eur=settings.job_cost_cap_eur),
         "models": {"llm": settings.llm_model, "image": settings.image_model, "video": settings.video_model},

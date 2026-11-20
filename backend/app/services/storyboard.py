@@ -22,9 +22,11 @@ PLATFORM_NAMES = {
 
 INSTRUCTIONS = """\
 You plan short user-generated-content (UGC) style video ads for social platforms.
-Write a storyboard of exactly three scenes in this order: hook, demo, cta. Each scene becomes one
-reference image (made by editing the real product photo) and one image-to-video clip. duration_s is how
-many seconds the scene is on screen (2-10, usually 5); the three together make the ad.
+Write a storyboard of scenes. Without a <story>: exactly three scenes, in this order: hook, demo, cta.
+With a <story>: follow the story's own structure, one scene per beat or shot it describes, 1 to 5 scenes
+(merge beats if it has more); the first scene is the hook and the last the cta, any between are demo.
+Each scene becomes one reference image (made by editing the real product photo) and one image-to-video
+clip. duration_s is how many seconds the scene is on screen (2-10, usually 5).
 
 image_prompt (80-150 words), one detailed paragraph covering, in this order:
 - subject and action: who or what is in frame, where the product is and how it is held or placed;
@@ -69,9 +71,9 @@ Other rules:
   timings), or both:
   - spoken lines (dialogue, narration, quoted text) go into voiceover word for word, in order;
   - visual directions go into description, image_prompt and motion_prompt, keeping every detail the
-    story gives (people, clothes, places, weather, light, colours, camera moves, timings), split across
-    the three scenes in the story's order;
-  - timings in the story set each scene's duration_s (for example a 10-second timeline: about 3 + 4 + 3);
+    story gives (people, clothes, places, weather, light, colours, camera moves, timings), scene by
+    scene in the story's order;
+  - timings in the story set each scene's duration_s (for example 0:00-0:02 is a 2-second scene);
   - if the story has no spoken lines, write short voiceover lines that fit it, or leave voiceover empty
     when the story asks for no voice;
   - the three hooks are alternative opening lines for this same story.

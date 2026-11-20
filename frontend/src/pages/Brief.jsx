@@ -26,8 +26,16 @@ const AD_TYPES = {
 };
 const TONES = { '': 'Theme default', energetic: 'Energetic', calm: 'Calm', playful: 'Playful', premium: 'Premium' };
 const FONTS = ['Inter', 'Montserrat', 'Bebas Neue', 'Playfair Display'];
-const VOICES = { marin: 'Marin (recommended)', cedar: 'Cedar', coral: 'Coral', onyx: 'Onyx' };
-const MUSIC = { theme: "The theme's track", none: 'No music' };
+const VOICES = { marin: 'Marin (recommended)', cedar: 'Cedar', coral: 'Coral', onyx: 'Onyx', none: 'No voiceover' };
+const MUSIC = {
+  theme: "The theme's track",
+  sport: 'ITS A TRAP (sport)',
+  beauty: 'Ocean Memory (beauty)',
+  tech: 'Track 1 (tech)',
+  food: 'Toy Box (food)',
+  fashion: 'Everything is groovy (fashion)',
+  none: 'No music',
+};
 const CAPTIONS = { bold: 'Bold, a few words at a time', clean: 'Clean subtitles', off: 'Off' };
 const STYLES = {
   realistic: 'Realistic phone video (UGC)',

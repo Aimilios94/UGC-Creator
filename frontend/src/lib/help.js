@@ -1,8 +1,8 @@
 // Short explanations shown on hover or keyboard focus.
 export const HELP = {
-  hook: 'Scene 1, the first seconds of the ad. Its only job is to stop people scrolling.',
-  demo: 'Scene 2: the product in use, showing what it does and why it matters.',
-  cta: 'Scene 3, the call to action: what to do next, with your offer. The end card with the button follows it.',
+  hook: 'The opening scene, the first seconds of the ad. Its only job is to stop people scrolling.',
+  demo: 'A middle scene: the product in use, showing what it does and why it matters.',
+  cta: 'The last scene, the call to action: what to do next, with your offer. The end card with the button follows it.',
   pov: 'Point of view: puts the viewer in the moment, for example "POV: you finally found…".',
   problem_first: 'Opens with a problem the viewer knows, then shows the product as the fix.',
   three_reasons: 'A quick list ("3 reasons…"): promises value in a few seconds.',
@@ -34,6 +34,8 @@ export const HELP = {
   voice: 'The AI voice that reads the voiceover. Viewers must be told it is AI: turn on the AI label when you post.',
   music: 'A licensed background track for the theme, lowered while the voice speaks.',
   captions: 'The voiceover as burned-in text, for people watching with the sound off.',
+  sound: 'The voice, music and captions of the whole ad. Press the list icon to listen before you choose. You can change them until the video is made.',
+  add_scene: 'Add a scene (up to 5). Each scene is one picture and one clip.',
   approve_images: 'Step 1 makes one picture per scene. You see them before any video is paid for.',
   make_video: 'Step 2: voiceover, one clip per scene, captions, music and the end card, in every format.',
 };

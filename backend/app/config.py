@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     video_duration_s: int = 5  # Kling accepts "5" or "10"
     tts_model: str = "gpt-4o-mini-tts"  # shuts down 6 Jan 2027: replace before then (D26)
     tts_voice: str = "marin"  # default voice; the brief can pick another
-    render_scenes: int = 3  # M2: all three scenes (Cloud Run pins 1 until the M2 deploy; deploy/gcp/*.env.yaml)
+    render_scenes: int = 5  # most scenes rendered per ad (1-5, D28); Cloud Run pins 1 until the M2 deploy
 
     # --- Compose (M2) ---
     end_card_s: float = 2.0

@@ -36,6 +36,10 @@ The worker and the compose tests need **ffmpeg with libass** on PATH (the Docker
 
 The five 30-second beds in `backend/app/music/` are cut from CC0 tracks (sources and licence: [MUSIC.md](MUSIC.md)). To recut them, download the five tracks from their Free Music Archive pages (free login) into a folder outside the repo and run `.venv/Scripts/python scripts/make_music_beds.py <folder>`. The originals are not committed.
 
+### Voice previews
+
+The four short voice previews in `backend/app/voices/` were made once with `.venv/Scripts/python scripts/make_voice_samples.py` (real voice model, paid: about 0.006 EUR; needs `OPENAI_API_KEY` in `backend/.env`). Run it again only to change the sample line or the voices.
+
 ## Tests
 
 ```bash

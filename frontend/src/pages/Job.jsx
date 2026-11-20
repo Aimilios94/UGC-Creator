@@ -6,10 +6,15 @@ import { formatMoney } from '../lib/money';
 import { Help } from '../components/Help';
 import { HELP } from '../lib/help';
 import Stepper, { BackButton } from '../components/Stepper';
+import AutoTextarea from '../components/AutoTextarea';
+import SoundCard from '../components/SoundCard';
 import { goToBrief } from '../lib/steps';
 
 const POLL_MS = 3000;
-const ROLE_LABEL = { hook: 'Scene 1 · Hook', demo: 'Scene 2 · Demo', cta: 'Scene 3 · Call to action' };
+const ROLE_NAME = { hook: 'Hook', demo: 'Demo', cta: 'Call to action' };
+const sceneTitle = (s, i) => `Scene ${i + 1} · ${ROLE_NAME[s.role] || s.role}`;
+const MAX_SCENES = 5;
+const rolesFor = (n) => (n === 1 ? ['cta'] : ['hook', ...Array(n - 2).fill('demo'), 'cta']);
 const FORMULA_LABEL = {
   pov: 'POV',
   problem_first: 'Problem first',
@@ -34,14 +39,14 @@ function splitLength(total, n) {
 }
 
 // Live estimate from the server's unit prices (own images are free; clips by their length).
-function estimateBoard(board, prices, n = 3) {
+function estimateBoard(board, prices, n = 3, voice = 'marin') {
   let images = ZERO;
   let video = ZERO;
   if (!board || !prices) return null;
   board.scenes.slice(0, n).forEach((s) => {
     if (s.image_source === 'generate') images = add(images, prices.image);
     video = add(video, prices.video_per_second, renderSeconds(s.duration_s));
-    if (s.voiceover.trim()) video = add(video, prices.voice_line);
+    if (s.voiceover.trim() && voice !== 'none') video = add(video, prices.voice_line);
   });
   return { images, video, total: add(images, video) };
 }
@@ -223,12 +228,12 @@ function StoryboardStep({ job, onChange, readOnly }) {
     job.storyboard?.hook_choice != null ? `h${job.storyboard.hook_choice}` : 'written',
   );
   const [ownHook, setOwnHook] = useState('');
-  const [mode, setMode] = useState(
-    job.storyboard?.scenes.every((s) => s.image_source !== 'generate') ? 'video' : 'images',
-  );
-  const n = config?.render_scenes ?? 3;
-  const estimate = useMemo(() => estimateBoard(board, config?.prices, n), [board, config, n]);
+  const [mode, setMode] = useState('video');
+  const [sound, setSound] = useState({ voice: job.brief.voice, music: job.brief.music, captions: job.brief.captions });
+  const n = board?.scenes.length ?? 3;
+  const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice), [board, config, n, sound.voice]);
   const hasStory = storyMode === 'own' || Boolean(job.brief.story);
+  const newImages = board ? board.scenes.filter((s) => s.image_source === 'generate').length : 0;
 
   if (!board) {
     return (
@@ -325,11 +330,33 @@ function StoryboardStep({ job, onChange, readOnly }) {
         setError('Some lines still need editing (marked in red).');
         return;
       }
-      onChange(await api.approve(job.id, mode));
-      navigate(`/job/${job.id}${mode === 'video' ? '/video' : ''}`);
+      const make = newImages === 0 ? 'video' : mode;
+      onChange(await api.approve(job.id, make));
+      navigate(`/job/${job.id}${make === 'video' ? '/video' : ''}`);
     });
 
   const check = () => run('check', save);
+  const changeSound = (patch) =>
+    run('sound', async () => {
+      setSound({ ...sound, ...patch });
+      onChange(await api.setSound(job.id, patch));
+    });
+  const addScene = () =>
+    change({
+      ...board,
+      scenes: (() => {
+        const scenes = [...board.scenes];
+        const blank = { ...scenes[Math.max(0, scenes.length - 2)], description: '', voiceover: '', on_screen_text: '', image_prompt: '', motion_prompt: '', image_source: 'generate', image_upload_key: null, duration_s: 3 };
+        scenes.splice(Math.max(scenes.length - 1, 1), 0, blank);
+        const roles = rolesFor(scenes.length);
+        return scenes.map((x, k) => ({ ...x, role: roles[k] }));
+      })(),
+    });
+  const removeScene = (i) => {
+    const scenes = board.scenes.filter((_, k) => k !== i);
+    const roles = rolesFor(scenes.length);
+    change({ ...board, scenes: scenes.map((x, k) => ({ ...x, role: roles[k] })) });
+  };
   const uploads = (i) => job.assets.filter((a) => a.kind === 'upload' && a.scene_idx === i);
   const disabled = readOnly || Boolean(busy);
 
@@ -363,8 +390,8 @@ function StoryboardStep({ job, onChange, readOnly }) {
             </span>
             {storyMode === 'own' && (
               <>
-                <textarea
-                  rows={5}
+                <AutoTextarea
+                  minRows={5}
                   value={story}
                   onChange={(e) => setStory(e.target.value)}
                   maxLength={4000}
@@ -389,6 +416,8 @@ function StoryboardStep({ job, onChange, readOnly }) {
           </Choice>
         </div>
       </section>
+
+      <SoundCard value={sound} theme={job.brief.theme} onChange={changeSound} disabled={disabled} />
 
       {flags.length > 0 && (
         <div className="notice flag-notice" role="status">
@@ -462,12 +491,19 @@ function StoryboardStep({ job, onChange, readOnly }) {
         {board.scenes.slice(0, n).map((s, i) => {
           const own = uploads(i).at(-1);
           return (
-            <article key={s.role} className="card scene">
-              <h2>
-                {ROLE_LABEL[s.role]} <Help text={HELP[s.role]} />
-              </h2>
+            <article key={i} className="card scene">
+              <div className="scene-head">
+                <h2>
+                  {sceneTitle(s, i)} <Help text={HELP[s.role]} />
+                </h2>
+                {!readOnly && n > 1 && (
+                  <button type="button" className="btn btn-ghost btn-small" onClick={() => removeScene(i)} disabled={disabled} aria-label={`Remove scene ${i + 1}`}>
+                    Remove
+                  </button>
+                )}
+              </div>
               <FieldLabel htmlFor={`d${i}`} text="What we see" help={HELP.description} />
-              <textarea id={`d${i}`} rows={3} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} maxLength={800} disabled={disabled} />
+              <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} maxLength={800} disabled={disabled} />
               <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />
               <input id={`v${i}`} className={cls(`scenes.${i}.voiceover`)} value={s.voiceover} onChange={onScene(i, 'voiceover')} maxLength={220} disabled={disabled} />
               <FieldLabel htmlFor={`t${i}`} text="On-screen text" help={HELP.on_screen_text} />
@@ -504,16 +540,21 @@ function StoryboardStep({ job, onChange, readOnly }) {
               {showPrompts && (
                 <>
                   <FieldLabel htmlFor={`ip${i}`} text="Image prompt" help={HELP.image_prompt} />
-                  <textarea id={`ip${i}`} rows={7} value={s.image_prompt} onChange={onScene(i, 'image_prompt')} maxLength={2500} disabled={disabled || s.image_source !== 'generate'} />
+                  <AutoTextarea id={`ip${i}`} minRows={4} value={s.image_prompt} onChange={onScene(i, 'image_prompt')} maxLength={2500} disabled={disabled || s.image_source !== 'generate'} />
                   {s.image_source !== 'generate' && <p className="muted small">Not used: this scene uses your own image.</p>}
                   <FieldLabel htmlFor={`mp${i}`} text="Motion prompt (shot list)" help={HELP.motion_prompt} />
-                  <textarea id={`mp${i}`} rows={7} value={s.motion_prompt} onChange={onScene(i, 'motion_prompt')} maxLength={2200} disabled={disabled} />
+                  <AutoTextarea id={`mp${i}`} minRows={4} value={s.motion_prompt} onChange={onScene(i, 'motion_prompt')} maxLength={2200} disabled={disabled} />
                 </>
               )}
             </article>
           );
         })}
       </div>
+      {!readOnly && n < MAX_SCENES && (
+        <button type="button" className="btn btn-secondary btn-small add-scene" onClick={addScene} disabled={disabled}>
+          + Add a scene <Help text={HELP.add_scene} />
+        </button>
+      )}
       </details>
 
       <details className="card fold" open={!hasStory}>
@@ -568,20 +609,31 @@ function StoryboardStep({ job, onChange, readOnly }) {
 
       {!readOnly && (
         <div className="actions">
-          <div className="continue-row">
-            <label htmlFor="make" className="label-like">
-              What to make <Help text={HELP.make} />
-            </label>
-            <select id="make" value={mode} onChange={(e) => setMode(e.target.value)} disabled={disabled}>
-              <option value="images">Images first (check them, then decide on the video)</option>
-              <option value="video">Video (images and video in one go)</option>
-            </select>
-          </div>
+          {newImages > 0 ? (
+            <div className="continue-row">
+              <label htmlFor="make" className="label-like">
+                Next <Help text={HELP.make} />
+              </label>
+              <select id="make" value={mode} onChange={(e) => setMode(e.target.value)} disabled={disabled}>
+                <option value="video">Make the video now</option>
+                <option value="images">Check the new pictures first</option>
+              </select>
+            </div>
+          ) : (
+            <p className="label-like">Next: make the video</p>
+          )}
+          <p className="muted small make-explain">
+            {newImages === 0
+              ? 'Every scene uses your own picture, so the video is made straight away.'
+              : mode === 'video'
+                ? `The ${newImages} missing ${newImages === 1 ? 'picture is' : 'pictures are'} made first, then the video, without stopping.`
+                : `Only the ${newImages} missing ${newImages === 1 ? 'picture is' : 'pictures are'} made now. You look at them, can still edit, and then decide on the video.`}
+          </p>
           {estimate && (
             <CostBox
               rows={
-                mode === 'video'
-                  ? [['Images and video', estimate.total]]
+                mode === 'video' || newImages === 0
+                  ? [['Pictures and video', estimate.total]]
                   : [
                       ['Images (now)', estimate.images],
                       ['Video (later, if you choose it)', estimate.video],
@@ -614,11 +666,21 @@ function ImagesStep({ job, onChange, readOnly = false }) {
   const [board, setBoard] = useState(job.storyboard);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const n = config?.render_scenes ?? 3;
-  const estimate = useMemo(() => estimateBoard(board, config?.prices, n), [board, config, n]);
+  const [sound, setSound] = useState({ voice: job.brief.voice, music: job.brief.music, captions: job.brief.captions });
+  const n = board.scenes.length;
+  const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice), [board, config, n, sound.voice]);
   const locked = readOnly || job.phase === 'video';
   const editScene = (i, field, value) =>
     setBoard({ ...board, scenes: board.scenes.map((s, j) => (j === i ? { ...s, [field]: value } : s)) });
+
+  async function changeSound(patch) {
+    setSound({ ...sound, ...patch });
+    try {
+      onChange(await api.setSound(job.id, patch));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   async function makeVideo() {
     setBusy(true);
@@ -647,9 +709,9 @@ function ImagesStep({ job, onChange, readOnly = false }) {
         {board.scenes.slice(0, n).map((s, i) => {
           const image = job.assets.find((a) => a.kind === 'image' && a.scene_idx === i);
           return (
-            <article key={s.role} className="card scene">
+            <article key={i} className="card scene">
               <h2>
-                {ROLE_LABEL[s.role]} <Help text={HELP[s.role]} />
+                {sceneTitle(s, i)} <Help text={HELP[s.role]} />
               </h2>
               {image ? (
                 <a href={image.url} target="_blank" rel="noreferrer">
@@ -674,14 +736,15 @@ function ImagesStep({ job, onChange, readOnly = false }) {
                 currency={currency}
               />
               <FieldLabel htmlFor={`imp${i}`} text="Motion prompt (shot list)" help={HELP.motion_prompt} />
-              <textarea id={`imp${i}`} rows={8} value={s.motion_prompt} onChange={(e) => editScene(i, 'motion_prompt', e.target.value)} maxLength={2200} disabled={locked} />
+              <AutoTextarea id={`imp${i}`} minRows={4} value={s.motion_prompt} onChange={(e) => editScene(i, 'motion_prompt', e.target.value)} maxLength={2200} disabled={locked} />
             </article>
           );
         })}
       </div>
+      {!locked && <SoundCard value={sound} theme={job.brief.theme} onChange={changeSound} />}
       {!locked && (
         <div className="actions">
-          {estimate && <CostBox rows={[['Step 2, video and voice', estimate.video]]} spend={job.spend} cap={job.cost_cap} currency={currency} />}
+          {estimate && <CostBox rows={[['Video and voice', estimate.video]]} spend={job.spend} cap={job.cost_cap} currency={currency} />}
           {error && <p className="error" role="alert">{error}</p>}
           <p className="muted small">
             Making the video adds the voiceover, one clip per scene, captions, music and the end card, in every format <Help text={HELP.make_video} />. You can close the tab while it runs.
@@ -783,10 +846,9 @@ function FinishedAd({ job, variant }) {
 
 function GenerateStep({ job, onChange }) {
   const currency = useCurrency();
-  const config = useConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const n = Math.max(config?.render_scenes ?? 1, ...job.stages.filter((s) => s.scene_idx >= 0).map((s) => s.scene_idx + 1));
+  const n = Math.max(job.storyboard?.scenes.length ?? 1, ...job.stages.filter((s) => s.scene_idx >= 0).map((s) => s.scene_idx + 1));
   const idxs = Array.from({ length: n }, (_, i) => i);
   const videoPhase = job.phase === 'video';
   const expected = [
@@ -795,7 +857,7 @@ function GenerateStep({ job, onChange }) {
     ...idxs.map((i) => ({ stage: 'image', scene_idx: i })),
     ...(videoPhase
       ? [
-          ...idxs.filter((i) => job.storyboard?.scenes[i]?.voiceover).map((i) => ({ stage: 'voice', scene_idx: i })),
+          ...(job.brief.voice === 'none' ? [] : idxs.filter((i) => job.storyboard?.scenes[i]?.voiceover).map((i) => ({ stage: 'voice', scene_idx: i }))),
           ...idxs.map((i) => ({ stage: 'video', scene_idx: i })),
           { stage: 'compose', scene_idx: -1 },
         ]

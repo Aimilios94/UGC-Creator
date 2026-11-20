@@ -80,9 +80,13 @@ def _story_parts(story: str) -> list[str] | None:
         beats = [beats[0] + " " + beats[1], *beats[2:]]  # a heading before the first timestamp joins it
     if len(beats) < 3:
         beats = [x.strip() for x in SENTENCE_END.split(text) if x.strip()]
-    if len(beats) < 3:
-        beats = (beats * 3)[:3]
-    return [" ".join(beats[i * len(beats) // 3 : (i + 1) * len(beats) // 3]) for i in range(3)]
+    if timed.match(beats[0]) or any(timed.match(b) for b in beats[1:]):
+        n = min(len(beats), 5)  # a timed story: one scene per beat (1-5), as the real writer is told
+    else:
+        n = 3
+        if len(beats) < 3:
+            beats = (beats * 3)[:3]
+    return [" ".join(beats[i * len(beats) // n : (i + 1) * len(beats) // n]) for i in range(n)]
 
 
 def _seconds(part: str) -> int | None:
@@ -174,7 +178,9 @@ def mock_storyboard(brief: dict) -> dict:
         {"formula": "three_reasons", "text": f"3 reasons people pick {name}"},
     ]
     if parts:
-        # The user's story leads: each scene tells its part, its spoken lines are kept, the hooks open it.
+        # The user's story leads: one scene per part, its spoken lines kept, the hooks open it.
+        template = scenes
+        scenes = [dict(template[0 if i == 0 else (2 if i == len(parts) - 1 else 1)]) for i in range(len(parts))]
         for scene, part in zip(scenes, parts, strict=True):
             scene["description"] = part[:800]
             scene["image_prompt"] = (part + " " + keep)[:2500]

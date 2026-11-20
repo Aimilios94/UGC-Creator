@@ -107,7 +107,7 @@ def test_eur_conversion_and_usd_display():
 def test_job_estimate_matches_table_and_fits_the_cap():
     """M2: three scenes, each one reference image, one 5 s clip and one voiceover line (D2, D26)."""
     s = Settings(_env_file=None)
-    assert s.render_scenes == 3
+    assert s.render_scenes == 5  # at most 5 scenes; an ad without a story has 3 (D28)
     media = 3 * (0.0398 + 0.35)
     voice = estimate_job_usd(s) - media
     assert 0 < voice < 0.01  # three voiceover lines cost well under a cent together

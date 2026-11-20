@@ -27,6 +27,7 @@ from ..models import (
     JobView,
     Money,
     ProductAnalysis,
+    SoundIn,
     StageView,
     Storyboard,
     VariantView,
@@ -116,7 +117,7 @@ def public_board(board: Storyboard) -> Storyboard:
 def _estimate(ctx: Context, board: Storyboard, spent_usd: float, job: dict) -> Estimate:
     s = ctx.settings
     rate = s.usd_to_eur_rate
-    images, video = estimate_board_usd(s, board)
+    images, video = estimate_board_usd(s, board, job["brief"].get("voice", "marin"))
     if job["status"] != "draft":
         images = 0.0  # already made
     if job["status"] != "draft" and (job.get("phase") or "video") == "video":
@@ -132,13 +133,20 @@ def _estimate(ctx: Context, board: Storyboard, spent_usd: float, job: dict) -> E
 
 def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool) -> Storyboard:
     """Apply the user's edits, but never from the browser: storage keys (set only by the upload
-    route) and, once the images exist, everything that made them."""
+    route) and, once the images exist, everything that made them, including how many scenes
+    there are. Before approval scenes may be added or removed (1-5); a scene keeps its uploaded
+    image only while it stays at the same position."""
+    if lock_images and len(new.scenes) != len(old.scenes):
+        raise HTTPException(status_code=422, detail="The scenes are fixed once the images are made.")
     scenes = []
-    for n, o in zip(new.scenes, old.scenes, strict=True):
-        keep = {"image_upload_key": o.image_upload_key, "role": o.role}
+    for i, n in enumerate(new.scenes):
+        o = old.scenes[i] if i < len(old.scenes) else None
+        keep = {"image_upload_key": o.image_upload_key if o else None}
         if lock_images:
             keep |= {"image_prompt": o.image_prompt, "image_source": o.image_source}
         sc = n.model_copy(update=keep)
+        if sc.image_source == "generate" and not (sc.image_prompt.strip() or sc.description.strip()):
+            raise HTTPException(status_code=422, detail=f"Scene {i + 1} needs a description or an image prompt.")
         if sc.image_source == "upload" and not sc.image_upload_key:
             raise HTTPException(
                 status_code=422, detail="Upload an image for that scene first, or choose another source."
@@ -157,7 +165,7 @@ def _check_ready(ctx: Context, job: dict, board: Storyboard, *, phase: str) -> N
             "need to come from your brief.",
         )
     s = ctx.settings
-    images, video = estimate_board_usd(s, board)
+    images, video = estimate_board_usd(s, board, job["brief"].get("voice", "marin"))
     need = (images + video) if phase == "images" else video
     if repo.job_spend_usd(ctx.db, str(job["id"])) + need > s.job_cost_cap_usd + 1e-9:
         raise HTTPException(
@@ -284,6 +292,22 @@ def edit_storyboard(
     merged = merge_board(board, Storyboard.model_validate(job["storyboard"]), lock_images=False)
     if not repo.set_storyboard(ctx.db, str(job["id"]), merged.model_dump(mode="json")):
         raise HTTPException(status_code=409, detail="The storyboard is locked once approved.")
+    return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+@router.put("/{job_id}/sound")
+def set_sound(
+    job_id: str, body: SoundIn, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)
+) -> JobView:
+    """Voice, music and captions can change until the video is made."""
+    job = _own_job(ctx, job_id, sess)
+    editable = job["status"] == "draft" or (job["status"] == "done" and job.get("phase") == "images")
+    if not editable:
+        raise HTTPException(status_code=409, detail="The sound is fixed once the video is being made.")
+    brief = {**job["brief"], **body.model_dump(exclude_none=True)}
+    Brief.model_validate(brief)
+    with ctx.db.tx() as c:
+        c.execute("update jobs set brief = %s, updated_at = now() where id = %s", (repo.Jsonb(brief), job_id))
     return job_view(ctx, repo.get_job(ctx.db, job_id))
 
 

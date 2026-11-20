@@ -50,7 +50,7 @@ At the end of every session, before telling the user you are done:
 
 ## Decisions
 
-All decisions are in `DECISIONS.md` (D1–D27; D1–D6 are the ones agreed before M1, D22–D24 the owner's calls on account timing, the M2 starter tasks and the landing refresh, D25 the campaign brief, brand kit and testimonial rule, D26 compose, voiceover and music, D27 the user-steered storyboard and the two steps). Read it before changing spend, queue, privacy or provider code.
+All decisions are in `DECISIONS.md` (D1–D28; D1–D6 are the ones agreed before M1, D22–D24 the owner's calls on account timing, the M2 starter tasks and the landing refresh, D25 the campaign brief, brand kit and testimonial rule, D26 compose, voiceover and music, D27 the user-steered storyboard and the two steps, D28 1–5 scenes and the ad's sound). Read it before changing spend, queue, privacy or provider code.
 
 ## Working notes
 

@@ -1,0 +1,106 @@
+"""A story's own structure (1-5 scenes), the ad's sound (voice, no voice, any music track),
+and the voice and music lists with previews (D28)."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+from app import worker
+from app.services.music import music_for
+from conftest import BRIEF, new_session
+from helpers import approve, create_job, make_video, to_video
+
+FOUR_BEATS = (
+    "0:00 - 0:02 (Establish): handheld shot follows a man crossing a wet zebra crossing at night in the hoodie.\n"
+    "0:02 - 0:04 (Spark): he cups his hands against the rain; neon glows in the mist.\n"
+    "0:04 - 0:06 (Walk): slow steps over a dark puddle, ripples reflecting the city lights.\n"
+    '0:06 - 0:08 (Close): slow push-in on the back print, neon bokeh. "Wear the night."'
+)
+
+
+def _h(session_id: str) -> dict:
+    return {"X-Session-Id": session_id}
+
+
+def test_a_story_with_four_beats_makes_a_four_scene_ad(client, ctx, session_id, photo_bytes):
+    job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": FOUR_BEATS}).json()
+    scenes = job["storyboard"]["scenes"]
+    assert [s["role"] for s in scenes] == ["hook", "demo", "demo", "cta"]
+    assert [s["duration_s"] for s in scenes] == [2, 2, 2, 2]
+    to_video(client, ctx, session_id, job["id"])
+    worker.run_once(ctx)
+    done = client.get(f"/jobs/{job['id']}", headers=_h(session_id)).json()
+    assert done["status"] == "done"
+    assert [r.kind for r in ctx.media.submits] == ["image"] * 4 + ["video"] * 4
+    counts = {k: sum(a["kind"] == k for a in done["assets"]) for k in ("still", "carousel")}
+    assert counts == {"still": 4, "carousel": 5}
+
+
+def test_scenes_can_be_added_and_removed_before_approval_only(client, ctx, session_id, photo_bytes):
+    job = create_job(client, session_id, photo_bytes).json()
+    board = job["storyboard"]
+    extra = {**board["scenes"][1], "description": "A close-up of the stitching.", "image_prompt": ""}
+    board["scenes"] = [*board["scenes"][:2], extra, extra, board["scenes"][2]]
+    view = client.put(f"/jobs/{job['id']}/storyboard", json=board, headers=_h(session_id)).json()
+    assert [s["role"] for s in view["storyboard"]["scenes"]] == ["hook", "demo", "demo", "demo", "cta"]
+    six = {**board, "scenes": [*board["scenes"], extra]}
+    assert client.put(f"/jobs/{job['id']}/storyboard", json=six, headers=_h(session_id)).status_code == 422
+    empty = {**board, "scenes": [{**extra, "description": "", "image_prompt": ""}]}
+    assert client.put(f"/jobs/{job['id']}/storyboard", json=empty, headers=_h(session_id)).status_code == 422
+    one = {**board, "scenes": [board["scenes"][0]]}
+    view = client.put(f"/jobs/{job['id']}/storyboard", json=one, headers=_h(session_id)).json()
+    assert [s["role"] for s in view["storyboard"]["scenes"]] == ["cta"]
+
+    approve(client, session_id, job["id"])
+    worker.run_once(ctx)
+    images_done = client.get(f"/jobs/{job['id']}", headers=_h(session_id)).json()
+    more = {**images_done["storyboard"], "scenes": images_done["storyboard"]["scenes"] * 2}
+    r = make_video(client, session_id, job["id"], more)
+    assert r.status_code == 422 and "fixed" in r.json()["detail"]
+
+
+def test_no_voiceover_skips_the_voice_and_its_cost(client, ctx, session_id, photo_bytes):
+    job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "voice": "none"}).json()
+    with_voice = create_job(client, session_id, photo_bytes).json()
+    assert job["estimate"]["video"]["usd"] < with_voice["estimate"]["video"]["usd"]
+    to_video(client, ctx, session_id, job["id"])
+    worker.run_once(ctx)
+    done = client.get(f"/jobs/{job['id']}", headers=_h(session_id)).json()
+    assert done["status"] == "done" and ctx.voice.requests == []
+    assert all(c.get("audio_track", True) for c in done["variants"][0]["checks"])  # music still plays
+
+
+def test_sound_can_change_until_the_video_is_made(client, ctx, session_id, photo_bytes):
+    job = create_job(client, session_id, photo_bytes).json()
+    r = client.put(f"/jobs/{job['id']}/sound", json={"voice": "onyx", "music": "tech"}, headers=_h(session_id))
+    assert r.status_code == 200 and (r.json()["brief"]["voice"], r.json()["brief"]["music"]) == ("onyx", "tech")
+    assert client.put(f"/jobs/{job['id']}/sound", json={"music": "polka"}, headers=_h(session_id)).status_code == 422
+    assert client.put(f"/jobs/{job['id']}/sound", json={"voice": "none"}, headers=_h(new_session())).status_code == 404
+    to_video(client, ctx, session_id, job["id"])
+    late = client.put(f"/jobs/{job['id']}/sound", json={"voice": "marin"}, headers=_h(session_id))
+    assert late.status_code == 409
+
+
+def test_music_choice_picks_the_bed():
+    def brief(music, theme=None):
+        return SimpleNamespace(music=music, theme=theme)
+
+    assert music_for(brief("none"), "food") is None
+    assert music_for(brief("theme", "sport"), "food").name == "sport.m4a"
+    assert music_for(brief("theme"), "food").name == "food.m4a"
+    assert music_for(brief("tech", "sport"), "food").name == "tech.m4a"  # any track, whatever the theme
+
+
+def test_voice_and_music_lists_with_previews(client):
+    voices = client.get("/voices").json()
+    assert [v["id"] for v in voices] == ["marin", "cedar", "coral", "onyx"]
+    for v in voices:
+        if v["sample"]:
+            got = client.get(v["sample"])
+            assert got.status_code == 200 and got.headers["content-type"].startswith("audio/")
+    music = client.get("/music").json()
+    assert {m["id"] for m in music} == {"sport", "beauty", "tech", "food", "fashion"}
+    got = client.get(music[0]["sample"])
+    assert got.status_code == 200 and got.headers["content-type"].startswith("audio/")
+    assert client.get("/music/../config.m4a").status_code == 404
+    assert client.get("/voices/robot.m4a").status_code == 404

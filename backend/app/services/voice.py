@@ -21,6 +21,12 @@ AUDIO_TOKENS_PER_S = 25
 WORDS_PER_S = 2.2  # a slow speaker, so the estimate is on the high side
 
 VOICES = ("marin", "cedar", "coral", "onyx")  # built-in gpt-4o-mini-tts voices offered in the app
+VOICE_LABELS = {
+    "marin": "Marin (OpenAI's recommended voice)",
+    "cedar": "Cedar (OpenAI's recommended voice)",
+    "coral": "Coral",
+    "onyx": "Onyx",
+}
 
 TONE_STYLE = {
     "energetic": "upbeat and energetic, quick pace, like an excited creator",

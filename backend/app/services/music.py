@@ -15,6 +15,15 @@ def manifest() -> dict:
     return yaml.safe_load((MUSIC_DIR / "music.yaml").read_text(encoding="utf-8"))
 
 
+def music_for(brief, default_theme: str) -> Path | None:
+    """The bed the brief asks for: none, the theme's (default), or a named one."""
+    if brief.music == "none":
+        return None
+    if brief.music == "theme":
+        return bed_for(brief.theme, default_theme)
+    return bed_for(brief.music, default_theme)
+
+
 def bed_for(theme: str | None, default_theme: str) -> Path:
     """The bed for the brief's theme, or the default theme's bed when it has none."""
     beds = manifest()

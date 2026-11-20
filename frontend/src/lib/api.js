@@ -5,6 +5,9 @@
 
 const BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 
+// Full URL of an API path (for audio previews played straight from the API).
+export const apiUrl = (path) => `${BASE}${path}`;
+
 let memorySession = null;
 let memoryCode = '';
 
@@ -112,6 +115,9 @@ export const api = {
   makeVideo: (id, storyboard) =>
     request(`/jobs/${encodeURIComponent(id)}/video`, { method: 'POST', json: storyboard ?? null }),
   retry: (id) => request(`/jobs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  setSound: (id, sound) => request(`/jobs/${encodeURIComponent(id)}/sound`, { method: 'PUT', json: sound }),
+  voices: () => request('/voices'),
+  music: () => request('/music'),
 };
 
 export function rememberJob(id) {

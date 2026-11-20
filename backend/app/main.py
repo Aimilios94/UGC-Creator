@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .config import get_settings
-from .routers import assets, brand_kit, campaigns, health, jobs
+from .routers import assets, brand_kit, campaigns, health, jobs, library
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -37,6 +37,7 @@ app.include_router(health.router)
 app.include_router(jobs.router)
 app.include_router(campaigns.router)
 app.include_router(brand_kit.router)
+app.include_router(library.router)
 app.include_router(assets.router)
 
 

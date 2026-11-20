@@ -15,8 +15,9 @@ Theme = Literal["sport", "beauty", "tech", "food", "fashion"]  # one YAML each i
 AdType = Literal["testimonial", "product_demo", "unboxing", "problem_solution"]
 Tone = Literal["energetic", "calm", "playful", "premium"]
 Font = Literal["Inter", "Montserrat", "Bebas Neue", "Playfair Display"]  # bundled by compose (OFL)
-Voice = Literal["marin", "cedar", "coral", "onyx"]  # gpt-4o-mini-tts built-in voices offered
-Music = Literal["theme", "none"]
+Voice = Literal["marin", "cedar", "coral", "onyx", "none"]  # gpt-4o-mini-tts voices offered, or no voiceover
+Music = Literal["theme", "none", "sport", "beauty", "tech", "food", "fashion"]  # the theme's bed, none, or any bed
+MIN_SCENES, MAX_SCENES = 1, 5
 CaptionStyle = Literal["bold", "clean", "off"]
 VisualStyle = Literal["realistic", "cinematic", "3d", "2d"]
 ImageSource = Literal["generate", "product", "upload"]
@@ -103,9 +104,18 @@ class Hook(BaseModel):
     text: str = Field(max_length=160)
 
 
+def roles_for(n: int) -> list[str]:
+    """Scene roles by position: the first opens (hook), the last closes (cta), the rest show (demo)."""
+    if n == 1:
+        return ["cta"]
+    return ["hook", *(["demo"] * (n - 2)), "cta"]
+
+
 def _roles_in_order(scenes):
-    if [s.role for s in scenes] != ["hook", "demo", "cta"]:
-        raise ValueError("scenes must be hook, demo, cta in that order")
+    """The roles follow the scenes' order; they are set by position, whatever the writer sent."""
+    roles = roles_for(len(scenes))
+    for scene, role in zip(scenes, roles, strict=True):
+        scene.role = role
     return scenes
 
 
@@ -113,7 +123,7 @@ class StoryboardDraft(BaseModel):
     """Three scenes (hook, demo, call to action) and three alternative hooks, as the AI writes them."""
 
     title: str = Field(max_length=100)
-    scenes: list[SceneDraft] = Field(min_length=3, max_length=3)
+    scenes: list[SceneDraft] = Field(min_length=MIN_SCENES, max_length=MAX_SCENES)
     hooks: list[Hook] = Field(min_length=3, max_length=3)
     cta_text: str = Field(max_length=60)
 
@@ -127,17 +137,15 @@ class Storyboard(BaseModel):
     """The storyboard the user edits and approves."""
 
     title: str = Field(max_length=100)
-    scenes: list[Scene] = Field(min_length=3, max_length=3)
+    scenes: list[Scene] = Field(min_length=MIN_SCENES, max_length=MAX_SCENES)
     hooks: list[Hook] = Field(min_length=3, max_length=3)
     cta_text: str = Field(max_length=60)
     hook_choice: int | None = Field(default=None, ge=0, le=2)  # the hook idea used for scene 1, if any
 
     @field_validator("scenes")
     @classmethod
-    def _roles_in_order(cls, scenes: list[Scene]) -> list[Scene]:
-        if [s.role for s in scenes] != ["hook", "demo", "cta"]:
-            raise ValueError("scenes must be hook, demo, cta in that order")
-        return scenes
+    def _roles_by_position(cls, scenes: list[Scene]) -> list[Scene]:
+        return _roles_in_order(scenes)
 
 
 class BrandColors(BaseModel):
@@ -222,6 +230,14 @@ class VariantView(BaseModel):
     ratios: list[str] = []  # ratios exported (passed the safe-zone check)
     skipped: dict[str, str] = {}  # ratio -> why it was not exported
     checks: list[dict] = []  # code-graded output checks per exported file
+
+
+class SoundIn(BaseModel):
+    """The ad's sound, changeable until the video is made."""
+
+    voice: Voice | None = None
+    music: Music | None = None
+    captions: CaptionStyle | None = None
 
 
 class ApproveIn(BaseModel):

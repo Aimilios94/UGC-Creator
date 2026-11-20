@@ -33,7 +33,7 @@ from . import analyze, storyboard
 from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into
 from .image_gen import PlannedRender, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
-from .music import bed_for
+from .music import music_for
 from .output_checks import check_compose
 from .platform_specs import MIN_CROP_KEEP, frame_size
 from .providers.llm import LlmHandle, build_llm
@@ -497,7 +497,7 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
                 offer=brief.offer,
                 product_name=brief.product_name,
                 end_card_image=end_image,
-                music=bed_for(brief.theme, s.default_music_theme) if brief.music == "theme" else None,
+                music=music_for(brief, s.default_music_theme),
                 captions=brief.captions,
                 branding=_branding(ctx, job, work),
                 scale=s.compose_scale,
@@ -614,9 +614,10 @@ def run_job(ctx: Context, job: dict) -> None:
         repo.finish_job(ctx.db, job_id)
         return
 
-    for row in rows:
-        scene = Scene.model_validate(row["data"])
-        run_voice_stage(ctx, job, row["idx"], scene.voiceover, brief.voice, tone)
+    if brief.voice != "none":
+        for row in rows:
+            scene = Scene.model_validate(row["data"])
+            run_voice_stage(ctx, job, row["idx"], scene.voiceover, brief.voice, tone)
     for row in rows:
         idx = row["idx"]
         scene = Scene.model_validate(row["data"])
@@ -643,6 +644,7 @@ def run_job(ctx: Context, job: dict) -> None:
     repo.finish_job(ctx.db, job_id)
 
 
+DEFAULT_SCENES = 3  # an ad written without the user's own story
 VOICE_EST_WORDS = 14  # a voiceover line is about 12 words; a little more for the estimate
 
 
@@ -655,15 +657,16 @@ def estimate_job_usd(s: Settings) -> float:
     """Default estimate for a full ad (3 generated images, 5 s clips, voiceover), shown before a brief."""
     per_scene = cost_usd(s.image_model, Usage(images=1)) + cost_usd(s.video_model, Usage(seconds=s.video_duration_s))
     per_scene += voice_est_usd(s)
-    return round(per_scene * s.render_scenes, 6)
+    return round(per_scene * min(DEFAULT_SCENES, s.render_scenes), 6)
 
 
-def estimate_board_usd(s: Settings, board: Storyboard) -> tuple[float, float]:
+def estimate_board_usd(s: Settings, board: Storyboard, voice: str = "marin") -> tuple[float, float]:
     """(images, video) estimate for this storyboard: own images are free; clips by each scene's length."""
     scenes = board.scenes[: s.render_scenes]
     images = sum(cost_usd(s.image_model, Usage(images=1)) for sc in scenes if sc.image_source == "generate")
     video = sum(cost_usd(s.video_model, Usage(seconds=render_seconds(sc.duration_s))) for sc in scenes)
-    video += sum(voice_est_usd(s, sc.voiceover) for sc in scenes if sc.voiceover.strip())
+    if voice != "none":
+        video += sum(voice_est_usd(s, sc.voiceover) for sc in scenes if sc.voiceover.strip())
     return round(images, 6), round(video, 6)
 
 
