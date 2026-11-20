@@ -157,6 +157,10 @@ class MockMedia:
     name: str = "mock"
     submits: list[MediaRequest] = field(default_factory=list)
     fail_status_times: int = 0  # simulate a crash while polling, for resume tests
+    # Local stack: show the user's own pictures (a "picture" is the product photo fitted to the frame,
+    # a "clip" is its input picture with a slow camera move) instead of plain placeholders. Tests keep
+    # the fast placeholders.
+    preview: bool = False
 
     def submit(self, req: MediaRequest) -> str:
         self.submits.append(req)
@@ -169,12 +173,26 @@ class MockMedia:
             raise MediaError("simulated crash while polling")
         return "done"
 
+    def _request(self, prediction_id: str) -> MediaRequest | None:
+        try:
+            return self.submits[int(prediction_id.rsplit("-", 1)[1]) - 1]
+        except (ValueError, IndexError):
+            return None
+
     def result(self, model: str, prediction_id: str, kind: str) -> MediaResult:
+        req = self._request(prediction_id) if self.preview else None
         if kind == "video":
+            if req is not None and req.input_image.data:
+                seconds = int(req.arguments.get("duration", "5"))
+                return MediaResult(content_type="video/mp4", data=_mock_clip(req.input_image.data, seconds))
             return MediaResult(content_type="video/mp4", data=MOCK_CLIP.read_bytes())
         ratio = prediction_id_ratio(self.submits, prediction_id)
         w, h = _RATIO_SIZES.get(ratio, (540, 960))
-        return MediaResult(content_type="image/jpeg", data=_mock_image(w, h, prediction_id), width=w, height=h)
+        if req is not None and req.input_image.data:
+            data = _mock_picture(req.input_image.data, w, h)
+        else:
+            data = _mock_image(w, h, prediction_id)
+        return MediaResult(content_type="image/jpeg", data=data, width=w, height=h)
 
     def download(self, result: MediaResult) -> bytes:
         return result.data or b""
@@ -199,6 +217,40 @@ def _mock_image(w: int, h: int, label: str) -> bytes:
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=80)
     return buf.getvalue()
+
+
+def _mock_picture(photo: bytes, w: int, h: int) -> bytes:
+    """Local preview of a "generated" picture: the product photo fitted to the frame, marked as a test."""
+    from PIL import Image, ImageDraw, ImageOps
+
+    with Image.open(io.BytesIO(photo)) as src:
+        img = ImageOps.fit(src.convert("RGB"), (w, h))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, h - 28, w, h], fill=(0, 0, 0))
+    d.text((10, h - 22), "TEST PICTURE (no AI on the local stack)", fill=(255, 255, 255))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=85)
+    return buf.getvalue()
+
+
+def _mock_clip(picture: bytes, seconds: int) -> bytes:
+    """Local preview of a clip: the scene's starting picture with a slow push-in (no AI motion)."""
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "in.jpg"
+        dst = Path(tmp) / "out.mp4"
+        src.write_bytes(picture)
+        frames = seconds * 25
+        subprocess.run(  # noqa: S603 - argument list, no shell
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),  # noqa: S607
+             "-vf", f"scale=720:-2,zoompan=z='min(zoom+0.0012,1.2)':d={frames}:x='iw/2-(iw/zoom/2)':"
+             f"y='ih/2-(ih/zoom/2)':s=540x960:fps=25,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+             "-frames:v", str(frames), "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(dst)],
+            check=True,
+        )  # fmt: skip
+        return dst.read_bytes()
 
 
 def wait_for(
@@ -237,7 +289,7 @@ def build_media_or_unavailable(settings: Settings) -> MediaProvider:
 
 def build_media(settings: Settings) -> MediaProvider:
     if settings.media_provider == "mock":
-        return MockMedia()
+        return MockMedia(preview=settings.mock_preview)
     if settings.media_provider == "fal":
         return FalMedia(settings.fal_key, output_expiry_s=settings.fal_output_expiry_s)
     raise ProviderNotConfigured(f"unknown MEDIA_PROVIDER {settings.media_provider!r}")

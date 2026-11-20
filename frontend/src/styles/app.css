@@ -451,3 +451,19 @@ details.ai-instructions[open] > summary::before { content: '▾ '; }
 .ai-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 12px; }
 
 .hook-intro { margin: 12px 0 4px; max-width: 760px; }
+
+/* Video step: the video first, the summary beside it */
+.video-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .video-layout { grid-template-columns: 1fr; } }
+.video-layout .side { display: grid; gap: 16px; }
+.summary-card h3 { margin: 16px 0 6px; font-size: 1rem; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 8px 0 0; }
+.facts dt { color: var(--text-secondary); font-size: 0.9rem; }
+.facts dd { margin: 0; }
+.story-lines { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.9rem; }
+.made-with { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.made-with td { padding: 5px 4px; border-bottom: 1px solid var(--card-border); vertical-align: top; }
+.made-with td.num { text-align: right; white-space: nowrap; }
+.made-with tr.total td { font-weight: 700; border-bottom: none; }
+details.fold-plain > summary { cursor: pointer; font-weight: 600; }
+.models-line { max-width: 520px; margin: 4px 0 0; }

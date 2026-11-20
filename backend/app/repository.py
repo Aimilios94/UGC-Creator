@@ -504,6 +504,17 @@ _LIVE = "status in ('reserved', 'billed')"
 _TODAY = "created_at >= (date_trunc('day', now() at time zone 'utc') at time zone 'utc')"
 
 
+def job_costs(db: Database, job_id: str) -> list[dict]:
+    """Spend per kind and model (what each AI cost for this ad)."""
+    with db.tx() as c:
+        return _all(
+            c,
+            f"""select kind, model, count(*) as calls, {_SPENT} as usd from llm_calls
+                where {_LIVE} and job_id = %s group by kind, model order by min(created_at)""",
+            (job_id,),
+        )
+
+
 def job_spend_usd(db: Database, job_id: str) -> float:
     with db.tx() as c:
         return float(_one(c, f"select {_SPENT} as s from llm_calls where {_LIVE} and job_id = %s", (job_id,))["s"])

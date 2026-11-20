@@ -215,6 +215,13 @@ class CampaignView(BaseModel):
     created_at: str
 
 
+class CostLine(BaseModel):
+    kind: str  # llm | image | video | tts
+    model: str
+    calls: int
+    cost: Money
+
+
 class Estimate(BaseModel):
     images: Money  # reference images still to generate (own images are free)
     video: Money  # clips (by each scene's length) and voiceover
@@ -253,6 +260,7 @@ class JobView(BaseModel):
     campaign_id: str | None = None
     brand: BrandKit | None = None
     phase: str = "video"  # images (step 1) | video (step 2)
+    costs: list[CostLine] = []  # what each AI cost so far
     flags: list[StoryboardFlag] = []
     variants: list[VariantView] = []
     estimate: Estimate | None = None

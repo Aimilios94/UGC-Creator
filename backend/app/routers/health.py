@@ -55,7 +55,12 @@ def public_config(settings: Settings = Depends(get_settings)) -> dict:
         "max_scenes": min(MAX_SCENES, settings.render_scenes),
         "job_estimate": Money(**money(estimate_job_usd(settings), rate)),
         "job_cost_cap": Money(usd=round(settings.job_cost_cap_usd, 4), eur=settings.job_cost_cap_eur),
-        "models": {"llm": settings.llm_model, "image": settings.image_model, "video": settings.video_model},
+        "models": {
+            "llm": settings.llm_model,
+            "image": settings.image_model,
+            "video": settings.video_model,
+            "tts": settings.tts_model,
+        },
         # Unit prices for live estimates on the Storyboard step (same price table as the server).
         "prices": {
             "image": Money(**money(cost_usd(settings.image_model, Usage(images=1)), rate)),
@@ -64,6 +69,8 @@ def public_config(settings: Settings = Depends(get_settings)) -> dict:
         },
         "clip_lengths": [5, 10],  # what the video model renders; a scene can be 2-10 s (cut in compose)
         "end_card_s": settings.end_card_s,
+        # Local stack with mock providers: nothing is made by AI or paid; prices show a real run.
+        "test_mode": settings.media_provider == "mock",
     }
 
 

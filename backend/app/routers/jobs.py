@@ -23,6 +23,7 @@ from ..models import (
     BrandKit,
     BrandSnapshot,
     Brief,
+    CostLine,
     Estimate,
     JobView,
     Money,
@@ -78,6 +79,15 @@ def job_view(ctx: Context, job: dict) -> JobView:
         id=job_id,
         status=job["status"],
         phase=job.get("phase") or "video",
+        costs=[
+            CostLine(
+                kind=r["kind"],
+                model=r["model"],
+                calls=int(r["calls"]),
+                cost=Money(**money(float(r["usd"]), s.usd_to_eur_rate)),
+            )
+            for r in repo.job_costs(ctx.db, job_id)
+        ],
         estimate=_estimate(ctx, board, spent, job) if board is not None else None,
         brief=brief,
         campaign_id=str(job["campaign_id"]) if job.get("campaign_id") else None,

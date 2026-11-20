@@ -8,6 +8,7 @@ import { HELP } from '../lib/help';
 import Stepper, { BackButton } from '../components/Stepper';
 import AutoTextarea from '../components/AutoTextarea';
 import SoundCard from '../components/SoundCard';
+import { KIND_LABEL, modelLabel } from '../lib/models';
 import { goToBrief } from '../lib/steps';
 
 const POLL_MS = 3000;
@@ -746,6 +747,18 @@ function StoryboardStep({ job, onChange, readOnly }) {
               currency={currency}
             />
           )}
+          {config && (
+            <p className="muted small models-line">
+              AI used: pictures by <strong>{modelLabel(config.models.image)}</strong>, clips by{' '}
+              <strong>{modelLabel(config.models.video)}</strong>
+              {sound.voice !== 'none' && (
+                <>
+                  , voice by <strong>{modelLabel(config.models.tts)}</strong>
+                </>
+              )}
+              . Choosing other models comes with the model comparison (M4).
+            </p>
+          )}
           {error && <p className="error" role="alert">{error}</p>}
           <button className="btn btn-primary" onClick={approve} disabled={disabled}>
             {busy === 'approve' ? 'Starting…' : 'Continue →'}
@@ -867,22 +880,114 @@ function ImagesStep({ job, onChange, readOnly = false }) {
 }
 
 // --- progress and the finished ad -----------------------------------------------------------------
-const STAGE_LABEL = {
-  analyze: 'Read the product photo',
-  storyboard: 'Write the storyboard',
-  voice: 'Voiceover',
-  image: 'Image',
-  video: 'Video clip',
-  compose: 'Edit the ad: captions, music, end card, every format',
-};
-
 const RATIO_LABEL = { '9:16': '9:16 vertical', '1:1': '1:1 square', '4:5': '4:5 portrait', '16:9': '16:9 landscape' };
+const STYLE_LABEL = { realistic: 'Realistic phone video', cinematic: 'Cinematic', '3d': '3D animation', '2d': '2D illustration / anime' };
+const VOICE_LABEL = { marin: 'Marin', cedar: 'Cedar', coral: 'Coral', onyx: 'Onyx', none: 'No voiceover' };
+const CAPTION_LABEL = { bold: 'Bold, a few words at a time', clean: 'Clean subtitles', off: 'Off' };
 
 function StageIcon({ status }) {
   if (status === 'done') return <CheckCircle2 size={18} className="ok" aria-label="done" />;
   if (status === 'failed') return <XCircle size={18} className="bad" aria-label="failed" />;
   if (status === 'running' || status === 'submitted') return <Loader2 size={18} className="spin" aria-label="in progress" />;
   return <Circle size={18} className="muted" aria-label="waiting" />;
+}
+
+// The steps in the order they happen, each grouped over the scenes.
+function progressGroups(job, n) {
+  const videoPhase = job.phase === 'video';
+  const of = (stage) => job.stages.filter((s) => s.stage === stage);
+  const status = (rows, expected) => {
+    if (rows.some((r) => r.status === 'failed')) return 'failed';
+    if (rows.length >= expected && rows.every((r) => r.status === 'done')) return 'done';
+    if (rows.some((r) => ['running', 'submitted', 'done'].includes(r.status))) return 'running';
+    return 'waiting';
+  };
+  const voiced = job.brief.voice !== 'none' ? (job.storyboard?.scenes || []).filter((s) => s.voiceover?.trim()).length : 0;
+  const groups = [
+    { label: 'Read the photo and write the storyboard', rows: [...of('analyze'), ...of('storyboard')], expected: 2 },
+    { label: `Starting pictures (${n})`, rows: of('image'), expected: n },
+  ];
+  if (videoPhase) {
+    if (voiced) groups.push({ label: `Voiceover (${voiced} ${voiced === 1 ? 'line' : 'lines'})`, rows: of('voice'), expected: voiced });
+    groups.push({ label: `Video clips (${n})`, rows: of('video'), expected: n });
+    groups.push({ label: 'Final edit: captions, music, end card, every shape', rows: of('compose'), expected: 1 });
+  }
+  return groups.map((g) => ({
+    ...g,
+    status: status(g.rows, g.expected),
+    done: g.rows.filter((r) => r.status === 'done').length,
+    error: g.rows.find((r) => r.error)?.error,
+  }));
+}
+
+function AdSummary({ job, variant, testMode }) {
+  const currency = useCurrency();
+  const [music, setMusic] = useState([]);
+  useEffect(() => {
+    api.music().then(setMusic, () => {});
+  }, []);
+  const b = job.brief;
+  const scenes = job.storyboard?.scenes || [];
+  const track =
+    b.music === 'none'
+      ? null
+      : music.find((m) => m.id === (b.music === 'theme' ? b.theme || 'food' : b.music));
+  const total = job.costs.reduce((acc, c) => add(acc, c.cost), ZERO);
+  return (
+    <section className="card summary-card">
+      <h2>About this ad</h2>
+      <dl className="facts">
+        <dt>Story</dt>
+        <dd>
+          <ol className="story-lines">
+            {scenes.map((s, i) => (
+              <li key={i}>
+                <span className="muted small">{s.duration_s} s · </span>
+                {s.description.length > 140 ? `${s.description.slice(0, 137)}…` : s.description}
+              </li>
+            ))}
+          </ol>
+        </dd>
+        <dt>Length</dt>
+        <dd>
+          {variant?.duration_s ? `${variant.duration_s.toFixed(1)} s` : '—'} ({scenes.length} {scenes.length === 1 ? 'scene' : 'scenes'} + end card)
+        </dd>
+        <dt>Style</dt>
+        <dd>{STYLE_LABEL[b.visual_style] || b.visual_style}</dd>
+        <dt>Voice</dt>
+        <dd>{VOICE_LABEL[b.voice] || b.voice}</dd>
+        <dt>Music</dt>
+        <dd>{b.music === 'none' ? 'No music' : track ? `${track.title} by ${track.artist} (CC0)` : '…'}</dd>
+        <dt>Captions</dt>
+        <dd>{CAPTION_LABEL[b.captions] || b.captions}</dd>
+      </dl>
+      <h3>Made with</h3>
+      <table className="made-with">
+        <tbody>
+          {job.costs.map((c) => (
+            <tr key={c.kind + c.model}>
+              <td>{KIND_LABEL[c.kind] || c.kind}</td>
+              <td className="muted">{modelLabel(c.model)}</td>
+              <td className="num">{formatMoney(c.cost, currency)}</td>
+            </tr>
+          ))}
+          <tr className="total">
+            <td colSpan={2}>Total</td>
+            <td className="num">{formatMoney(total, currency)}</td>
+          </tr>
+        </tbody>
+      </table>
+      {testMode && (
+        <p className="notice small">
+          <AlertTriangle size={14} aria-hidden="true" />
+          <span>
+            Local test: no AI made these pictures or clips and nothing was paid. Each clip is your starting picture with a slow
+            camera move; the prices show what a real run would cost.
+          </span>
+        </p>
+      )}
+    </section>
+  );
 }
 
 function FinishedAd({ job, variant }) {
@@ -896,7 +1001,7 @@ function FinishedAd({ job, variant }) {
   if (!current) return null;
   return (
     <div className="finished">
-      <div className="ratio-tabs" role="tablist" aria-label="Format">
+      <div className="ratio-tabs" role="tablist" aria-label="Shape">
         {ordered.map((a) => (
           <button
             key={a.ratio}
@@ -913,22 +1018,29 @@ function FinishedAd({ job, variant }) {
       <video key={current.url} src={current.url} controls playsInline poster={cover?.url} className={`ratio-${current.ratio.replace(':', 'x')}`} />
       <p className="small">
         <a href={current.url} download={current.name} target="_blank" rel="noreferrer">
-          Open {RATIO_LABEL[current.ratio] || current.ratio} ({variant.duration_s?.toFixed(1)} s)
+          Open the {RATIO_LABEL[current.ratio] || current.ratio} video
         </a>{' '}
         <span className="muted">(right-click the video to save it)</span>
       </p>
       {Object.keys(variant.skipped || {}).length > 0 && (
         <p className="muted small">
-          Not exported:{' '}
+          Not made in:{' '}
           {Object.entries(variant.skipped)
             .map(([r, why]) => `${r} (${why})`)
             .join('; ')}
           .
         </p>
       )}
+      <p className="muted small">
+        Every file is marked as AI-generated in its metadata. When you post, turn on the platform&rsquo;s AI-generated label.
+      </p>
       {(stills.length > 0 || carousel.length > 0) && (
-        <div className="extras">
-          <h3>Images</h3>
+        <details className="extras fold-plain">
+          <summary>Extra images for posting (optional)</summary>
+          <p className="muted small">
+            Made from your video, for platforms that also want pictures: a cover (thumbnail), one still per scene for picture
+            ads, and a 4:5 carousel ending on your call to action. You do not need them to post the video.
+          </p>
           <div className="thumbs">
             {[cover, ...stills, ...carousel].filter(Boolean).map((a) => (
               <a key={a.name} href={a.url} target="_blank" rel="noreferrer" title={a.name}>
@@ -936,36 +1048,21 @@ function FinishedAd({ job, variant }) {
               </a>
             ))}
           </div>
-          <p className="muted small">Cover, one still per scene, and a 4:5 carousel ending on the call to action.</p>
-        </div>
+        </details>
       )}
-      <p className="muted small">
-        Every file is marked as AI-generated in its metadata. When you post, turn on the platform&rsquo;s AI-generated label: the images, video and voice are made by AI.
-      </p>
     </div>
   );
 }
 
 function GenerateStep({ job, onChange }) {
   const currency = useCurrency();
+  const config = useConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const n = Math.max(job.storyboard?.scenes.length ?? 1, ...job.stages.filter((s) => s.scene_idx >= 0).map((s) => s.scene_idx + 1));
   const idxs = Array.from({ length: n }, (_, i) => i);
   const videoPhase = job.phase === 'video';
-  const expected = [
-    { stage: 'analyze', scene_idx: -1 },
-    { stage: 'storyboard', scene_idx: -1 },
-    ...idxs.map((i) => ({ stage: 'image', scene_idx: i })),
-    ...(videoPhase
-      ? [
-          ...(job.brief.voice === 'none' ? [] : idxs.filter((i) => job.storyboard?.scenes[i]?.voiceover).map((i) => ({ stage: 'voice', scene_idx: i }))),
-          ...idxs.map((i) => ({ stage: 'video', scene_idx: i })),
-          { stage: 'compose', scene_idx: -1 },
-        ]
-      : []),
-  ];
-  const stageStatus = (st) => job.stages.find((s) => s.stage === st.stage && s.scene_idx === st.scene_idx) || { status: 'waiting' };
+  const groups = progressGroups(job, n);
   const active = isActive(job);
   const ratioClass = `ratio-${job.brief.aspect_ratio.replace(':', 'x')}`;
   const variant = job.variants?.find((v) => v.label === 'A');
@@ -987,46 +1084,12 @@ function GenerateStep({ job, onChange }) {
     <div className="page">
       <Stepper step={videoPhase ? 4 : 3} job={job} />
       <BackButton onClick={() => navigate(`/job/${job.id}/${videoPhase ? 'images' : 'storyboard'}`)}>
-        Back to the {videoPhase ? 'images' : 'storyboard'}
+        Back to the {videoPhase ? 'pictures' : 'storyboard'}
       </BackButton>
       <h1>
-        {videoPhase && <Clapperboard size={26} aria-hidden="true" />} {videoPhase ? 'Your video' : 'Making the images'}
+        {videoPhase && <Clapperboard size={26} aria-hidden="true" />} {finished ? 'Your video' : videoPhase ? 'Making your video' : 'Making the pictures'}
       </h1>
-      <div className="grid-2">
-        <section className="card">
-          <h2>Progress</h2>
-          <ul className="stages">
-            {expected.map((st) => {
-              const s = stageStatus(st);
-              return (
-                <li key={`${st.stage}-${st.scene_idx}`}>
-                  <StageIcon status={s.status} />
-                  <span>
-                    {STAGE_LABEL[st.stage]}
-                    {st.scene_idx >= 0 ? ` (scene ${st.scene_idx + 1})` : ''}
-                  </span>
-                  {s.error && <span className="error small">{s.error}</span>}
-                </li>
-              );
-            })}
-          </ul>
-          <p className="cost" aria-live="polite">
-            Spent so far: <strong>{formatMoney(job.spend, currency)}</strong>{' '}
-            <span className="muted">of a {formatMoney(job.cost_cap, currency)} cap</span>
-          </p>
-          {active && <p className="muted small">You can close this tab: it continues on the server. Come back to this page in this browser to see the result.</p>}
-          {job.status === 'failed' && (
-            <div className="failed">
-              <p className="error" role="alert">{job.last_error || 'The job failed.'}</p>
-              <p className="muted small">Trying again keeps the finished steps. Spend so far still counts toward the cap.</p>
-              <button className="btn btn-secondary" onClick={retry} disabled={busy}>
-                <RotateCcw size={16} aria-hidden="true" /> Try again
-              </button>
-              {error && <p className="error">{error}</p>}
-            </div>
-          )}
-        </section>
-
+      <div className="video-layout">
         <section className="card media">
           {finished ? (
             <FinishedAd job={job} variant={variant} />
@@ -1044,7 +1107,7 @@ function GenerateStep({ job, onChange }) {
                     ) : (
                       <div className="placeholder">
                         <Loader2 className={active ? 'spin' : ''} size={24} aria-hidden="true" />
-                        <span className="muted small">{active ? 'Rendering…' : 'No media yet'}</span>
+                        <span className="muted small">{active ? 'Working…' : 'Not made yet'}</span>
                       </div>
                     )}
                     {n > 1 && <figcaption className="muted small">Scene {idx + 1}</figcaption>}
@@ -1053,8 +1116,44 @@ function GenerateStep({ job, onChange }) {
               })}
             </div>
           )}
-          {job.status === 'done' && <p className="ok small">Done. Links to the files expire after a few minutes; reload to refresh them.</p>}
         </section>
+
+        <div className="side">
+          {finished ? (
+            <AdSummary job={job} variant={variant} testMode={config?.test_mode} />
+          ) : (
+            <section className="card">
+              <h2>Progress</h2>
+              <ul className="stages">
+                {groups.map((g) => (
+                  <li key={g.label}>
+                    <StageIcon status={g.status} />
+                    <span>
+                      {g.label}
+                      {g.expected > 1 && g.status === 'running' ? ` · ${g.done}/${g.expected}` : ''}
+                    </span>
+                    {g.error && <span className="error small">{g.error}</span>}
+                  </li>
+                ))}
+              </ul>
+              <p className="cost" aria-live="polite">
+                Spent so far: <strong>{formatMoney(job.spend, currency)}</strong>{' '}
+                <span className="muted">of a {formatMoney(job.cost_cap, currency)} cap</span>
+              </p>
+              {active && <p className="muted small">You can close this tab: it continues on the server. Come back to this page in this browser to see the result.</p>}
+              {job.status === 'failed' && (
+                <div className="failed">
+                  <p className="error" role="alert">{job.last_error || 'Something failed.'}</p>
+                  <p className="muted small">Trying again keeps the finished steps. Spend so far still counts toward the cap.</p>
+                  <button className="btn btn-secondary" onClick={retry} disabled={busy}>
+                    <RotateCcw size={16} aria-hidden="true" /> Try again
+                  </button>
+                  {error && <p className="error">{error}</p>}
+                </div>
+              )}
+            </section>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     llm_provider: str = "openai"  # openai | anthropic | mock
     media_provider: str = "fal"  # fal | mock
     voice_provider: str = "openai"  # openai | mock (voiceover, M2)
+    mock_preview: bool = True  # mock media shows the user's own pictures (local stack); tests use placeholders
     storage_provider: str = "local"  # local | gcs
 
     # --- Keys ---

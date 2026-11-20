@@ -23,6 +23,7 @@ _SAFE_ENV = {
     "LLM_PROVIDER": "mock",
     "MEDIA_PROVIDER": "mock",
     "VOICE_PROVIDER": "mock",
+    "MOCK_PREVIEW": "false",
     "STORAGE_PROVIDER": "local",
     "JOB_RUNNER": "local",
     "OPENAI_API_KEY": "",
