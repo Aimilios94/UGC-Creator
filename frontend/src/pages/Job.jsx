@@ -227,7 +227,6 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [showPrompts, setShowPrompts] = useState(true);
   const [storyMode, setStoryMode] = useState(job.brief.story ? 'own' : 'ai');
   const [story, setStory] = useState(job.brief.story || '');
   const [writtenLine] = useState(job.storyboard?.scenes[0]?.voiceover || '');
@@ -389,12 +388,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
     <div className="page">
       <Stepper step={2} job={job} />
       <BackButton onClick={() => goToBrief(job)}>Back to the brief</BackButton>
-      <div className="row between">
-        <h1>{board.title}</h1>
-        <button type="button" className="btn btn-ghost btn-small" onClick={() => setShowPrompts(!showPrompts)} aria-expanded={showPrompts}>
-          {showPrompts ? 'Hide' : 'Show'} image and motion prompts
-        </button>
-      </div>
+      <h1>{board.title}</h1>
       <p className="muted">
         {readOnly
           ? 'Approved: the storyboard is locked. On the Images step you can still edit the voiceover, text, motion and clip length before the video is made.'
@@ -522,11 +516,11 @@ function StoryboardStep({ job, onChange, readOnly }) {
               .join(' · ')}
           </span>
         </summary>
-      <div className="scenes">
+      <div className="scenes scenes-list">
         {board.scenes.slice(0, n).map((s, i) => {
           const own = uploads(i).at(-1);
           return (
-            <article key={i} className="card scene">
+            <article key={i} className="card scene scene-wide">
               <div className="scene-head">
                 <h2>
                   {sceneTitle(s, i)} <Help text={HELP[s.role]} />
@@ -537,47 +531,59 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   </button>
                 )}
               </div>
-              <FieldLabel htmlFor={`d${i}`} text="Summary (for you)" help={HELP.description} />
-              <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} maxLength={800} disabled={disabled} />
-              <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />
-              <input id={`v${i}`} className={cls(`scenes.${i}.voiceover`)} value={s.voiceover} onChange={onScene(i, 'voiceover')} maxLength={220} disabled={disabled} />
-              <FieldLabel htmlFor={`t${i}`} text="On-screen text" help={HELP.on_screen_text} />
-              <input id={`t${i}`} className={cls(`scenes.${i}.on_screen_text`)} value={s.on_screen_text} onChange={onScene(i, 'on_screen_text')} maxLength={80} disabled={disabled} />
-
-              <span className="label-like">
-                Image <Help text={HELP.image_source} />
-              </span>
-              <div className="choice-row stack" role="radiogroup" aria-label={`Image for scene ${i + 1}`}>
-                {['generate', 'product', 'upload'].map((src) => (
-                  <Chip key={src} name={`src${i}`} value={src} checked={s.image_source === src} disabled={disabled || (src === 'upload' && !own)} onChange={() => editScene(i, 'image_source', src)}>
-                    {SOURCE_LABEL[src]}
-                    {config && <span className="muted small">{src === 'generate' ? formatMoney(config.prices.image, currency) : 'free'}</span>}
-                  </Chip>
-                ))}
+              <div className="scene-grid">
+                <div className="scene-main">
+                  <FieldLabel htmlFor={`d${i}`} text="What happens in this scene" help={HELP.description} />
+                  <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} maxLength={800} disabled={disabled} />
+                  <div className="grid-2 tight">
+                    <div>
+                      <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />
+                      <input id={`v${i}`} className={cls(`scenes.${i}.voiceover`)} value={s.voiceover} onChange={onScene(i, 'voiceover')} maxLength={220} disabled={disabled} placeholder={sound.voice === 'none' ? 'No voiceover in this ad' : 'Nothing is said in this scene'} />
+                    </div>
+                    <div>
+                      <FieldLabel htmlFor={`t${i}`} text="On-screen text" help={HELP.on_screen_text} />
+                      <input id={`t${i}`} className={cls(`scenes.${i}.on_screen_text`)} value={s.on_screen_text} onChange={onScene(i, 'on_screen_text')} maxLength={80} disabled={disabled} placeholder="No text on screen" />
+                    </div>
+                  </div>
+                </div>
+                <div className="scene-side">
+                  <span className="label-like">
+                    Starting picture <Help text={HELP.image_source} />
+                  </span>
+                  <div className="choice-row stack" role="radiogroup" aria-label={`Starting picture for scene ${i + 1}`}>
+                    {['generate', 'product', 'upload'].map((src) => (
+                      <Chip key={src} name={`src${i}`} value={src} checked={s.image_source === src} disabled={disabled || (src === 'upload' && !own)} onChange={() => editScene(i, 'image_source', src)}>
+                        {SOURCE_LABEL[src]}
+                        {config && <span className="muted small">{src === 'generate' ? formatMoney(config.prices.image, currency) : 'free'}</span>}
+                      </Chip>
+                    ))}
+                  </div>
+                  {!readOnly && (
+                    <label className="btn btn-ghost btn-small upload-btn">
+                      {busy === `upload${i}` ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />} Upload a picture for this scene
+                      <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={uploadFor(i)} disabled={disabled} />
+                    </label>
+                  )}
+                  {s.image_source === 'upload' && own && <img className="scene-image" src={own.url} alt={`Your picture for scene ${i + 1}`} />}
+                  <SceneLength
+                    id={`len${i}`}
+                    value={s.duration_s}
+                    onChange={(v) => editScene(i, 'duration_s', v)}
+                    disabled={disabled}
+                    prices={config?.prices}
+                    currency={currency}
+                  />
+                </div>
               </div>
-              {!readOnly && (
-                <label className="btn btn-ghost btn-small upload-btn">
-                  {busy === `upload${i}` ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Upload size={14} aria-hidden="true" />} Upload an image for this scene
-                  <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={uploadFor(i)} disabled={disabled} />
-                </label>
-              )}
-              {s.image_source === 'upload' && own && <img className="scene-image" src={own.url} alt={`Your image for scene ${i + 1}`} />}
 
-              <SceneLength
-                id={`len${i}`}
-                value={s.duration_s}
-                onChange={(v) => editScene(i, 'duration_s', v)}
-                disabled={disabled}
-                prices={config?.prices}
-                currency={currency}
-              />
-
-              {showPrompts && (
-                <div className="ai-instructions">
-                  <p className="ai-title">Instructions sent to the AI for this scene</p>
+              <details className="ai-instructions">
+                <summary>
+                  Show what the AI gets <span className="muted small">(the starting picture and the movement, written from this scene)</span>
+                </summary>
+                <div className="ai-pair">
                   <div className="ai-field">
-                    <FieldLabel htmlFor={`ip${i}`} text="1. Starting picture" help={HELP.image_prompt} />
-                    <p className="muted small hint">What the first frame shows: people, place, light, colours. The clip starts from this picture.</p>
+                    <FieldLabel htmlFor={`ip${i}`} text="1. Starting picture (for the picture AI)" help={HELP.image_prompt} />
+                    <p className="muted small hint">One frozen moment: the first frame, made from your product photo.</p>
                     {s.image_source === 'generate' ? (
                       <AutoTextarea id={`ip${i}`} minRows={3} value={s.image_prompt} onChange={onScene(i, 'image_prompt')} maxLength={2500} disabled={disabled} />
                     ) : (
@@ -585,12 +591,12 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     )}
                   </div>
                   <div className="ai-field">
-                    <FieldLabel htmlFor={`mp${i}`} text="2. Movement in the clip" help={HELP.motion_prompt} />
-                    <p className="muted small hint">What moves, second by second: the camera, the people, the light, and how the scene ends.</p>
+                    <FieldLabel htmlFor={`mp${i}`} text="2. Movement (for the video AI)" help={HELP.motion_prompt} />
+                    <p className="muted small hint">What changes, second by second: camera, people, light, the last frame.</p>
                     <AutoTextarea id={`mp${i}`} minRows={3} value={s.motion_prompt} onChange={onScene(i, 'motion_prompt')} maxLength={2200} disabled={disabled} />
                   </div>
                 </div>
-              )}
+              </details>
             </article>
           );
         })}

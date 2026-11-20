@@ -48,7 +48,8 @@ lead naturally into the next scene. Keep the product fully visible and unchanged
 on object physics (a ball going in, a throw being caught, liquid poured precisely): they render badly.
 
 Other rules:
-- description: one or two plain sentences saying what the viewer sees.
+- description: one or two plain sentences saying what the viewer sees; with a <story>, the story's own
+  text for this scene, word for word.
 - voiceover: one short spoken line per scene that fits its duration_s (about 2.5 words per second).
 - on_screen_text: a short headline for the scene (a few words); it is burned in later.
 - No first-person claims of use, experience or results ("I've used this for 3 months", "my skin

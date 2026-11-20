@@ -185,7 +185,7 @@ def mock_storyboard(brief: dict) -> dict:
             # Like the real writer: a short summary, a still first frame, and the timed movement.
             plain = re.sub(r"^.*?\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\s*(\([^)]*\))?:?\s*", "", part).strip() or part
             first = SENTENCE_END.split(plain)[0]
-            scene["description"] = (first if len(first) <= 160 else first[:157].rstrip() + "...")[:800]
+            scene["description"] = part[:800]  # the story's own text for this scene
             scene["image_prompt"] = (f"Still first frame of this scene, before anything moves: {first} {keep}")[:2500]
             scene["motion_prompt"] = part[:2200]
             scene["voiceover"] = _spoken(part)
