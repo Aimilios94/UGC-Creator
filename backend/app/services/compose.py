@@ -58,6 +58,7 @@ class ComposeError(RuntimeError):
 @dataclass
 class SceneInput:
     clip: Path
+    length_s: float | None = None  # seconds on screen; the clip is cut to it (None = the whole clip)
     voiceover: str = ""
     headline: str = ""  # the scene's on-screen text
     voice: Path | None = None  # WAV
@@ -214,12 +215,15 @@ def plan_timeline(spec: ComposeSpec) -> list[SceneTiming]:
     t = 0.0
     for scene in spec.scenes:
         clip_s = probe_duration(scene.clip)
+        if scene.length_s:
+            clip_s = min(clip_s, scene.length_s)
+        target = scene.length_s or clip_s  # a clip shorter than its scene is held on its last frame
         tempo = 1.0
         need = scene.voice_s + VOICE_LEAD_S + VOICE_TAIL_S if scene.voice else 0.0
-        if need > clip_s:
-            tempo = min(MAX_TEMPO, need / clip_s)
+        if need > target:
+            tempo = min(MAX_TEMPO, need / target)
         spoken = scene.voice_s / tempo if scene.voice else 0.0
-        duration = max(clip_s, spoken + VOICE_LEAD_S + VOICE_TAIL_S if scene.voice else clip_s)
+        duration = max(target, spoken + VOICE_LEAD_S + VOICE_TAIL_S if scene.voice else target)
         vs = t + VOICE_LEAD_S
         out.append(
             SceneTiming(

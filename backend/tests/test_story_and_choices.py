@@ -13,9 +13,15 @@ from conftest import BRIEF, new_session
 from helpers import approve, create_job, make_video, to_video
 
 STORY = (
-    "My grandad played every Sunday in boots that slipped. "
-    "Now the whole team wears Grip Socks Pro under their boots. "
-    "Grab a pair before Sunday with code KICK10."
+    'My grandad played every Sunday in boots that slipped. He said "My boots never held me." '
+    'Now the whole team wears Grip Socks Pro under their boots. "Not one slip all season," says the coach. '
+    'Sunday morning, kit bag on the bench. "Grab a pair before Sunday with code KICK10."'
+)
+SHOT_LIST = (
+    "Rainy night, 10-second timeline. 0:00 - 0:02 (Establish): handheld low-angle shot follows a man crossing "
+    "a wet zebra crossing in a city at night, wearing the hoodie.\n"
+    "0:02 - 0:06 (Detail): he lifts his hands into the rain, neon reflections on the wet fabric.\n"
+    "0:06 - 0:10 (Closing): slow cinematic push-in on the back print, neon bokeh at the edges."
 )
 
 
@@ -40,7 +46,8 @@ def test_my_own_story_rewrites_the_storyboard_keeping_my_lines(client, ctx, sess
     assert r.status_code == 200, r.text
     view = r.json()
     lines = [s["voiceover"] for s in view["storyboard"]["scenes"]]
-    assert lines[0].startswith("My grandad played") and "KICK10" in lines[2]
+    assert lines[0] == "My boots never held me." and "KICK10" in lines[2]  # the spoken lines, word for word
+    assert "grandad" in view["storyboard"]["scenes"][0]["description"]  # the scenes tell this story
     assert view["brief"]["story"] == STORY
     assert view["flags"] == []  # a claim from the user's own story counts as supplied
     with ctx.db.tx() as c:
@@ -174,3 +181,39 @@ def test_make_the_video_needs_the_images_first_and_is_idempotent(client, ctx, se
     again = make_video(client, session_id, job["id"])
     assert again.status_code == 202 and again.json()["phase"] == "video"
     assert make_video(client, new_session(), job["id"]).status_code == 404
+
+
+def test_a_shot_list_story_drives_the_visuals_and_the_scene_lengths(client, ctx, session_id, photo_bytes):
+    job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": SHOT_LIST}).json()
+    scenes = job["storyboard"]["scenes"]
+    assert [s["duration_s"] for s in scenes] == [2, 4, 4]  # from the story's timestamps
+    assert "zebra crossing" in scenes[0]["motion_prompt"] and "push-in on the back print" in scenes[2]["motion_prompt"]
+    assert all(s["voiceover"] == "" for s in scenes)  # no spoken lines in a shot list
+    assert "zebra crossing" in job["storyboard"]["hooks"][0]["text"]  # hooks open this story
+
+
+def test_short_scenes_render_a_5_s_clip_and_are_cut_to_length(client, ctx, session_id, photo_bytes):
+    job = create_job(client, session_id, photo_bytes).json()
+    board = job["storyboard"]
+    for s, length in zip(board["scenes"], (3, 7, 5), strict=True):
+        s["duration_s"] = length
+    view = client.put(f"/jobs/{job['id']}/storyboard", json=board, headers=_h(session_id)).json()
+    assert [s["duration_s"] for s in view["storyboard"]["scenes"]] == [3, 7, 5]
+    bad = {**board, "scenes": [{**board["scenes"][0], "duration_s": 12}, *board["scenes"][1:]]}
+    assert client.put(f"/jobs/{job['id']}/storyboard", json=bad, headers=_h(session_id)).status_code == 422
+    to_video(client, ctx, session_id, job["id"])
+    worker.run_once(ctx)
+    clips = [r for r in ctx.media.submits if r.kind == "video"]
+    assert [r.arguments["duration"] for r in clips] == ["5", "10", "5"]  # billed clip lengths
+    assert "Only the first 3 seconds are used" in clips[0].arguments["prompt"]
+
+
+def test_all_in_one_go_makes_images_and_video_without_stopping(client, ctx, session_id, photo_bytes):
+    job = create_job(client, session_id, photo_bytes).json()
+    r = client.post(f"/jobs/{job['id']}/approve", json={"mode": "video"}, headers=_h(session_id))
+    assert r.status_code == 202 and r.json()["phase"] == "video"
+    worker.run_once(ctx)
+    done = client.get(f"/jobs/{job['id']}", headers=_h(session_id)).json()
+    assert (done["status"], done["phase"]) == ("done", "video")
+    assert [r.kind for r in ctx.media.submits] == ["image"] * 3 + ["video"] * 3
+    assert done["variants"][0]["status"] == "done" and done["variants"][0]["ratios"]

@@ -77,14 +77,23 @@ class SceneDraft(BaseModel):
         description="Timed shot list for the image-to-video clip: what happens in each beat, camera and subject "
         "motion, lighting, focus, and how the shot ends",
     )
-    voiceover: str = Field(max_length=220, description="Voiceover line, about 5 seconds when spoken")
+    voiceover: str = Field(
+        default="", max_length=220, description="Spoken line for this scene (short enough for its length), or empty"
+    )
     on_screen_text: str = Field(default="", max_length=80)
+    duration_s: int = Field(
+        default=5, ge=2, le=10, description="Seconds this scene is on screen, 2-10; follow the story's timing if given"
+    )
+
+
+def render_seconds(duration_s: int) -> int:
+    """The video model makes 5 s or 10 s clips; a shorter scene is cut from the clip in compose."""
+    return 5 if duration_s <= 5 else 10
 
 
 class Scene(SceneDraft):
-    """A scene with the user's choices: clip length and where its image comes from."""
+    """A scene with the user's choices: where its image comes from (and its length, above)."""
 
-    duration_s: Literal[5, 10] = 5
     image_source: ImageSource = "generate"
     image_upload_key: str | None = None  # set by the server when the user uploads an image; never by the client
 
@@ -213,6 +222,12 @@ class VariantView(BaseModel):
     ratios: list[str] = []  # ratios exported (passed the safe-zone check)
     skipped: dict[str, str] = {}  # ratio -> why it was not exported
     checks: list[dict] = []  # code-graded output checks per exported file
+
+
+class ApproveIn(BaseModel):
+    """What Approve makes: the images first (the user decides on the video after), or all in one go."""
+
+    mode: Literal["images", "video"] = "images"
 
 
 class JobView(BaseModel):

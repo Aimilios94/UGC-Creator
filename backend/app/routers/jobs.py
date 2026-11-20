@@ -18,6 +18,7 @@ from .. import repository as repo
 from ..deps import get_ctx, require_access_code, session_hash
 from ..errors import BudgetExceeded, ProviderNotConfigured, UploadRejected
 from ..models import (
+    ApproveIn,
     AssetView,
     BrandKit,
     BrandSnapshot,
@@ -361,14 +362,20 @@ def _start_worker(ctx: Context) -> None:
 
 
 @router.post("/{job_id}/approve", status_code=202, dependencies=[Depends(require_access_code)])
-def approve(job_id: str, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)) -> JobView:
+def approve(
+    job_id: str,
+    body: ApproveIn | None = Body(default=None),
+    sess: str = Depends(session_hash),
+    ctx: Context = Depends(get_ctx),
+) -> JobView:
     """Idempotent: a double-click or retry changes nothing after the first approval.
 
     Refused while the storyboard has lines that break the testimonial rule."""
     current = _own_job(ctx, job_id, sess)
     if current["status"] == "draft" and current.get("storyboard"):
         _check_ready(ctx, current, Storyboard.model_validate(current["storyboard"]), phase="images")
-    job, _ = repo.approve_job(ctx.db, job_id, sess)
+    mode = body.mode if body else "images"
+    job, _ = repo.approve_job(ctx.db, job_id, sess, phase=mode)
     if job["status"] == "draft":
         raise HTTPException(status_code=409, detail="There is no storyboard to approve yet.")
     if job["status"] == "queued":

@@ -15,7 +15,10 @@ export const HELP = {
     'Exact instructions for the image model: subject, setting, framing, camera and lens, light, colours and style.',
   motion_prompt:
     'Shot list for the video model: what happens second by second, how the camera moves, and the final frame. More detail gives a better clip.',
-  clip: 'How long this scene is: 5 or 10 seconds. Video is paid per second.',
+  clip: 'How long this scene is on screen: 2 to 10 seconds. The video model makes 5 s or 10 s clips (paid per second of clip); a shorter scene is cut from its clip.',
+  ad_length: 'Type the total length of the scenes; it is split over the scenes (2 to 10 s each). The 2-second end card comes after.',
+  scenes: 'Each scene: what we see, the spoken line, the headline, where its image comes from, its length and the prompts. Open it only if you want to check or change something.',
+  make: 'Images first: you check the pictures and can still edit before paying for video. Video: images and video in one go, for when everything is ready.',
   image_source:
     'Generate a new picture from your product photo, use your product photo as it is, or upload a picture you already have (free).',
   story:

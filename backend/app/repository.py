@@ -158,7 +158,7 @@ def set_storyboard(db: Database, job_id: str, storyboard: dict) -> bool:
         return row is not None
 
 
-def approve_job(db: Database, job_id: str, session_hash: str) -> tuple[dict | None, bool]:
+def approve_job(db: Database, job_id: str, session_hash: str, phase: str = "images") -> tuple[dict | None, bool]:
     """Flip draft -> queued once and freeze the scenes. Returns (job, transitioned).
 
     A double-click or client retry finds the job no longer a draft and changes
@@ -167,10 +167,10 @@ def approve_job(db: Database, job_id: str, session_hash: str) -> tuple[dict | No
     with db.tx() as c:
         row = _one(
             c,
-            """update jobs set status = 'queued', phase = 'images', approved_at = now(), updated_at = now()
+            """update jobs set status = 'queued', phase = %s, approved_at = now(), updated_at = now()
                where id = %s and session_hash = %s and status = 'draft' and storyboard is not null
                returning *""",
-            (job_id, session_hash),
+            (phase, job_id, session_hash),
         )
         if row is None:
             return _one(c, "select * from jobs where id = %s and session_hash = %s", (job_id, session_hash)), False

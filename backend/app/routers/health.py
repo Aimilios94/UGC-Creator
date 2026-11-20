@@ -61,7 +61,8 @@ def public_config(settings: Settings = Depends(get_settings)) -> dict:
             "video_per_second": Money(**money(cost_usd(settings.video_model, Usage(seconds=1)), rate)),
             "voice_line": Money(**money(voice_est_usd(settings), rate)),
         },
-        "clip_lengths": [5, 10],
+        "clip_lengths": [5, 10],  # what the video model renders; a scene can be 2-10 s (cut in compose)
+        "end_card_s": settings.end_card_s,
     }
 
 

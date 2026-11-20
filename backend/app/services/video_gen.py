@@ -25,12 +25,16 @@ def plan_scene_video(
     reference: InputImage,
     reference_sha256: str,
     style: str = "realistic",
+    used_s: int | None = None,
 ) -> PlannedRender:
     if duration_s not in (5, 10):
         raise ValueError("Kling image-to-video accepts 5 or 10 seconds")
+    used = min(used_s or duration_s, duration_s)
     tail = " One continuous take, no cuts. Keep the product unchanged in every frame. "
     tail += VIDEO_STYLE.get(style, VIDEO_STYLE["realistic"])
-    if duration_s == 10:
+    if used < duration_s:
+        tail += f" Only the first {used} seconds are used: play all the beats within them, then hold the last frame."
+    elif duration_s == 10:
         tail += " The clip is 10 seconds: spread these beats evenly over the 10 seconds."
     prompt = scene.motion_prompt.strip()[: MAX_PROMPT - len(tail)] + tail
     arguments = {"prompt": prompt, "duration": str(duration_s), "negative_prompt": VIDEO_NEGATIVE}

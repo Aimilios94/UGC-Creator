@@ -395,3 +395,17 @@ label .help, .label-like .help { margin-left: 6px; }
 .choice-row.stack { flex-direction: column; align-items: stretch; }
 .choice-row.stack .chip { justify-content: space-between; border-radius: var(--radius-md); }
 .choice-row.stack .chip .muted { margin-left: auto; }
+
+/* Foldable sections and the Continue row */
+.fold > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; cursor: pointer; list-style: none; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: '▸'; color: var(--text-secondary); transition: transform 0.15s ease; }
+.fold[open] > summary::before { transform: rotate(90deg); }
+.fold .fold-title { font-weight: 700; font-size: 1.15rem; }
+.fold[open] .fold-sum { display: none; }
+.fold > .scenes { margin-bottom: 0; }
+.fold > .choice-group { margin-top: 12px; }
+.length-input { display: inline-flex; align-items: center; gap: 4px; }
+.length-input input { width: 70px; }
+.continue-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.continue-row select { width: auto; max-width: 100%; }

@@ -101,7 +101,8 @@ export const api = {
   getJob: (id) => request(`/jobs/${encodeURIComponent(id)}`),
   saveStoryboard: (id, storyboard) =>
     request(`/jobs/${encodeURIComponent(id)}/storyboard`, { method: 'PUT', json: storyboard }),
-  approve: (id) => request(`/jobs/${encodeURIComponent(id)}/approve`, { method: 'POST' }),
+  approve: (id, mode = 'images') =>
+    request(`/jobs/${encodeURIComponent(id)}/approve`, { method: 'POST', json: { mode } }),
   story: (id, story) => request(`/jobs/${encodeURIComponent(id)}/story`, { method: 'POST', json: { story } }),
   uploadSceneImage: (id, idx, file) => {
     const form = new FormData();

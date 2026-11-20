@@ -27,7 +27,7 @@ from pathlib import Path
 from .. import repository as repo
 from ..config import Settings
 from ..errors import BudgetExceeded
-from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Storyboard
+from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Storyboard, render_seconds
 from ..repository import Database
 from . import analyze, storyboard
 from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into
@@ -478,6 +478,7 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
                 scenes.append(
                     SceneInput(
                         clip=clip,
+                        length_s=float(scene.duration_s),
                         voiceover=scene.voiceover,
                         headline=scene.on_screen_text,
                         voice=voice_path,
@@ -629,7 +630,8 @@ def run_job(ctx: Context, job: dict) -> None:
             return plan_scene_video(
                 model=s.video_model,
                 scene=scene,
-                duration_s=scene.duration_s,
+                duration_s=render_seconds(scene.duration_s),
+                used_s=scene.duration_s,
                 reference=ref,
                 reference_sha256=image["sha256"],
                 style=brief.visual_style,
@@ -660,7 +662,7 @@ def estimate_board_usd(s: Settings, board: Storyboard) -> tuple[float, float]:
     """(images, video) estimate for this storyboard: own images are free; clips by each scene's length."""
     scenes = board.scenes[: s.render_scenes]
     images = sum(cost_usd(s.image_model, Usage(images=1)) for sc in scenes if sc.image_source == "generate")
-    video = sum(cost_usd(s.video_model, Usage(seconds=sc.duration_s)) for sc in scenes)
+    video = sum(cost_usd(s.video_model, Usage(seconds=render_seconds(sc.duration_s))) for sc in scenes)
     video += sum(voice_est_usd(s, sc.voiceover) for sc in scenes if sc.voiceover.strip())
     return round(images, 6), round(video, 6)
 

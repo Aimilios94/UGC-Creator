@@ -21,6 +21,17 @@ const SOURCE_LABEL = { generate: 'Generate', product: 'My product photo', upload
 const isActive = (j) => j.status === 'queued' || j.status === 'running';
 const ZERO = { usd: 0, eur: 0 };
 const add = (a, b, k = 1) => ({ usd: a.usd + b.usd * k, eur: a.eur + b.eur * k });
+const MIN_SCENE_S = 2;
+const MAX_SCENE_S = 10;
+const renderSeconds = (d) => (d <= 5 ? 5 : 10); // the video model makes 5 s or 10 s clips; shorter scenes are cut
+const clampScene = (v) => Math.max(MIN_SCENE_S, Math.min(MAX_SCENE_S, Math.round(Number(v) || MIN_SCENE_S)));
+
+// Split a total ad length over the scenes (each 2-10 s).
+function splitLength(total, n) {
+  const t = Math.max(MIN_SCENE_S * n, Math.min(MAX_SCENE_S * n, Math.round(total)));
+  const base = Math.floor(t / n);
+  return Array.from({ length: n }, (_, i) => clampScene(base + (i < t - base * n ? 1 : 0)));
+}
 
 // Live estimate from the server's unit prices (own images are free; clips by their length).
 function estimateBoard(board, prices, n = 3) {
@@ -29,7 +40,7 @@ function estimateBoard(board, prices, n = 3) {
   if (!board || !prices) return null;
   board.scenes.slice(0, n).forEach((s) => {
     if (s.image_source === 'generate') images = add(images, prices.image);
-    video = add(video, prices.video_per_second, s.duration_s);
+    video = add(video, prices.video_per_second, renderSeconds(s.duration_s));
     if (s.voiceover.trim()) video = add(video, prices.voice_line);
   });
   return { images, video, total: add(images, video) };
@@ -154,6 +165,39 @@ function CostBox({ rows, spend, cap, currency }) {
   );
 }
 
+function SceneLength({ id, value, onChange, disabled, prices, currency }) {
+  return (
+    <div className="field-row">
+      <label htmlFor={id} className="label-like">
+        Length <Help text={HELP.clip} />
+      </label>
+      <span className="length-input">
+        <input
+          id={id}
+          type="number"
+          min={MIN_SCENE_S}
+          max={MAX_SCENE_S}
+          step={1}
+          value={value}
+          onChange={(e) => onChange(clampScene(e.target.value))}
+          disabled={disabled}
+        />{' '}
+        s
+        {prices && (
+          <span className="muted small">
+            {' '}
+            {renderSeconds(value)} s clip,{' '}
+            {formatMoney(
+              { usd: prices.video_per_second.usd * renderSeconds(value), eur: prices.video_per_second.eur * renderSeconds(value) },
+              currency,
+            )}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function FieldLabel({ htmlFor, text, help }) {
   return (
     <label htmlFor={htmlFor}>
@@ -179,8 +223,12 @@ function StoryboardStep({ job, onChange, readOnly }) {
     job.storyboard?.hook_choice != null ? `h${job.storyboard.hook_choice}` : 'written',
   );
   const [ownHook, setOwnHook] = useState('');
+  const [mode, setMode] = useState(
+    job.storyboard?.scenes.every((s) => s.image_source !== 'generate') ? 'video' : 'images',
+  );
   const n = config?.render_scenes ?? 3;
   const estimate = useMemo(() => estimateBoard(board, config?.prices, n), [board, config, n]);
+  const hasStory = storyMode === 'own' || Boolean(job.brief.story);
 
   if (!board) {
     return (
@@ -205,6 +253,11 @@ function StoryboardStep({ job, onChange, readOnly }) {
     change({ ...board, scenes: board.scenes.map((s, j) => (j === i ? { ...s, [field]: value } : s)) });
   const onScene = (i, field) => (e) => editScene(i, field, e.target.value);
   const editTop = (field) => (e) => change({ ...board, [field]: e.target.value });
+  const adLength = board.scenes.slice(0, n).reduce((t, s) => t + s.duration_s, 0);
+  const setAdLength = (total) => {
+    const parts = splitLength(total, n);
+    change({ ...board, scenes: board.scenes.map((s, i) => (i < n ? { ...s, duration_s: parts[i] } : s)) });
+  };
 
   function pickHook(mode, text) {
     setHookMode(mode);
@@ -272,8 +325,8 @@ function StoryboardStep({ job, onChange, readOnly }) {
         setError('Some lines still need editing (marked in red).');
         return;
       }
-      onChange(await api.approve(job.id));
-      navigate(`/job/${job.id}`);
+      onChange(await api.approve(job.id, mode));
+      navigate(`/job/${job.id}${mode === 'video' ? '/video' : ''}`);
     });
 
   const check = () => run('check', save);
@@ -293,7 +346,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
       <p className="muted">
         {readOnly
           ? 'Approved: the storyboard is locked. On the Images step you can still edit the voiceover, text, motion and clip length before the video is made.'
-          : 'Choose where the story comes from, check each scene, pick the opening hook, then approve. Nothing is rendered before you approve.'}
+          : 'Choose where the story comes from, check what you need, then continue. Nothing is made before you continue.'}
       </p>
 
       <section className="card">
@@ -369,9 +422,42 @@ function StoryboardStep({ job, onChange, readOnly }) {
             <FieldLabel htmlFor="cta" text="Call to action (button)" help={HELP.cta_text} />
             <input id="cta" className={cls('cta_text')} value={board.cta_text} onChange={editTop('cta_text')} maxLength={60} disabled={disabled} />
           </div>
+          <div>
+            <label htmlFor="adlen">
+              Ad length (seconds) <Help text={HELP.ad_length} />
+            </label>
+            <input
+              id="adlen"
+              type="number"
+              min={MIN_SCENE_S * n}
+              max={MAX_SCENE_S * n}
+              value={adLength}
+              onChange={(e) => setAdLength(Number(e.target.value))}
+              disabled={disabled}
+            />
+            <p className="muted small">
+              {board.scenes
+                .slice(0, n)
+                .map((s) => `${s.duration_s} s`)
+                .join(' + ')}{' '}
+              + {config?.end_card_s ?? 2} s end card. Up to {MAX_SCENE_S * n} s.
+            </p>
+          </div>
         </div>
       </section>
 
+      <details className="card fold" open={!hasStory}>
+        <summary>
+          <span className="fold-title">
+            Scenes ({n}) <Help text={HELP.scenes} />
+          </span>
+          <span className="muted small fold-sum">
+            {board.scenes
+              .slice(0, n)
+              .map((s, i) => `${i + 1}: ${s.duration_s} s, ${SOURCE_LABEL[s.image_source].toLowerCase()}`)
+              .join(' · ')}
+          </span>
+        </summary>
       <div className="scenes">
         {board.scenes.slice(0, n).map((s, i) => {
           const own = uploads(i).at(-1);
@@ -406,23 +492,14 @@ function StoryboardStep({ job, onChange, readOnly }) {
               )}
               {s.image_source === 'upload' && own && <img className="scene-image" src={own.url} alt={`Your image for scene ${i + 1}`} />}
 
-              <div className="field-row">
-                <span className="label-like">
-                  Clip length <Help text={HELP.clip} />
-                </span>
-                <div className="choice-row" role="radiogroup" aria-label={`Clip length for scene ${i + 1}`}>
-                  {[5, 10].map((sec) => (
-                    <Chip key={sec} name={`dur${i}`} value={sec} checked={s.duration_s === sec} onChange={() => editScene(i, 'duration_s', sec)} disabled={disabled}>
-                      {sec} s
-                      {config && (
-                        <span className="muted small">
-                          {formatMoney({ usd: config.prices.video_per_second.usd * sec, eur: config.prices.video_per_second.eur * sec }, currency)}
-                        </span>
-                      )}
-                    </Chip>
-                  ))}
-                </div>
-              </div>
+              <SceneLength
+                id={`len${i}`}
+                value={s.duration_s}
+                onChange={(v) => editScene(i, 'duration_s', v)}
+                disabled={disabled}
+                prices={config?.prices}
+                currency={currency}
+              />
 
               {showPrompts && (
                 <>
@@ -437,11 +514,17 @@ function StoryboardStep({ job, onChange, readOnly }) {
           );
         })}
       </div>
+      </details>
 
-      <section className="card">
-        <h2>
-          Opening hook for scene 1 <Help text={HELP.hooks} />
-        </h2>
+      <details className="card fold" open={!hasStory}>
+        <summary>
+          <span className="fold-title">
+            Opening hook {hasStory ? '(optional)' : ''} <Help text={HELP.hooks} />
+          </span>
+          <span className="muted small fold-sum">
+            {hookMode === 'written' ? 'Scene 1 as written' : hookMode === 'own' ? 'Your own hook' : FORMULA_LABEL[board.hooks[Number(hookMode.slice(1))]?.formula]}
+          </span>
+        </summary>
         <div className="choice-group" role="radiogroup" aria-label="Opening hook">
           <Choice name="hook" value="written" checked={hookMode === 'written'} onChange={() => pickHook('written')} disabled={disabled} title="Keep scene 1 as written">
             <span className="muted small">“{writtenLine}”</span>
@@ -478,28 +561,40 @@ function StoryboardStep({ job, onChange, readOnly }) {
             />
           </Choice>
         </div>
-        <p className="muted small">The ticked hook becomes scene 1&rsquo;s voiceover. Hook Lab, which renders and ranks all three, arrives in a later version.</p>
-      </section>
+        <p className="muted small">
+          The ticked hook becomes scene 1&rsquo;s voiceover. {hasStory ? 'The ideas are written from your story.' : ''} Hook Lab, which renders and ranks all three, arrives in a later version.
+        </p>
+      </details>
 
       {!readOnly && (
         <div className="actions">
+          <div className="continue-row">
+            <label htmlFor="make" className="label-like">
+              What to make <Help text={HELP.make} />
+            </label>
+            <select id="make" value={mode} onChange={(e) => setMode(e.target.value)} disabled={disabled}>
+              <option value="images">Images first (check them, then decide on the video)</option>
+              <option value="video">Video (images and video in one go)</option>
+            </select>
+          </div>
           {estimate && (
             <CostBox
-              rows={[
-                ['Step 1, images (now)', estimate.images],
-                ['Step 2, video and voice (later, your choice)', estimate.video],
-              ]}
+              rows={
+                mode === 'video'
+                  ? [['Images and video', estimate.total]]
+                  : [
+                      ['Images (now)', estimate.images],
+                      ['Video (later, if you choose it)', estimate.video],
+                    ]
+              }
               spend={job.spend}
               cap={job.cost_cap}
               currency={currency}
             />
           )}
           {error && <p className="error" role="alert">{error}</p>}
-          <p className="muted small">
-            Approving makes the images only <Help text={HELP.approve_images} />. You see them, can still change the voiceover, text, motion and clip lengths, and then decide whether to make the video.
-          </p>
           <button className="btn btn-primary" onClick={approve} disabled={disabled}>
-            {busy === 'approve' ? 'Approving…' : `Approve and make the images${estimate ? ` (${formatMoney(estimate.images, currency)})` : ''}`}
+            {busy === 'approve' ? 'Starting…' : 'Continue →'}
           </button>
         </div>
       )}
@@ -546,7 +641,7 @@ function ImagesStep({ job, onChange, readOnly = false }) {
       <p className="muted">
         {locked
           ? 'These images were used for the video.'
-          : 'Check the pictures. You can still change each scene’s voiceover, text, motion and clip length. Then make the video, or keep the images only.'}
+          : 'Check the pictures. You can still change each scene’s voiceover, text, motion and length. Then make the video, or keep the images only.'}
       </p>
       <div className="scenes">
         {board.scenes.slice(0, n).map((s, i) => {
@@ -570,18 +665,14 @@ function ImagesStep({ job, onChange, readOnly = false }) {
               <input id={`iv${i}`} value={s.voiceover} onChange={(e) => editScene(i, 'voiceover', e.target.value)} maxLength={220} disabled={locked} />
               <FieldLabel htmlFor={`it${i}`} text="On-screen text" help={HELP.on_screen_text} />
               <input id={`it${i}`} value={s.on_screen_text} onChange={(e) => editScene(i, 'on_screen_text', e.target.value)} maxLength={80} disabled={locked} />
-              <div className="field-row">
-                <span className="label-like">
-                  Clip length <Help text={HELP.clip} />
-                </span>
-                <div className="choice-row" role="radiogroup" aria-label={`Clip length for scene ${i + 1}`}>
-                  {[5, 10].map((sec) => (
-                    <Chip key={sec} name={`idur${i}`} value={sec} checked={s.duration_s === sec} onChange={() => editScene(i, 'duration_s', sec)} disabled={locked}>
-                      {sec} s
-                    </Chip>
-                  ))}
-                </div>
-              </div>
+              <SceneLength
+                id={`ilen${i}`}
+                value={s.duration_s}
+                onChange={(v) => editScene(i, 'duration_s', v)}
+                disabled={locked}
+                prices={config?.prices}
+                currency={currency}
+              />
               <FieldLabel htmlFor={`imp${i}`} text="Motion prompt (shot list)" help={HELP.motion_prompt} />
               <textarea id={`imp${i}`} rows={8} value={s.motion_prompt} onChange={(e) => editScene(i, 'motion_prompt', e.target.value)} maxLength={2200} disabled={locked} />
             </article>

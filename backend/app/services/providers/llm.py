@@ -21,6 +21,7 @@ from ...errors import ProviderNotConfigured
 
 BRIEF_RE = re.compile(r"<brief>(.*?)</brief>", re.S)
 STORY_RE = re.compile(r"<story>(.*?)</story>", re.S)
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+|(?<=[.!?][\"”])\s+")  # a sentence may end inside quotes
 
 
 @dataclass
@@ -68,13 +69,34 @@ def mock_analysis(brief: dict) -> dict:
     }
 
 
-def _story_lines(story: str) -> list[str] | None:
-    """The story split into three spoken lines, kept word for word (mock only)."""
-    sentences = [x.strip() for x in re.split(r"(?<=[.!?])\s+", story.strip()) if x.strip()]
-    if not sentences:
+def _story_parts(story: str) -> list[str] | None:
+    """The story in three parts, in order (mock only): by its timestamped beats if it has them, else by sentences."""
+    text = story.strip()
+    if not text:
         return None
-    thirds = [sentences[i * len(sentences) // 3 : (i + 1) * len(sentences) // 3] for i in range(3)]
-    return [" ".join(t)[:220] if t else sentences[-1][:220] for t in thirds]
+    beats = [b.strip() for b in re.split(r"\n\s*\n|(?=\b\d{1,2}:\d{2}\s*[-\u2013]\s*\d{1,2}:\d{2})", text) if b.strip()]
+    timed = re.compile(r"^\d{1,2}:\d{2}")
+    if len(beats) > 1 and not timed.match(beats[0]) and timed.match(beats[1]):
+        beats = [beats[0] + " " + beats[1], *beats[2:]]  # a heading before the first timestamp joins it
+    if len(beats) < 3:
+        beats = [x.strip() for x in SENTENCE_END.split(text) if x.strip()]
+    if len(beats) < 3:
+        beats = (beats * 3)[:3]
+    return [" ".join(beats[i * len(beats) // 3 : (i + 1) * len(beats) // 3]) for i in range(3)]
+
+
+def _seconds(part: str) -> int | None:
+    """A story part's length from its timestamps, for example "0:02 - 0:06" -> 4 (mock only)."""
+    stamps = [int(m) * 60 + int(sec) for m, sec in re.findall(r"(\d{1,2}):(\d{2})", part)]
+    if len(stamps) < 2:
+        return None
+    return max(2, min(10, max(stamps) - min(stamps)))
+
+
+def _spoken(part: str) -> str:
+    """Quoted text in a story part is its spoken line (mock only)."""
+    quotes = re.findall(r"[\"\u201c]([^\"\u201d]{3,200})[\"\u201d]", part)
+    return " ".join(quotes)[:220]
 
 
 def mock_storyboard(brief: dict) -> dict:
@@ -82,7 +104,8 @@ def mock_storyboard(brief: dict) -> dict:
     name = brief.get("product_name", "the product")
     offer = brief.get("offer") or ""
     keep = f"Keep {name} exactly as in the reference photo: same shape, colours, logo and packaging text."
-    lines = _story_lines(brief.get("story") or "") or [
+    parts = _story_parts(brief.get("story") or "")
+    lines = [
         f"Stop scrolling: this is {name}.",
         "Here is how it works, in one step.",
         f"Get yours today. {offer}".strip(),
@@ -105,7 +128,6 @@ def mock_storyboard(brief: dict) -> dict:
                 "to a stop, a hand enters from the right and rests next to the product; final frame is a tight, "
                 "well-lit close-up of the product, ready to cut to the demo."
             ),
-            "voiceover": lines[0],
             "on_screen_text": f"Meet {name}"[:80],
         },
         {
@@ -125,7 +147,6 @@ def mock_storyboard(brief: dict) -> dict:
                 "the product. 4-5 s: the hands bring the product back to face the camera and pause; final frame "
                 "shows the front of the product clearly, centred."
             ),
-            "voiceover": lines[1],
             "on_screen_text": "How it works",
         },
         {
@@ -144,20 +165,33 @@ def mock_storyboard(brief: dict) -> dict:
                 "rim light adding a soft glint on the product's edge. 4-5 s: hold still on a clean, centred "
                 "frame with empty space above the product for the call to action."
             ),
-            "voiceover": lines[2],
             "on_screen_text": offer[:80],
         },
     ]
-    return {
-        "title": f"{name}: quick UGC ad",
-        "scenes": scenes,
-        "hooks": [
-            {"formula": "pov", "text": f"POV: you finally found {name}"},
-            {"formula": "problem_first", "text": f"Tired of the old way? Try {name}"},
-            {"formula": "three_reasons", "text": f"3 reasons people pick {name}"},
-        ],
-        "cta_text": "Shop now",
-    }
+    hooks = [
+        {"formula": "pov", "text": f"POV: you finally found {name}"},
+        {"formula": "problem_first", "text": f"Tired of the old way? Try {name}"},
+        {"formula": "three_reasons", "text": f"3 reasons people pick {name}"},
+    ]
+    if parts:
+        # The user's story leads: each scene tells its part, its spoken lines are kept, the hooks open it.
+        for scene, part in zip(scenes, parts, strict=True):
+            scene["description"] = part[:800]
+            scene["image_prompt"] = (part + " " + keep)[:2500]
+            scene["motion_prompt"] = part[:2200]
+            scene["voiceover"] = _spoken(part)
+            scene["duration_s"] = _seconds(part) or 5
+        opening = re.sub(r"^.*?\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\s*(\([^)]*\))?:?\s*", "", parts[0].strip())
+        opening = SENTENCE_END.split(opening)[0][:120]
+        hooks = [
+            {"formula": "pov", "text": f"POV: {opening}"[:160]},
+            {"formula": "problem_first", "text": f"Before {name}: {opening}"[:160]},
+            {"formula": "three_reasons", "text": f"3 reasons this moment needs {name}"[:160]},
+        ]
+    else:
+        for scene, line in zip(scenes, lines, strict=True):
+            scene["voiceover"] = line
+    return {"title": f"{name}: quick UGC ad", "scenes": scenes, "hooks": hooks, "cta_text": "Shop now"}
 
 
 MOCK_TASKS: dict[str, Callable[[dict], dict]] = {"analyze": mock_analysis, "storyboard": mock_storyboard}
