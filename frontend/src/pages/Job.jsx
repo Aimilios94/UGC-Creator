@@ -21,6 +21,19 @@ const FORMULA_LABEL = {
   three_reasons: '3 reasons',
   unboxing_tease: 'Unboxing tease',
 };
+// The three hook ideas, said plainly.
+const HOOK_KIND = {
+  pov: 'put the viewer in the moment',
+  problem_first: 'start with a problem they know',
+  three_reasons: 'promise a quick list',
+  unboxing_tease: 'build curiosity',
+};
+const HOOK_HOW = {
+  pov: 'Talks as if it is happening to them, often starting with "POV:".',
+  problem_first: 'Names something annoying they know, then your product is the fix.',
+  three_reasons: 'Promises a few quick reasons, so they stay to hear them.',
+  unboxing_tease: 'Reveals the product bit by bit, so they wait for the rest.',
+};
 const SOURCE_LABEL = { generate: 'Generate', product: 'My product photo', upload: 'Upload my own' };
 
 const isActive = (j) => j.status === 'queued' || j.status === 'running';
@@ -230,6 +243,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const [storyMode, setStoryMode] = useState(job.brief.story ? 'own' : 'ai');
   const [story, setStory] = useState(job.brief.story || '');
   const [writtenLine] = useState(job.storyboard?.scenes[0]?.voiceover || '');
+  const [writtenText] = useState(job.storyboard?.scenes[0]?.on_screen_text || '');
   const [hookMode, setHookMode] = useState(
     job.storyboard?.hook_choice != null ? `h${job.storyboard.hook_choice}` : 'written',
   );
@@ -288,20 +302,22 @@ function StoryboardStep({ job, onChange, readOnly }) {
     change({ ...board, scenes: board.scenes.map((s, i) => (i < n ? { ...s, duration_s: parts[i] } : s)) });
   };
 
+  const hookField = sound.voice === 'none' ? 'on_screen_text' : 'voiceover';
+  const writtenHook = hookField === 'voiceover' ? writtenLine : writtenText;
   function pickHook(mode, text) {
     setHookMode(mode);
-    const line = mode === 'written' ? writtenLine : text;
+    const line = mode === 'written' ? writtenHook : text;
     const choice = mode.startsWith('h') ? Number(mode.slice(1)) : null;
     change({
       ...board,
       hook_choice: choice,
-      scenes: board.scenes.map((s, j) => (j === 0 ? { ...s, voiceover: line } : s)),
+      scenes: board.scenes.map((s, j) => (j === 0 ? { ...s, [hookField]: line } : s)),
     });
   }
   const editHookText = (i) => (e) => {
     const hooks = board.hooks.map((h, j) => (j === i ? { ...h, text: e.target.value } : h));
     const next = { ...board, hooks };
-    if (hookMode === `h${i}`) next.scenes = board.scenes.map((s, j) => (j === 0 ? { ...s, voiceover: e.target.value } : s));
+    if (hookMode === `h${i}`) next.scenes = board.scenes.map((s, j) => (j === 0 ? { ...s, [hookField]: e.target.value } : s));
     change(next);
   };
 
@@ -611,15 +627,31 @@ function StoryboardStep({ job, onChange, readOnly }) {
       <details className="card fold" open={!hasStory}>
         <summary>
           <span className="fold-title">
-            Opening hook {hasStory ? '(optional)' : ''} <Help text={HELP.hooks} />
+            First line of the ad {hasStory ? '(optional)' : ''} <Help text={HELP.hooks} />
           </span>
           <span className="muted small fold-sum">
-            {hookMode === 'written' ? 'Scene 1 as written' : hookMode === 'own' ? 'Your own hook' : FORMULA_LABEL[board.hooks[Number(hookMode.slice(1))]?.formula]}
+            {hookMode === 'written'
+              ? 'Kept as written'
+              : hookMode === 'own'
+                ? 'Your own line'
+                : `${FORMULA_LABEL[board.hooks[Number(hookMode.slice(1))]?.formula]} idea`}
           </span>
         </summary>
-        <div className="choice-group" role="radiogroup" aria-label="Opening hook">
-          <Choice name="hook" value="written" checked={hookMode === 'written'} onChange={() => pickHook('written')} disabled={disabled} title="Keep scene 1 as written">
-            <span className="muted small">“{writtenLine}”</span>
+        <p className="muted hook-intro">
+          The first 1–2 seconds decide whether people keep watching. Choose the first line of your ad: it is{' '}
+          {hookField === 'voiceover' ? (
+            <strong>the first thing people hear</strong>
+          ) : (
+            <strong>the first text people see</strong>
+          )}{' '}
+          (scene 1&rsquo;s {hookField === 'voiceover' ? 'voiceover' : 'on-screen text, because this ad has no voiceover'}). Keep it as
+          it is, or pick one of three ideas, each a different way to grab attention.
+        </p>
+        <div className="choice-group" role="radiogroup" aria-label="First line of the ad">
+          <Choice name="hook" value="written" checked={hookMode === 'written'} onChange={() => pickHook('written')} disabled={disabled} title="Keep it as it is">
+            <span className="muted small">
+              {writtenHook ? `“${writtenHook}”` : hookField === 'voiceover' ? 'Scene 1 has no spoken line: the ad opens without words.' : 'Scene 1 has no text on screen.'}
+            </span>
           </Choice>
           {board.hooks.map((h, i) => (
             <Choice
@@ -629,33 +661,27 @@ function StoryboardStep({ job, onChange, readOnly }) {
               checked={hookMode === `h${i}`}
               onChange={() => pickHook(`h${i}`, h.text)}
               disabled={disabled}
-              title={
-                <>
-                  {FORMULA_LABEL[h.formula]} <Help text={HELP[h.formula]} />
-                </>
-              }
+              title={`Idea ${i + 1}: ${HOOK_KIND[h.formula]}`}
             >
-              <input type="text" className={cls(`hooks.${i}.text`)} value={h.text} onChange={editHookText(i)} maxLength={160} disabled={disabled} aria-label={`${FORMULA_LABEL[h.formula]} hook`} />
+              <span className="muted small">{HOOK_HOW[h.formula]}</span>
+              <input type="text" className={cls(`hooks.${i}.text`)} value={h.text} onChange={editHookText(i)} maxLength={160} disabled={disabled} aria-label={`Idea ${i + 1}`} />
             </Choice>
           ))}
-          <Choice name="hook" value="own" checked={hookMode === 'own'} onChange={() => pickHook('own', ownHook)} disabled={disabled} title="My own hook">
+          <Choice name="hook" value="own" checked={hookMode === 'own'} onChange={() => pickHook('own', ownHook)} disabled={disabled} title="Write my own first line">
             <input
               type="text"
               value={ownHook}
-              placeholder="Write the first line people hear"
+              placeholder={hookField === 'voiceover' ? 'The first words people hear' : 'The first words people see'}
               maxLength={160}
               disabled={disabled}
-              aria-label="Your own hook"
+              aria-label="Your own first line"
               onChange={(e) => {
                 setOwnHook(e.target.value);
-                if (hookMode === 'own') editScene(0, 'voiceover', e.target.value);
+                if (hookMode === 'own') editScene(0, hookField, e.target.value);
               }}
             />
           </Choice>
         </div>
-        <p className="muted small">
-          The ticked hook becomes scene 1&rsquo;s voiceover. {hasStory ? 'The ideas are written from your story.' : ''} Hook Lab, which renders and ranks all three, arrives in a later version.
-        </p>
       </details>
 
       {!readOnly && (

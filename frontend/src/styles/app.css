@@ -449,3 +449,5 @@ details.ai-instructions > summary::-webkit-details-marker { display: none; }
 details.ai-instructions > summary::before { content: '▸ '; color: var(--text-secondary); }
 details.ai-instructions[open] > summary::before { content: '▾ '; }
 .ai-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 12px; }
+
+.hook-intro { margin: 12px 0 4px; max-width: 760px; }

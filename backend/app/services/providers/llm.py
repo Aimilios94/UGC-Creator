@@ -190,12 +190,11 @@ def mock_storyboard(brief: dict) -> dict:
             scene["motion_prompt"] = part[:2200]
             scene["voiceover"] = _spoken(part)
             scene["duration_s"] = _seconds(part) or 5
-        opening = re.sub(r"^.*?\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\s*(\([^)]*\))?:?\s*", "", parts[0].strip())
-        opening = SENTENCE_END.split(opening)[0][:120]
+        # Short opening lines a viewer would hear (the real writer bases them on the story).
         hooks = [
-            {"formula": "pov", "text": f"POV: {opening}"[:160]},
-            {"formula": "problem_first", "text": f"Before {name}: {opening}"[:160]},
-            {"formula": "three_reasons", "text": f"3 reasons this moment needs {name}"[:160]},
+            {"formula": "pov", "text": f"POV: you just found {name}"[:160]},
+            {"formula": "problem_first", "text": f"Most people scroll past. Not when {name} walks by."[:160]},
+            {"formula": "three_reasons", "text": f"3 reasons people turn around when they see {name}"[:160]},
         ]
     else:
         for scene, line in zip(scenes, lines, strict=True):

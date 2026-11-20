@@ -189,7 +189,7 @@ def test_a_shot_list_story_drives_the_visuals_and_the_scene_lengths(client, ctx,
     assert [s["duration_s"] for s in scenes] == [2, 4, 4]  # from the story's timestamps
     assert "zebra crossing" in scenes[0]["motion_prompt"] and "push-in on the back print" in scenes[2]["motion_prompt"]
     assert all(s["voiceover"] == "" for s in scenes)  # no spoken lines in a shot list
-    assert "zebra crossing" in job["storyboard"]["hooks"][0]["text"]  # hooks open this story
+    assert {h["formula"] for h in job["storyboard"]["hooks"]} == {"pov", "problem_first", "three_reasons"}
 
 
 def test_short_scenes_render_a_5_s_clip_and_are_cut_to_length(client, ctx, session_id, photo_bytes):
