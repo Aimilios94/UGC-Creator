@@ -30,13 +30,19 @@ def test_brief_to_storyboard_to_playable_video(client, ctx, session_id, photo_by
     assert worker.run_once(ctx) is True
     done = client.get(f"/jobs/{job['id']}", headers={"X-Session-Id": session_id}).json()
     assert done["status"] == "done", done["last_error"]
-    kinds = {(a["kind"], a["scene_idx"]) for a in done["assets"]}
-    assert kinds == {("upload", None)} | {(k, i) for k in ("image", "video") for i in range(3)}  # 3 scenes (M2)
-    assert done["variants"] == [{"label": "A", "hook_idx": 0, "status": "done"}]
+    scene_files = {(a["kind"], a["scene_idx"]) for a in done["assets"] if a["scene_idx"] is not None}
+    assert scene_files == {(k, i) for k in ("audio", "image", "video") for i in range(3)}  # 3 scenes, voiced (M2)
+    variant = done["variants"][0]
+    assert (variant["label"], variant["hook_idx"], variant["status"]) == ("A", 0, "done")
+    assert variant["ratios"][0] == "9:16" and set(variant["ratios"]) == {"9:16", "1:1", "4:5", "16:9"}
+    assert variant["skipped"] == {} and all(c["passed"] for c in variant["checks"])
+    ads = {a["ratio"]: a for a in done["assets"] if a["kind"] == "ad"}
+    assert set(ads) == set(variant["ratios"])
+    counts = {k: sum(a["kind"] == k for a in done["assets"]) for k in ("cover", "still", "carousel")}
+    assert counts == {"cover": 1, "still": 3, "carousel": 4}
     assert done["spend"]["eur"] > 0 and done["spend"]["eur"] <= done["cost_cap"]["eur"]
 
-    video = next(a for a in done["assets"] if a["kind"] == "video")
-    path = httpx.URL(video["url"])
+    path = httpx.URL(ads["9:16"]["url"])
     got = client.get(path.path, params=dict(path.params))
     assert got.status_code == 200 and got.headers["content-type"] == "video/mp4"
     assert got.content[4:8] == b"ftyp"  # an MP4 container

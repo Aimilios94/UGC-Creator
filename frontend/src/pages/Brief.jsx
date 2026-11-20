@@ -23,13 +23,13 @@ const AD_TYPES = {
 };
 const TONES = { '': 'Theme default', energetic: 'Energetic', calm: 'Calm', playful: 'Playful', premium: 'Premium' };
 const FONTS = ['Inter', 'Montserrat', 'Bebas Neue', 'Playfair Display'];
+const VOICES = { marin: 'Marin (recommended)', cedar: 'Cedar', coral: 'Coral', onyx: 'Onyx' };
+const MUSIC = { theme: "The theme's track", none: 'No music' };
+const CAPTIONS = { bold: 'Bold, a few words at a time', clean: 'Clean subtitles', off: 'Off' };
 const DEFAULT_COLORS = { primary: '#6366f1', secondary: '#f0abfc', background: '#0f172a' };
 
 // Planned options (plan §7–§10). Shown so visitors can see what is coming; not sent to the API yet.
 const PRESETS = ['Balanced', 'Budget', 'Best quality'];
-const VOICES = ['Warm female', 'Calm male', 'Upbeat female', 'Deep male'];
-const MUSIC = ['Upbeat', 'Chill', 'Cinematic', 'None'];
-const CAPTIONS = ['Bold word-by-word', 'Clean subtitles', 'Off'];
 
 function Soon() {
   return <span className="soon">Soon</span>;
@@ -217,6 +217,9 @@ export default function Brief() {
     goal: 'sales',
     theme: '',
     ad_type: 'product_demo',
+    voice: 'marin',
+    music: 'theme',
+    captions: 'bold',
   });
   const [campaigns, setCampaigns] = useState([]);
   const [campaignId, setCampaignId] = useState('');
@@ -458,9 +461,9 @@ export default function Brief() {
                   <span>Test three opening hooks and keep the best one (about 0.10 EUR more)</span>
                 </label>
               </div>
-              <PreviewSelect id="voice" label="Voiceover" options={VOICES} />
-              <PreviewSelect id="music" label="Music" options={MUSIC} />
-              <PreviewSelect id="captions" label="Captions" options={CAPTIONS} />
+              <Select id="voice" label="Voiceover (AI voice)" value={form.voice} onChange={set('voice')} options={VOICES} />
+              <Select id="music" label="Music" value={form.music} onChange={set('music')} options={MUSIC} />
+              <Select id="captions" label="Captions" value={form.captions} onChange={set('captions')} options={CAPTIONS} />
               <div className="span-2">
                 <label htmlFor="email">
                   Email me when it is ready <Soon />

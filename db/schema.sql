@@ -51,7 +51,7 @@ create table if not exists scenes (
 create table if not exists stage_runs (
   id             uuid primary key default gen_random_uuid(),
   job_id         uuid not null references jobs (id) on delete cascade,
-  stage          text not null check (stage in ('analyze', 'storyboard', 'image', 'video')),
+  stage          text not null check (stage in ('analyze', 'storyboard', 'image', 'video', 'voice', 'compose')),
   scene_idx      smallint not null default -1,  -- -1 for job-level stages
   status         text not null check (status in ('running', 'submitted', 'done', 'failed')),
   provider       text,
@@ -70,7 +70,7 @@ create table if not exists stage_runs (
 create table if not exists assets (
   id            uuid primary key default gen_random_uuid(),
   job_id        uuid references jobs (id) on delete cascade,
-  kind          text not null check (kind in ('upload', 'image', 'video')),
+  kind          text not null check (kind in ('upload', 'image', 'video', 'audio', 'ad', 'cover', 'still', 'carousel')),
   storage_key   text not null unique,
   content_type  text not null,
   bytes         bigint,
@@ -85,7 +85,7 @@ create table if not exists assets (
 -- so evals, replays and the gallery never pay twice for the same render.
 create table if not exists media_cache (
   cache_key     text primary key,
-  kind          text not null check (kind in ('image', 'video')),
+  kind          text not null check (kind in ('image', 'video', 'audio')),
   model         text not null,
   storage_key   text not null,
   content_type  text not null,
@@ -173,3 +173,16 @@ create table if not exists variants (
   updated_at  timestamptz not null default now(),
   unique (job_id, label)
 );
+
+-- M2 item 2 (compose): the voice and compose stages, the composed files and cached voice
+-- lines. `create table if not exists` does not change an existing table, so the checks
+-- are replaced here as well (idempotent).
+alter table stage_runs drop constraint if exists stage_runs_stage_check;
+alter table stage_runs add constraint stage_runs_stage_check
+  check (stage in ('analyze', 'storyboard', 'image', 'video', 'voice', 'compose'));
+alter table assets drop constraint if exists assets_kind_check;
+alter table assets add constraint assets_kind_check
+  check (kind in ('upload', 'image', 'video', 'audio', 'ad', 'cover', 'still', 'carousel'));
+alter table media_cache drop constraint if exists media_cache_kind_check;
+alter table media_cache add constraint media_cache_kind_check check (kind in ('image', 'video', 'audio'));
+alter table variants add column if not exists output jsonb;  -- compose summary: duration, ratios, checks

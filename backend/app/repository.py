@@ -261,6 +261,14 @@ def handle_job_failure(db: Database, job_id: str, error: str, max_attempts: int)
         return row["status"] if row else "unknown"
 
 
+def set_variant_output(db: Database, job_id: str, label: str, output: dict) -> None:
+    with db.tx() as c:
+        c.execute(
+            "update variants set output = %s, updated_at = now() where job_id = %s and label = %s",
+            (Jsonb(output), job_id, label),
+        )
+
+
 def list_variants(db: Database, job_id: str) -> list[dict]:
     with db.tx() as c:
         return _all(c, "select * from variants where job_id = %s order by label", (job_id,))

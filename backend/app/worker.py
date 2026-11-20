@@ -22,6 +22,7 @@ from .repository import Database
 from .services.pipeline import Context, run_job
 from .services.providers.media import build_media
 from .services.providers.storage import build_storage
+from .services.providers.voice import build_voice
 
 log = logging.getLogger("worker")
 
@@ -30,7 +31,13 @@ def build_context(settings: Settings) -> Context:
     db = Database(
         settings.database_url, connect_timeout_s=settings.db_connect_timeout_s, retries=settings.db_connect_retries
     )
-    return Context(settings=settings, db=db, storage=build_storage(settings), media=build_media(settings))
+    return Context(
+        settings=settings,
+        db=db,
+        storage=build_storage(settings),
+        media=build_media(settings),
+        voice=build_voice(settings),
+    )
 
 
 def run_once(ctx: Context) -> bool:

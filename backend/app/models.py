@@ -15,6 +15,9 @@ Theme = Literal["sport", "beauty", "tech", "food", "fashion"]  # one YAML each i
 AdType = Literal["testimonial", "product_demo", "unboxing", "problem_solution"]
 Tone = Literal["energetic", "calm", "playful", "premium"]
 Font = Literal["Inter", "Montserrat", "Bebas Neue", "Playfair Display"]  # bundled by compose (OFL)
+Voice = Literal["marin", "cedar", "coral", "onyx"]  # gpt-4o-mini-tts built-in voices offered
+Music = Literal["theme", "none"]
+CaptionStyle = Literal["bold", "clean", "off"]
 HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
 
 
@@ -31,6 +34,9 @@ class Brief(BaseModel):
     goal: Goal | None = None
     theme: Theme | None = None
     ad_type: AdType | None = None
+    voice: Voice = "marin"
+    music: Music = "theme"
+    captions: CaptionStyle = "bold"
 
     @field_validator("product_name", "description", "audience", "offer", mode="before")
     @classmethod
@@ -129,6 +135,8 @@ class StageView(BaseModel):
 class AssetView(BaseModel):
     kind: str
     scene_idx: int | None = None
+    ratio: str | None = None  # composed ads: "9:16", "1:1", ...
+    name: str | None = None  # file name, e.g. "ad_9x16.mp4", "still_1.jpg"
     url: str
     content_type: str
     expires_in_s: int
@@ -154,6 +162,10 @@ class VariantView(BaseModel):
     label: str
     hook_idx: int
     status: str
+    duration_s: float | None = None
+    ratios: list[str] = []  # ratios exported (passed the safe-zone check)
+    skipped: dict[str, str] = {}  # ratio -> why it was not exported
+    checks: list[dict] = []  # code-graded output checks per exported file
 
 
 class JobView(BaseModel):

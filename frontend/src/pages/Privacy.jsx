@@ -8,7 +8,7 @@ const PROVIDERS = [
   },
   {
     name: 'OpenAI',
-    what: 'Your product photo and brief, to describe the product and write the storyboard.',
+    what: 'Your product photo and brief, to describe the product and write the storyboard; the voiceover lines, to make the AI voice.',
     where: 'United States (outside the EU).',
     notes: 'Sent through the OpenAI API with data sharing turned off for this project.',
     link: 'https://openai.com/policies/privacy-policy/',

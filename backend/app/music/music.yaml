@@ -1,0 +1,63 @@
+# Music beds for compose.py: one per theme, cut by scripts/make_music_beds.py.
+# Every track is CC0 1.0 (public domain): paid ads allowed, no credit needed,
+# redistribution allowed. Licence check and sources: docs/MUSIC.md.
+sport:
+  file: sport.m4a
+  title: ITS A TRAP
+  artist: HoliznaCC0
+  album: After Dark
+  source: https://freemusicarchive.org/music/holiznacc0/after-dark/its-a-trap-1/
+  licence: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+  licence_checked: '2026-11-20'
+  cut:
+    start_s: 14.0
+    length_s: 30.0
+    loudness_lufs: -18.0
+beauty:
+  file: beauty.m4a
+  title: Ocean Memory
+  artist: HoliznaCC0
+  album: OCEAN MEMORY ( Lo-fi Chill )
+  source: https://freemusicarchive.org/music/holiznacc0/ocean-memory-lo-fi-chill/ocean-memory/
+  licence: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+  licence_checked: '2026-11-20'
+  cut:
+    start_s: 56.0
+    length_s: 30.0
+    loudness_lufs: -18.0
+tech:
+  file: tech.m4a
+  title: Track 1
+  artist: HoliznaCC0
+  album: War ( Game Commission )
+  source: https://freemusicarchive.org/music/holiznacc0/war-game-commission/track-1/
+  licence: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+  licence_checked: '2026-11-20'
+  cut:
+    start_s: 155.0
+    length_s: 30.0
+    loudness_lufs: -18.0
+food:
+  file: food.m4a
+  title: Toy Box
+  artist: HoliznaCC0
+  album: Spring Woke Me Up
+  source: https://freemusicarchive.org/music/holiznacc0/spring-woke-me-up/toy-box/
+  licence: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+  licence_checked: '2026-11-20'
+  cut:
+    start_s: 80.0
+    length_s: 30.0
+    loudness_lufs: -18.0
+fashion:
+  file: fashion.m4a
+  title: Everything is groovy (How to move your body)
+  artist: Komiku
+  album: Helice Awesome Dance Adventure !!
+  source: https://freemusicarchive.org/music/Komiku/Helice_Awesome_Dance_Adventure_/everything-is-groovy-how-to-move-your-body/
+  licence: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+  licence_checked: '2026-11-20'
+  cut:
+    start_s: 46.0
+    length_s: 30.0
+    loudness_lufs: -18.0

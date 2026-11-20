@@ -2,7 +2,9 @@
 checked before every paid stage.
 
 Before approval (run by the API): analyze -> storyboard. Nothing renders yet.
-After approval (run by the worker): per scene, reference image -> image-to-video.
+After approval (run by the worker): the voiceover lines first (cheap, so a voice problem
+stops the job before any video is paid for), then per scene reference image ->
+image-to-video, then compose (free: ffmpeg in the worker) builds variant A.
 
 Rules this module enforces (each pinned by a guardrail test):
 - Before each paid stage, spend so far plus the stage estimate must fit under the job's
@@ -16,29 +18,44 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import tempfile
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from .. import repository as repo
 from ..config import Settings
 from ..errors import BudgetExceeded
-from ..models import BrandKit, Brief, ProductAnalysis, Scene, Storyboard
+from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Storyboard
 from ..repository import Database
 from . import analyze, storyboard
+from .compose import Branding, ComposeSpec, SceneInput, compose
 from .image_gen import PlannedRender, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
+from .music import bed_for
+from .output_checks import check_compose
 from .providers.llm import LlmHandle, build_llm
 from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
+from .providers.voice import VoiceProvider, build_voice
 from .storyboard_checks import fix_instructions, flag_testimonials
 from .video_gen import plan_scene_video
+from .voice import plan_voice, usage_for
 
 log = logging.getLogger(__name__)
 
 LLM_EST_INPUT_TOKENS = 4000  # a product photo plus the prompt, rounded up
-EXT_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp", "mp4": "video/mp4"}
-TYPE_EXTS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4"}
+EXT_TYPES = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+    "mp4": "video/mp4",
+    "wav": "audio/wav",
+}
+TYPE_EXTS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "audio/wav": "wav"}
+DEFAULT_BRANDING = Branding()  # theme palettes and fonts arrive with the theme YAMLs (M2 item 3)
 
 
 @dataclass
@@ -49,10 +66,16 @@ class Context:
     media: MediaProvider
     llm_factory: Callable[[str], LlmHandle] = field(default=None)  # type: ignore[assignment]
     sleep: Callable[[float], None] = time.sleep
+    voice: VoiceProvider | None = None  # the worker sets it; built on first use otherwise
 
     def __post_init__(self):
         if self.llm_factory is None:
             self.llm_factory = lambda task: build_llm(self.settings, task)
+
+    def voice_provider(self) -> VoiceProvider:
+        if self.voice is None:
+            self.voice = build_voice(self.settings)
+        return self.voice
 
 
 def _labels(s: Settings) -> dict[str, str]:
@@ -186,7 +209,7 @@ def _store_output(ctx: Context, job_id: str, stage: str, idx: int, data: bytes, 
     return repo.add_asset(
         ctx.db,
         job_id=job_id,
-        kind=stage,
+        kind={"voice": "audio"}.get(stage, stage),
         storage_key=key,
         content_type=content_type,
         size=len(data),
@@ -288,7 +311,7 @@ def run_media_stage(ctx: Context, job: dict, stage: str, idx: int, plan: Callabl
     repo.cache_put(
         ctx.db,
         cache_key=planned.cache_key,
-        kind=stage,
+        kind={"voice": "audio"}.get(stage, stage),
         model=req.model,
         storage_key=asset["storage_key"],
         content_type=asset["content_type"],
@@ -299,11 +322,207 @@ def run_media_stage(ctx: Context, job: dict, stage: str, idx: int, plan: Callabl
     return asset
 
 
+def run_voice_stage(ctx: Context, job: dict, idx: int, text: str, voice: str, tone: str | None) -> dict | None:
+    """One voiceover line (paid, a fraction of a cent), resuming from stage_runs. Returns the WAV asset."""
+    if not text.strip():
+        return None
+    s = ctx.settings
+    job_id = str(job["id"])
+    sr = repo.get_stage_run(ctx.db, job_id, "voice", idx)
+    if sr and sr["status"] == "done":
+        return repo.get_asset(ctx.db, sr["output"]["asset_id"])
+    provider = ctx.voice_provider()
+    planned = plan_voice(model=s.tts_model, text=text, voice=voice, tone=tone)
+    sr = repo.start_stage(
+        ctx.db, job_id, "voice", idx, provider=provider.name, model=s.tts_model, attempt=int(job.get("attempts") or 1)
+    )
+    hit = repo.cache_get(ctx.db, planned.cache_key)
+    if hit is not None:
+        try:
+            data = ctx.storage.get(hit["storage_key"])
+        except Exception:  # noqa: BLE001 - cached file gone: synthesise again
+            data = None
+        if data is not None:
+            asset = _store_output(ctx, job_id, "voice", idx, data, "audio/wav")
+            repo.record_cache_hit(
+                ctx.db, job_id=job_id, stage_run_id=sr["id"], kind="tts", provider=provider.name, model=s.tts_model
+            )
+            repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "cache_hit": True, **(hit["meta"] or {})})
+            return asset
+    est = cost_usd(s.tts_model, planned.usage)
+    try:
+        res_id = _reserve(
+            ctx,
+            job_id=job_id,
+            stage_run_id=sr["id"],
+            kind="tts",
+            provider=provider.name,
+            model=s.tts_model,
+            est_usd=est,
+        )
+    except BudgetExceeded as e:
+        repo.stage_failed(ctx.db, sr["id"], e.message)
+        raise
+    started = time.perf_counter()
+    try:
+        clip = provider.synthesize(planned.request)
+    except Exception as e:
+        # A failed request is not billed by OpenAI; the estimate is released.
+        repo.release(ctx.db, res_id, f"tts failed: {type(e).__name__}")
+        repo.stage_failed(ctx.db, sr["id"], f"{type(e).__name__}: {e}")
+        raise
+    asset = _store_output(ctx, job_id, "voice", idx, clip.wav, "audio/wav")
+    usage = usage_for(planned.request, clip.duration_s)
+    actual = cost_usd(s.tts_model, usage)
+    repo.bill(
+        ctx.db,
+        res_id,
+        cost_usd=actual,
+        usage={**usage.as_dict(), "estimated_tokens": True, "seconds": clip.duration_s},
+        latency_ms=int((time.perf_counter() - started) * 1000),
+    )
+    meta = {"duration_s": clip.duration_s}
+    repo.cache_put(
+        ctx.db,
+        cache_key=planned.cache_key,
+        kind="audio",
+        model=s.tts_model,
+        storage_key=asset["storage_key"],
+        content_type="audio/wav",
+        cost_usd=actual,
+        meta=meta,
+    )
+    repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), **meta})
+    return asset
+
+
+def _branding(ctx: Context, job: dict, work: Path) -> Branding:
+    if not job.get("brand"):
+        return DEFAULT_BRANDING
+    kit = BrandSnapshot.model_validate(job["brand"])
+    logo = None
+    if kit.logo_key:
+        try:
+            logo = work / ("logo." + kit.logo_key.rsplit(".", 1)[-1])
+            logo.write_bytes(ctx.storage.get(kit.logo_key))
+        except Exception:  # noqa: BLE001 - a missing logo must not stop the ad
+            log.warning("logo %s not found for job %s", kit.logo_key, job["id"])
+            logo = None
+    d = DEFAULT_BRANDING
+    return Branding(
+        font=kit.font or d.font,
+        primary=kit.colors.primary or d.primary,
+        secondary=kit.colors.secondary or d.secondary,
+        background=kit.colors.background or d.background,
+        logo=logo,
+    )
+
+
+ASSET_KIND = {"ad": "ad", "cover": "cover", "still": "still", "carousel": "carousel"}
+
+
+def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) -> None:
+    """Compose variant A from the stored clips (free: ffmpeg in the worker). Safe to run again."""
+    s = ctx.settings
+    job_id = str(job["id"])
+    sr = repo.get_stage_run(ctx.db, job_id, "compose")
+    if sr and sr["status"] == "done":
+        return
+    sr = repo.start_stage(
+        ctx.db, job_id, "compose", -1, provider="ffmpeg", model="compose", attempt=int(job.get("attempts") or 1)
+    )
+    try:
+        with tempfile.TemporaryDirectory(prefix="compose-") as tmp:
+            work = Path(tmp)
+            scenes: list[SceneInput] = []
+            last_image = None
+            for row in repo.list_scenes(ctx.db, job_id)[: s.render_scenes]:
+                idx = row["idx"]
+                scene = Scene.model_validate(row["data"])
+                video = repo.get_asset(ctx.db, str(row["video_asset_id"]))
+                clip = work / f"clip_{idx}.mp4"
+                clip.write_bytes(ctx.storage.get(video["storage_key"]))
+                if row["image_asset_id"]:
+                    last_image = repo.get_asset(ctx.db, str(row["image_asset_id"]))
+                voice_sr = repo.get_stage_run(ctx.db, job_id, "voice", idx)
+                voice_path, voice_s = None, 0.0
+                if voice_sr and voice_sr["status"] == "done":
+                    wav = repo.get_asset(ctx.db, voice_sr["output"]["asset_id"])
+                    voice_path = work / f"voice_{idx}.wav"
+                    voice_path.write_bytes(ctx.storage.get(wav["storage_key"]))
+                    voice_s = float(voice_sr["output"]["duration_s"])
+                scenes.append(
+                    SceneInput(
+                        clip=clip,
+                        voiceover=scene.voiceover,
+                        headline=scene.on_screen_text,
+                        voice=voice_path,
+                        voice_s=voice_s,
+                    )
+                )
+            end_image = None
+            if last_image is not None:
+                end_image = work / f"endcard_product.{TYPE_EXTS.get(last_image['content_type'], 'jpg')}"
+                end_image.write_bytes(ctx.storage.get(last_image["storage_key"]))
+            spec = ComposeSpec(
+                scenes=scenes,
+                master_ratio=brief.aspect_ratio,
+                platform=brief.platform,
+                cta_text=board.cta_text,
+                offer=brief.offer,
+                product_name=brief.product_name,
+                end_card_image=end_image,
+                music=bed_for(brief.theme, s.default_music_theme) if brief.music == "theme" else None,
+                captions=brief.captions,
+                branding=_branding(ctx, job, work),
+                scale=s.compose_scale,
+                end_card_s=s.end_card_s,
+            )
+            result = compose(spec, work / "out")
+            checks = check_compose(spec, result)
+            base = f"jobs/{job_id}/variant-A"
+            files = [("ad", r.path) for r in result.exported]
+            files += [("cover", result.cover)] + [("still", p) for p in result.stills]
+            files += [("carousel", p) for p in result.carousel]
+            for kind, path in files:
+                data = path.read_bytes()
+                key = f"{base}/{path.name}"
+                ctype = "video/mp4" if path.suffix == ".mp4" else "image/jpeg"
+                ctx.storage.put(key, data, ctype)
+                repo.add_asset(
+                    ctx.db,
+                    job_id=job_id,
+                    kind=ASSET_KIND[kind],
+                    storage_key=key,
+                    content_type=ctype,
+                    size=len(data),
+                    sha256=hashlib.sha256(data).hexdigest(),
+                )
+            output = {
+                "duration_s": result.duration_s,
+                "ratios": [r.ratio for r in result.exported],
+                "skipped": {r.ratio: r.reason for r in result.ads if not r.passed},
+                "checks": checks,
+                "timeline": [t.__dict__ for t in result.timeline],
+            }
+    except Exception as e:
+        repo.stage_failed(ctx.db, sr["id"], f"{type(e).__name__}: {e}")
+        raise
+    repo.set_variant_output(ctx.db, job_id, "A", output)
+    repo.stage_done(ctx.db, sr["id"], {k: output[k] for k in ("duration_s", "ratios", "skipped")})
+
+
 def run_job(ctx: Context, job: dict) -> None:
-    """Render the approved scenes. Safe to call again after a crash: it resumes."""
+    """Voice, render and compose the approved scenes. Safe to call again after a crash: it resumes."""
     s = ctx.settings
     job_id = str(job["id"])
     brief = Brief.model_validate(job["brief"])
+    board = Storyboard.model_validate(job["storyboard"])
+    brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
+    tone = brand.tone if brand else None
+    for row in repo.list_scenes(ctx.db, job_id)[: s.render_scenes]:
+        scene = Scene.model_validate(row["data"])
+        run_voice_stage(ctx, job, row["idx"], scene.voiceover, brief.voice, tone)
     photo = ctx.storage.get(job["upload_key"])
     product = InputImage(
         data=photo,
@@ -344,12 +563,18 @@ def run_job(ctx: Context, job: dict) -> None:
 
         video = run_media_stage(ctx, job, "video", idx, plan_video)
         repo.set_scene_asset(ctx.db, job_id, idx, "video", str(video["id"]))
+    run_compose_stage(ctx, job, brief, board)
     repo.finish_job(ctx.db, job_id)
+
+
+VOICE_EST_WORDS = 14  # a voiceover line is about 12 words; a little more for the estimate
 
 
 def estimate_job_usd(s: Settings) -> float:
     """Full estimate for one approved job under the current settings (shown before approval)."""
     per_scene = cost_usd(s.image_model, Usage(images=1)) + cost_usd(s.video_model, Usage(seconds=s.video_duration_s))
+    voice = plan_voice(model=s.tts_model, text=" ".join(["word"] * VOICE_EST_WORDS), voice=s.tts_voice, tone=None)
+    per_scene += cost_usd(s.tts_model, voice.usage)
     return round(per_scene * s.render_scenes, 6)
 
 

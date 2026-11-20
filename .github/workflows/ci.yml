@@ -51,8 +51,11 @@ jobs:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ugc_test
       LLM_PROVIDER: mock
       MEDIA_PROVIDER: mock
+      VOICE_PROVIDER: mock
     steps:
       - uses: actions/checkout@v7
+      - name: ffmpeg (compose tests run real ffmpeg)
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends ffmpeg && ffmpeg -version | head -1
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"

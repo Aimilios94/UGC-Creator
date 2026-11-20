@@ -282,15 +282,87 @@ function StoryboardStep({ job, onChange }) {
 const STAGE_LABEL = {
   analyze: 'Read the product photo',
   storyboard: 'Write the storyboard',
+  voice: 'Voiceover',
   image: 'Reference image',
   video: 'Video clip',
+  compose: 'Edit the ad: captions, music, end card, every format',
 };
+
+const RATIO_LABEL = { '9:16': '9:16 vertical', '1:1': '1:1 square', '4:5': '4:5 portrait', '16:9': '16:9 landscape' };
 
 function StageIcon({ status }) {
   if (status === 'done') return <CheckCircle2 size={18} className="ok" aria-label="done" />;
   if (status === 'failed') return <XCircle size={18} className="bad" aria-label="failed" />;
   if (status === 'running' || status === 'submitted') return <Loader2 size={18} className="spin" aria-label="in progress" />;
   return <Circle size={18} className="muted" aria-label="waiting" />;
+}
+
+function FinishedAd({ job, variant }) {
+  const ads = job.assets.filter((a) => a.kind === 'ad');
+  const ordered = variant.ratios.map((r) => ads.find((a) => a.ratio === r)).filter(Boolean);
+  const [ratio, setRatio] = useState(ordered[0]?.ratio);
+  const current = ordered.find((a) => a.ratio === ratio) || ordered[0];
+  const cover = job.assets.find((a) => a.kind === 'cover');
+  const stills = job.assets.filter((a) => a.kind === 'still');
+  const carousel = job.assets.filter((a) => a.kind === 'carousel');
+  if (!current) return null;
+  return (
+    <div className="finished">
+      <div className="ratio-tabs" role="tablist" aria-label="Format">
+        {ordered.map((a) => (
+          <button
+            key={a.ratio}
+            type="button"
+            role="tab"
+            aria-selected={a.ratio === current.ratio}
+            className={a.ratio === current.ratio ? 'tab active' : 'tab'}
+            onClick={() => setRatio(a.ratio)}
+          >
+            {RATIO_LABEL[a.ratio] || a.ratio}
+          </button>
+        ))}
+      </div>
+      <video
+        key={current.url}
+        src={current.url}
+        controls
+        playsInline
+        poster={cover?.url}
+        className={`ratio-${current.ratio.replace(':', 'x')}`}
+      />
+      <p className="small">
+        <a href={current.url} download={current.name}>
+          Download {RATIO_LABEL[current.ratio] || current.ratio} ({variant.duration_s?.toFixed(1)} s)
+        </a>
+      </p>
+      {Object.keys(variant.skipped || {}).length > 0 && (
+        <p className="muted small">
+          Not exported:{' '}
+          {Object.entries(variant.skipped)
+            .map(([r, why]) => `${r} (${why})`)
+            .join('; ')}
+          .
+        </p>
+      )}
+      {(stills.length > 0 || carousel.length > 0) && (
+        <div className="extras">
+          <h3>Images</h3>
+          <div className="thumbs">
+            {[cover, ...stills, ...carousel].filter(Boolean).map((a) => (
+              <a key={a.name} href={a.url} download={a.name} title={a.name}>
+                <img src={a.url} alt={a.name} />
+              </a>
+            ))}
+          </div>
+          <p className="muted small">Cover, one still per scene, and a 4:5 carousel ending on the call to action.</p>
+        </div>
+      )}
+      <p className="muted small">
+        Every file is marked as AI-generated in its metadata. When you post, turn on the platform&rsquo;s AI-generated
+        label: the images, video and voice are made by AI.
+      </p>
+    </div>
+  );
 }
 
 function GenerateStep({ job, onChange }) {
@@ -311,18 +383,24 @@ function GenerateStep({ job, onChange }) {
     video: job.assets.find((a) => a.kind === 'video' && a.scene_idx === i),
     image: job.assets.find((a) => a.kind === 'image' && a.scene_idx === i),
   }));
+  const voiced = Boolean(job.brief.voice) || job.stages.some((s) => s.stage === 'voice');
+  const sceneIdx = sceneMedia.map(({ idx }) => idx);
   const expected = [
     { stage: 'analyze', scene_idx: -1 },
     { stage: 'storyboard', scene_idx: -1 },
-    ...sceneMedia.flatMap(({ idx }) => [
+    ...(voiced ? sceneIdx.filter((i) => job.storyboard?.scenes[i]?.voiceover).map((i) => ({ stage: 'voice', scene_idx: i })) : []),
+    ...sceneIdx.flatMap((idx) => [
       { stage: 'image', scene_idx: idx },
       { stage: 'video', scene_idx: idx },
     ]),
+    ...(voiced ? [{ stage: 'compose', scene_idx: -1 }] : []),
   ];
   const stageStatus = (st) =>
     job.stages.find((s) => s.stage === st.stage && s.scene_idx === st.scene_idx) || { status: 'waiting' };
   const active = job.status === 'queued' || job.status === 'running';
   const ratioClass = `ratio-${job.brief.aspect_ratio.replace(':', 'x')}`;
+  const variant = job.variants?.find((v) => v.label === 'A');
+  const finished = variant && variant.ratios?.length > 0 && job.assets.some((a) => a.kind === 'ad');
 
   async function retry() {
     setBusy(true);
@@ -381,29 +459,29 @@ function GenerateStep({ job, onChange }) {
         </section>
 
         <section className="card media">
-          <div className={`scene-clips n${n}`}>
-            {sceneMedia.map(({ idx, video, image }) => (
-              <figure key={idx}>
-                {video ? (
-                  <video src={video.url} controls playsInline poster={image?.url} className={ratioClass} />
-                ) : image ? (
-                  <img src={image.url} alt={`Reference image for scene ${idx + 1}`} className={ratioClass} />
-                ) : (
-                  <div className="placeholder">
-                    <Loader2 className={active ? 'spin' : ''} size={24} aria-hidden="true" />
-                    <span className="muted small">{active ? 'Rendering…' : 'No media yet'}</span>
-                  </div>
-                )}
-                {n > 1 && <figcaption className="muted small">Scene {idx + 1}</figcaption>}
-              </figure>
-            ))}
-          </div>
+          {finished ? (
+            <FinishedAd job={job} variant={variant} />
+          ) : (
+            <div className={`scene-clips n${n}`}>
+              {sceneMedia.map(({ idx, video, image }) => (
+                <figure key={idx}>
+                  {video ? (
+                    <video src={video.url} controls playsInline poster={image?.url} className={ratioClass} />
+                  ) : image ? (
+                    <img src={image.url} alt={`Reference image for scene ${idx + 1}`} className={ratioClass} />
+                  ) : (
+                    <div className="placeholder">
+                      <Loader2 className={active ? 'spin' : ''} size={24} aria-hidden="true" />
+                      <span className="muted small">{active ? 'Rendering…' : 'No media yet'}</span>
+                    </div>
+                  )}
+                  {n > 1 && <figcaption className="muted small">Scene {idx + 1}</figcaption>}
+                </figure>
+              ))}
+            </div>
+          )}
           {job.status === 'done' && (
-            <p className="ok small">
-              Done.{' '}
-              {n > 1 ? 'The next version joins the scenes into one ad with voiceover, captions and music. ' : ''}
-              Links to the files expire after a few minutes; reload to refresh them.
-            </p>
+            <p className="ok small">Done. Links to the files expire after a few minutes; reload to refresh them.</p>
           )}
         </section>
       </div>

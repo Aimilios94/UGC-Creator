@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # --- Providers ---
     llm_provider: str = "openai"  # openai | anthropic | mock
     media_provider: str = "fal"  # fal | mock
+    voice_provider: str = "openai"  # openai | mock (voiceover, M2)
     storage_provider: str = "local"  # local | gcs
 
     # --- Keys ---
@@ -49,7 +50,14 @@ class Settings(BaseSettings):
     video_model: str = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
     llm_max_output_tokens: int = 8000
     video_duration_s: int = 5  # Kling accepts "5" or "10"
+    tts_model: str = "gpt-4o-mini-tts"  # shuts down 6 Jan 2027: replace before then (D26)
+    tts_voice: str = "marin"  # default voice; the brief can pick another
     render_scenes: int = 3  # M2: all three scenes (Cloud Run pins 1 until the M2 deploy; deploy/gcp/*.env.yaml)
+
+    # --- Compose (M2) ---
+    end_card_s: float = 2.0
+    compose_scale: float = 1.0  # 1 = 1080 px on the short side; tests render smaller
+    default_music_theme: str = "food"  # music bed when the brief has no theme
 
     # --- Database ---
     database_url: str = ""

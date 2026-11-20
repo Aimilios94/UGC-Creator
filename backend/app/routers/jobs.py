@@ -50,15 +50,19 @@ def job_view(ctx: Context, job: dict) -> JobView:
     assets: list[AssetView] = []
     for a in repo.list_assets(ctx.db, job_id):
         idx = None
-        if a["kind"] in ("image", "video"):
+        if "/scene-" in a["storage_key"]:
             try:
                 idx = int(a["storage_key"].split("/scene-")[1].split("/")[0])
             except (IndexError, ValueError):
                 idx = None
+        name = a["storage_key"].rsplit("/", 1)[-1]
+        ratio = name[3:-4].replace("x", ":") if a["kind"] == "ad" else None
         assets.append(
             AssetView(
                 kind=a["kind"],
                 scene_idx=idx,
+                ratio=ratio,
+                name=name,
                 url=ctx.storage.signed_url(a["storage_key"], ttl),
                 content_type=a["content_type"],
                 expires_in_s=ttl,
@@ -74,7 +78,15 @@ def job_view(ctx: Context, job: dict) -> JobView:
         brand=BrandKit.model_validate(job["brand"]) if job.get("brand") else None,
         flags=flag_testimonials(board, brief) if board is not None and job["status"] == "draft" else [],
         variants=[
-            VariantView(label=v["label"], hook_idx=v["hook_idx"], status=v["status"])
+            VariantView(
+                label=v["label"],
+                hook_idx=v["hook_idx"],
+                status=v["status"],
+                duration_s=(v.get("output") or {}).get("duration_s"),
+                ratios=(v.get("output") or {}).get("ratios", []),
+                skipped=(v.get("output") or {}).get("skipped", {}),
+                checks=(v.get("output") or {}).get("checks", []),
+            )
             for v in repo.list_variants(ctx.db, job_id)
         ],
         analysis=ProductAnalysis.model_validate(job["analysis"]) if job.get("analysis") else None,

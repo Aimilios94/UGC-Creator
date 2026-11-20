@@ -343,3 +343,13 @@ input.flagged, textarea.flagged { border-color: #fca5a5; box-shadow: 0 0 0 1px #
 .scene-clips { display: grid; gap: 10px; width: 100%; }
 .scene-clips.n2, .scene-clips.n3 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .scene-clips figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+/* M2: the finished ad */
+.finished { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+.ratio-tabs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.ratio-tabs .tab { background: transparent; border: 1px solid var(--card-border); color: var(--text-secondary); border-radius: var(--radius-full); padding: 6px 12px; font-size: 0.85rem; cursor: pointer; }
+.ratio-tabs .tab.active { border-color: var(--accent-primary); color: var(--text-primary); background: rgba(99, 102, 241, 0.15); }
+.extras { width: 100%; }
+.extras h3 { margin: 6px 0; font-size: 0.95rem; }
+.thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.thumbs img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #000; border-radius: var(--radius-sm); display: block; }

@@ -22,6 +22,7 @@ _SAFE_ENV = {
     "APP_ENV": "local",
     "LLM_PROVIDER": "mock",
     "MEDIA_PROVIDER": "mock",
+    "VOICE_PROVIDER": "mock",
     "STORAGE_PROVIDER": "local",
     "JOB_RUNNER": "local",
     "OPENAI_API_KEY": "",
@@ -77,6 +78,7 @@ from app.services.pipeline import Context  # noqa: E402
 from app.services.providers.llm import build_llm  # noqa: E402
 from app.services.providers.media import MockMedia  # noqa: E402
 from app.services.providers.storage import LocalStorage  # noqa: E402
+from app.services.providers.voice import MockVoice  # noqa: E402
 
 TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "")
 TABLES = ["llm_calls", "media_cache", "assets", "stage_runs", "scenes", "variants", "jobs", "campaigns", "brand_kits"]
@@ -88,6 +90,8 @@ def make_settings(**overrides) -> Settings:
         app_env="local",
         llm_provider="mock",
         media_provider="mock",
+        voice_provider="mock",
+        compose_scale=0.25,
         storage_provider="local",
         job_runner="local",
         asset_signing_secret="test-signing-secret",
@@ -144,6 +148,7 @@ def ctx(settings, db, storage, media) -> Context:
         media=media,
         llm_factory=lambda task: build_llm(settings, task),
         sleep=lambda s: None,
+        voice=MockVoice(),
     )
 
 

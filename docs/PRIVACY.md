@@ -9,6 +9,8 @@ The in-app notice is `frontend/src/pages/Privacy.jsx`. This page is the engineer
 | Campaign brief (name, goal, audience, offer, landing URL) | Database, per browser session | Neon Frankfurt | As the brief text (M2 cleanup) |
 | Brand kit (tone, colours, font) | Database, one per browser session; the tone goes to OpenAI in the storyboard prompt | Neon Frankfurt; OpenAI US | Until "delete my data" or 30 days without use (M2 cleanup) |
 | Brand logo (metadata stripped like photos) | Our storage under `brand/<session hash>/` | GCS europe-west4 | Not covered by the `jobs/` bucket rule: deleted by the M2 cleanup (30 days without use) and "delete my data" |
+| Voiceover lines (from the storyboard) | OpenAI (text to speech) → audio stored with the job | OpenAI US; GCS europe-west4 | Audio under `jobs/` (30-day bucket rule); OpenAI: API data sharing off |
+| Composed ads, cover, stills, carousel | Made in the worker (ffmpeg), stored with the job under `jobs/<id>/variant-A/` | GCS europe-west4 | 30-day bucket rule; every file is marked AI-generated in its metadata |
 | Generated images and clips | fal → copied to our storage at once | fal US (expire after 1 h); GCS europe-west4 | fal: 1 hour (`X-Fal-Object-Lifecycle-Preference`). Ours: files deleted after 30 days by the bucket rule (since M1); their database rows from M2 |
 | Job status, costs | Database | Neon Frankfurt | Cost rows stay for the daily limit (job link set to null on delete) |
 | Browser session ID | Browser localStorage; only its SHA-256 on the server | — | Until the user clears the browser |

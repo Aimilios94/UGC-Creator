@@ -7,6 +7,7 @@ python-multipart>=0.0.34
 psycopg[binary]>=3.3,<4
 httpx>=0.28
 Pillow>=13.0
+PyYAML>=6.0.2
 pydantic-ai-slim[openai,anthropic]>=2.70,<3
 fal-client>=1.0.3,<2
 google-cloud-storage>=3.17

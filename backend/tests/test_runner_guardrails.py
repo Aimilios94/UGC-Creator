@@ -76,10 +76,11 @@ def test_always_failing_job_fails_after_two_attempts_with_error_shown(client, ct
     assert worker.run_once(ctx) is False  # never started a third time
     view = client.get(f"/jobs/{job_id}", headers={"X-Session-Id": session_id}).json()
     assert view["status"] == "failed" and "provider is down" in view["last_error"]
-    # a failed submit spent nothing
+    # a failed submit spent nothing: only the text and voiceover calls before it count
     assert repo.job_spend_usd(ctx.db, job_id) == pytest.approx(
-        sum(float(r["cost_usd"]) for r in _calls(ctx, job_id) if r["kind"] == "llm")
+        sum(float(r["cost_usd"]) for r in _calls(ctx, job_id) if r["kind"] in ("llm", "tts"))
     )
+    assert not [r for r in _calls(ctx, job_id) if r["kind"] in ("image", "video") and r["status"] == "billed"]
 
 
 def _calls(ctx, job_id):

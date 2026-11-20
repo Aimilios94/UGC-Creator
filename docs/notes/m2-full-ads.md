@@ -16,9 +16,17 @@ Status: **in progress** on `v2`. Started 19 Nov 2026. The plan is [§17, M2](../
   - *UI:* Create page goal/theme/ad type/campaign/brand kit live (Soon tags removed); Generate step shows every scene's progress and clip.
   - *Checks:* 100 tests pass (39 new); lint and build clean; the flow checked in a browser on the mock stack.
 
+- **Item 2, compose, voiceover and music ([D26](../../DECISIONS.md), 20 Nov 2026; on `v2`, not deployed):**
+  - *Order in the worker:* voice lines → image and video per scene → compose. A voice failure stops the job before any video is paid.
+  - *Voice:* `providers/voice.py` (`openai` | `mock`), `gpt-4o-mini-tts`, voices marin/cedar/coral/onyx, tone from the brand kit. **OpenAI shuts the model down on 6 Jan 2027: choose and plug in a replacement before then.** Tokens estimated high; three lines cost well under a cent.
+  - *Compose:* silent master with hard cuts (hold or speed up ≤1.15× when a line is longer than its clip); ratios cropped (keeps ≥75%) or fitted on a blurred copy; captions (bold 3-word chunks, clean subtitles, or off) and headlines laid out by us inside the safe zone and burned in by libass; logo top-left; 2 s end card; voice over the ducked music bed, −14 LUFS; AI metadata on every MP4 and JPEG; cover, stills, 4:5 carousel; output checks stored on variant A.
+  - *Music:* five CC0 beds, one per theme ([MUSIC.md](../MUSIC.md)). *Fonts:* four OFL fonts.
+  - *Checks:* 120 tests pass (20 new: compose on real ffmpeg, AI-metadata guardrail, safe zones, voice spend rules); the full flow checked in a browser on the Docker mock stack (4 ratios in about 26 s).
+  - *Deploy notes:* the worker needs the OpenAI key; schema, `RENDER_SCENES=3` and a paid smoke run (SETUP, "M2 deploy").
+
 ## Next (plan §17, M2)
-1. ~~Campaign brief and brand kit; 3 scenes; testimonial rule~~ (done above). Still "Soon" on the Create page: model preset (M4), Hook Lab (M3), voiceover, music and captions (item 2), email (M3).
-2. `compose.py`: stitch, OpenAI TTS voiceover, burned-in captions, watermark, end card, licensed music bed, ratios with safe zones, cover, stills, carousel, "AI-generated" metadata on every export.
+1. ~~Campaign brief and brand kit; 3 scenes; testimonial rule~~ (done above). Still "Soon" on the Create page: model preset (M4), Hook Lab (M3), email (M3).
+2. ~~`compose.py`, voiceover, music~~ (done above).
 3. Theme YAMLs for the five themes, with the football pack.
 4. Cost tracking for every billing unit, live cost ticker, History page.
 5. Sentry (backend and frontend, EU org, with the scrubber), the OpenAPI docs page and a curl example in the README.

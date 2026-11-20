@@ -30,6 +30,12 @@ cp .env.example .env            # then fill in what you need; never commit .env
 
 Frontend: `cd frontend && npm install && npm run dev` (reads `VITE_API_BASE_URL`, default `http://localhost:8000`).
 
+The worker and the compose tests need **ffmpeg with libass** on PATH (the Docker image and CI install Debian/Ubuntu's `ffmpeg`; on Windows the gyan.dev "full" build works).
+
+### Music beds
+
+The five 30-second beds in `backend/app/music/` are cut from CC0 tracks (sources and licence: [MUSIC.md](MUSIC.md)). To recut them, download the five tracks from their Free Music Archive pages (free login) into a folder outside the repo and run `.venv/Scripts/python scripts/make_music_beds.py <folder>`. The originals are not committed.
+
 ## Tests
 
 ```bash
@@ -119,6 +125,13 @@ Frontend: the Vercel project `ugc-creator` (root directory `frontend`, Vite). Se
 - Production: https://ugc-creator-delta.vercel.app. Stable `v2` preview: https://ugc-creator-git-v2-aimilios-projects-21450502.vercel.app.
 
 Every site that calls the API must be listed in `CORS_ORIGINS` in `deploy/gcp/api.env.yaml` (today: production and the `v2` preview), then applied with `gcloud run services update ugc-api --env-vars-file=deploy/gcp/api.env.yaml` plus the same `--set-secrets` as above.
+
+### M2 deploy (not run yet; each step with the owner's go)
+
+1. Apply the schema to Neon (`scripts/apply_schema.py`): new tables `campaigns`, `brand_kits`, `variants`; new stage, asset and cache kinds.
+2. The worker now makes the voiceover, so it needs the OpenAI key: grant `ugc-worker` `roles/secretmanager.secretAccessor` on `openai-api-key` and add `OPENAI_API_KEY=openai-api-key:latest` to the job's `--set-secrets` ([D26](../DECISIONS.md)).
+3. Set `RENDER_SCENES: "3"` in both `deploy/gcp/*.env.yaml` (pinned to 1 until then, [D25](../DECISIONS.md)), build the image (it now installs ffmpeg) and update the job and the service.
+4. One paid smoke run of a full 3-scene ad (about 1.05 EUR), with the owner's go and limit.
 
 ### Rotate the access code
 Never print or commit the code.
