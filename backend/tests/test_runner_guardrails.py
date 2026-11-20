@@ -51,13 +51,13 @@ def test_retried_job_resumes_and_never_pays_twice(client, ctx, session_id, photo
     worker.run_once(ctx)
     job = _job(ctx, job_id)
     assert job["status"] == "done" and job["attempts"] == 2
-    assert [r.kind for r in ctx.media.submits] == ["image", "video"]  # each paid once
+    assert [r.kind for r in ctx.media.submits] == ["image", "video"] * 3  # each scene's renders paid once
     with ctx.db.tx() as c:
         billed = c.execute(
             "select kind, count(*) as n from llm_calls where job_id = %s and kind in ('image','video') group by kind",
             (job_id,),
         ).fetchall()
-    assert {r["kind"]: r["n"] for r in billed} == {"image": 1, "video": 1}
+    assert {r["kind"]: r["n"] for r in billed} == {"image": 3, "video": 3}
 
 
 def test_always_failing_job_fails_after_two_attempts_with_error_shown(client, ctx, session_id, photo_bytes):
@@ -156,7 +156,7 @@ def test_open_reservations_count_toward_the_limit(client, ctx, session_id, photo
 def test_media_cache_hit_costs_nothing(client, ctx, session_id, photo_bytes):
     job_id = _approved_job(client, session_id, photo_bytes)
     worker.run_once(ctx)
-    assert len(ctx.media.submits) == 2
+    assert len(ctx.media.submits) == 6  # 3 scenes x (image + video)
     # the same render again (same model, prompt, seed, input, settings) is served from the cache
     job = _job(ctx, job_id)
     with ctx.db.tx() as c:
@@ -182,6 +182,6 @@ def test_media_cache_hit_costs_nothing(client, ctx, session_id, photo_bytes):
             product_sha256=job["upload_sha256"],
         ),
     )
-    assert len(ctx.media.submits) == 2  # no new paid render
+    assert len(ctx.media.submits) == 6  # no new paid render
     hits = [r for r in _calls(ctx, job_id) if r["cache_hit"]]
     assert len(hits) == 1 and float(hits[0]["cost_usd"]) == 0

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from 'lucide-react';
 import { api, rememberJob } from '../lib/api';
 import { navigate, useCurrency } from '../lib/hooks';
 import { formatMoney } from '../lib/money';
@@ -79,11 +79,15 @@ function StoryboardStep({ job, onChange }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [advanced, setAdvanced] = useState(false);
-  const [estimate, setEstimate] = useState(null);
+  const [config, setConfig] = useState(null);
 
   useEffect(() => {
-    api.config().then((c) => setEstimate(c.job_estimate), () => {});
+    api.config().then(setConfig, () => {});
   }, []);
+
+  const flags = job.flags || [];
+  const cls = (field) => (flags.some((f) => f.field === field) ? 'flagged' : undefined);
+  const scenesN = config?.render_scenes ?? 3;
 
   if (!board) {
     return (
@@ -103,15 +107,47 @@ function StoryboardStep({ job, onChange }) {
     setBoard({ ...board, scenes });
     setDirty(true);
   };
+  const editTop = (field) => (e) => {
+    setBoard({ ...board, [field]: e.target.value });
+    setDirty(true);
+  };
+  const editHook = (i) => (e) => {
+    setBoard({ ...board, hooks: board.hooks.map((h, j) => (j === i ? { ...h, text: e.target.value } : h)) });
+    setDirty(true);
+  };
+
+  async function save() {
+    const saved = await api.saveStoryboard(job.id, board);
+    setDirty(false);
+    onChange(saved);
+    return saved;
+  }
 
   async function approve() {
     setBusy(true);
     setError('');
     try {
-      if (dirty) await api.saveStoryboard(job.id, board);
+      const current = dirty ? await save() : job;
+      if ((current.flags || []).length) {
+        setError('Some lines still need editing (marked above).');
+        setBusy(false);
+        return;
+      }
       onChange(await api.approve(job.id));
     } catch (err) {
       setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  async function check() {
+    setBusy(true);
+    setError('');
+    try {
+      await save();
+    } catch (err) {
+      setError(err.message);
+    } finally {
       setBusy(false);
     }
   }
@@ -125,21 +161,79 @@ function StoryboardStep({ job, onChange }) {
           {advanced ? 'Hide' : 'Show'} advanced fields
         </button>
       </div>
-      <p className="muted">
-        Edit anything, then approve. Nothing is rendered before you approve. This version renders scene 1; full 3-scene
-        ads come next.
-      </p>
+      <p className="muted">Edit anything, then approve. Nothing is rendered before you approve.</p>
+
+      {flags.length > 0 && (
+        <div className="notice flag-notice" role="status">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <div>
+            <strong>
+              {flags.length} {flags.length === 1 ? 'line needs' : 'lines need'} editing before you approve.
+            </strong>{' '}
+            An ad may only claim use, results, reviews or awards that your brief states. Rewrite the marked lines, then
+            check again.
+            <ul>
+              {flags.map((f) => (
+                <li key={f.field + f.text}>
+                  “{f.text}” <span className="muted">({f.reason})</span>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="btn btn-secondary btn-small" onClick={check} disabled={busy}>
+              Check again
+            </button>
+          </div>
+        </div>
+      )}
+
+      <section className="card">
+        <div className="grid-2 tight">
+          <div>
+            <label htmlFor="title">Title</label>
+            <input id="title" className={cls('title')} value={board.title} onChange={editTop('title')} maxLength={100} />
+          </div>
+          <div>
+            <label htmlFor="cta">Call to action</label>
+            <input
+              id="cta"
+              className={cls('cta_text')}
+              value={board.cta_text}
+              onChange={editTop('cta_text')}
+              maxLength={60}
+            />
+          </div>
+        </div>
+      </section>
 
       <div className="scenes">
         {board.scenes.map((s, i) => (
           <article key={s.role} className="card scene">
             <h2>{ROLE_LABEL[s.role]}</h2>
             <label htmlFor={`d${i}`}>What we see</label>
-            <textarea id={`d${i}`} rows={3} value={s.description} onChange={editScene(i, 'description')} maxLength={500} />
+            <textarea
+              id={`d${i}`}
+              rows={3}
+              className={cls(`scenes.${i}.description`)}
+              value={s.description}
+              onChange={editScene(i, 'description')}
+              maxLength={500}
+            />
             <label htmlFor={`v${i}`}>Voiceover</label>
-            <input id={`v${i}`} value={s.voiceover} onChange={editScene(i, 'voiceover')} maxLength={220} />
+            <input
+              id={`v${i}`}
+              className={cls(`scenes.${i}.voiceover`)}
+              value={s.voiceover}
+              onChange={editScene(i, 'voiceover')}
+              maxLength={220}
+            />
             <label htmlFor={`t${i}`}>On-screen text</label>
-            <input id={`t${i}`} value={s.on_screen_text} onChange={editScene(i, 'on_screen_text')} maxLength={80} />
+            <input
+              id={`t${i}`}
+              className={cls(`scenes.${i}.on_screen_text`)}
+              value={s.on_screen_text}
+              onChange={editScene(i, 'on_screen_text')}
+              maxLength={80}
+            />
             {advanced && (
               <>
                 <label htmlFor={`ip${i}`}>Image prompt</label>
@@ -155,20 +249,26 @@ function StoryboardStep({ job, onChange }) {
       <section className="card">
         <h2>Hook ideas for scene 1</h2>
         <ul className="hooks">
-          {board.hooks.map((h) => (
-            <li key={h.formula + h.text}>
-              <span className="pill">{FORMULA_LABEL[h.formula]}</span> {h.text}
+          {board.hooks.map((h, i) => (
+            <li key={h.formula} className="hook-edit">
+              <label htmlFor={`h${i}`} className="pill">
+                {FORMULA_LABEL[h.formula]}
+              </label>
+              <input id={`h${i}`} className={cls(`hooks.${i}.text`)} value={h.text} onChange={editHook(i)} maxLength={160} />
             </li>
           ))}
         </ul>
-        <p className="muted small">Hook Lab, which renders and ranks all three, arrives in a later version.</p>
+        <p className="muted small">
+          The ad opens with the first hook. Hook Lab, which renders and ranks all three, arrives in a later version.
+        </p>
       </section>
 
       <div className="actions">
         {error && <p className="error" role="alert">{error}</p>}
         <p className="muted small">
-          Approving renders scene 1 (one reference image and a 5-second clip)
-          {estimate && <> for about {formatMoney(estimate, currency)}</>}, under a cap of{' '}
+          Approving renders {scenesN === 1 ? 'scene 1' : `${scenesN} scenes`} (a reference image and a 5-second clip
+          each)
+          {config && <> for about {formatMoney(config.job_estimate, currency)}</>}, under a cap of{' '}
           {formatMoney(job.cost_cap, currency)} per ad.
         </p>
         <button className="btn btn-primary" onClick={approve} disabled={busy}>
@@ -197,17 +297,32 @@ function GenerateStep({ job, onChange }) {
   const currency = useCurrency();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const video = job.assets.find((a) => a.kind === 'video');
-  const image = job.assets.find((a) => a.kind === 'image');
+  const [scenesN, setScenesN] = useState(null);
+  useEffect(() => {
+    api.config().then(
+      (c) => setScenesN(c.render_scenes),
+      () => setScenesN(3),
+    );
+  }, []);
+  const rendered = Math.max(0, ...job.stages.filter((s) => s.scene_idx >= 0).map((s) => s.scene_idx + 1));
+  const n = Math.max(scenesN ?? 1, rendered);
+  const sceneMedia = Array.from({ length: n }, (_, i) => ({
+    idx: i,
+    video: job.assets.find((a) => a.kind === 'video' && a.scene_idx === i),
+    image: job.assets.find((a) => a.kind === 'image' && a.scene_idx === i),
+  }));
   const expected = [
     { stage: 'analyze', scene_idx: -1 },
     { stage: 'storyboard', scene_idx: -1 },
-    { stage: 'image', scene_idx: 0 },
-    { stage: 'video', scene_idx: 0 },
+    ...sceneMedia.flatMap(({ idx }) => [
+      { stage: 'image', scene_idx: idx },
+      { stage: 'video', scene_idx: idx },
+    ]),
   ];
   const stageStatus = (st) =>
     job.stages.find((s) => s.stage === st.stage && s.scene_idx === st.scene_idx) || { status: 'waiting' };
   const active = job.status === 'queued' || job.status === 'running';
+  const ratioClass = `ratio-${job.brief.aspect_ratio.replace(':', 'x')}`;
 
   async function retry() {
     setBusy(true);
@@ -232,9 +347,12 @@ function GenerateStep({ job, onChange }) {
             {expected.map((st) => {
               const s = stageStatus(st);
               return (
-                <li key={st.stage}>
+                <li key={`${st.stage}-${st.scene_idx}`}>
                   <StageIcon status={s.status} />
-                  <span>{STAGE_LABEL[st.stage]}{st.scene_idx >= 0 ? ' (scene 1)' : ''}</span>
+                  <span>
+                    {STAGE_LABEL[st.stage]}
+                    {st.scene_idx >= 0 ? ` (scene ${st.scene_idx + 1})` : ''}
+                  </span>
                   {s.error && <span className="error small">{s.error}</span>}
                 </li>
               );
@@ -263,17 +381,30 @@ function GenerateStep({ job, onChange }) {
         </section>
 
         <section className="card media">
-          {video ? (
-            <video src={video.url} controls playsInline poster={image?.url} className={`ratio-${job.brief.aspect_ratio.replace(':', 'x')}`} />
-          ) : image ? (
-            <img src={image.url} alt="Reference image for scene 1" className={`ratio-${job.brief.aspect_ratio.replace(':', 'x')}`} />
-          ) : (
-            <div className="placeholder">
-              <Loader2 className={active ? 'spin' : ''} size={28} aria-hidden="true" />
-              <span className="muted">{active ? 'Rendering…' : 'No media yet'}</span>
-            </div>
+          <div className={`scene-clips n${n}`}>
+            {sceneMedia.map(({ idx, video, image }) => (
+              <figure key={idx}>
+                {video ? (
+                  <video src={video.url} controls playsInline poster={image?.url} className={ratioClass} />
+                ) : image ? (
+                  <img src={image.url} alt={`Reference image for scene ${idx + 1}`} className={ratioClass} />
+                ) : (
+                  <div className="placeholder">
+                    <Loader2 className={active ? 'spin' : ''} size={24} aria-hidden="true" />
+                    <span className="muted small">{active ? 'Rendering…' : 'No media yet'}</span>
+                  </div>
+                )}
+                {n > 1 && <figcaption className="muted small">Scene {idx + 1}</figcaption>}
+              </figure>
+            ))}
+          </div>
+          {job.status === 'done' && (
+            <p className="ok small">
+              Done.{' '}
+              {n > 1 ? 'The next version joins the scenes into one ad with voiceover, captions and music. ' : ''}
+              Links to the files expire after a few minutes; reload to refresh them.
+            </p>
           )}
-          {job.status === 'done' && <p className="ok small">Done. Links to the files expire after a few minutes; reload to refresh them.</p>}
         </section>
       </div>
     </div>

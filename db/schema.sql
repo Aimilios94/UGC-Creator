@@ -3,6 +3,7 @@
 -- One idempotent file, applied by backend/scripts/apply_schema.py. No migration
 -- tool: each table is added here when its feature is built (plan §12).
 -- M1 tables: jobs, scenes, stage_runs, assets, media_cache, llm_calls.
+-- M2 tables: campaigns, brand_kits, variants (at the end of the file).
 -- ============================================================================
 
 create extension if not exists vector;  -- used from M6 (doc_chunks); created now to prove it works
@@ -118,3 +119,57 @@ create table if not exists llm_calls (
 create index if not exists llm_calls_created_idx on llm_calls (created_at);
 create index if not exists llm_calls_job_idx on llm_calls (job_id);
 create index if not exists llm_calls_stage_idx on llm_calls (stage_run_id);
+
+-- ============================================================================
+-- M2 tables: campaigns, brand_kits, variants.
+-- ============================================================================
+
+-- campaigns ------------------------------------------------------------------
+-- A campaign brief groups ads (plan §11). Private to the browser session, like jobs.
+create table if not exists campaigns (
+  id            uuid primary key default gen_random_uuid(),
+  session_hash  text not null,
+  name          text not null,
+  goal          text check (goal in ('sales', 'awareness', 'traffic')),
+  audience      text not null default '',
+  offer         text not null default '',
+  landing_url   text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index if not exists campaigns_session_idx on campaigns (session_hash, created_at desc);
+
+-- brand_kits -----------------------------------------------------------------
+-- One brand kit per browser session (no sign-in): set once, reused by every ad.
+-- Plain fields, no RAG (plan §9). The logo file lives under brand/<session_hash>/.
+create table if not exists brand_kits (
+  id            uuid primary key default gen_random_uuid(),
+  session_hash  text not null unique,
+  tone          text,
+  colors        jsonb not null default '{}'::jsonb,  -- {"primary", "secondary", "background"} as #rrggbb
+  font          text,
+  logo_key      text,                                -- storage key of the sanitised logo
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- jobs gain their campaign and a snapshot of the brand kit taken when the brief was
+-- sent, so a later brand-kit edit never changes an ad that is already planned.
+alter table jobs add column if not exists campaign_id uuid references campaigns (id) on delete set null;
+alter table jobs add column if not exists brand jsonb;
+create index if not exists jobs_campaign_idx on jobs (campaign_id);
+
+-- variants -------------------------------------------------------------------
+-- The ads built from one approved storyboard. Variant A (the first hook) is created
+-- at approval; B and C come from Hook Lab on request (M3). Compose (M2) attaches the
+-- finished files to the variant.
+create table if not exists variants (
+  id          uuid primary key default gen_random_uuid(),
+  job_id      uuid not null references jobs (id) on delete cascade,
+  label       text not null check (label in ('A', 'B', 'C')),
+  hook_idx    smallint not null check (hook_idx between 0 and 2),
+  status      text not null default 'queued' check (status in ('queued', 'done', 'failed')),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  unique (job_id, label)
+);

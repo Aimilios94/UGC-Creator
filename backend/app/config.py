@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     video_model: str = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
     llm_max_output_tokens: int = 8000
     video_duration_s: int = 5  # Kling accepts "5" or "10"
-    render_scenes: int = 1  # M1 renders scene 1 only; M2 renders all three
+    render_scenes: int = 3  # M2: all three scenes (Cloud Run pins 1 until the M2 deploy; deploy/gcp/*.env.yaml)
 
     # --- Database ---
     database_url: str = ""

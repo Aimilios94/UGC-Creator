@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from .. import repository as repo
 from ..config import Settings
 from ..errors import BudgetExceeded
-from ..models import Brief, ProductAnalysis, Scene, Storyboard
+from ..models import BrandKit, Brief, ProductAnalysis, Scene, Storyboard
 from ..repository import Database
 from . import analyze, storyboard
 from .image_gen import PlannedRender, plan_scene_image
@@ -31,6 +31,7 @@ from .llm_trace import Usage, cost_usd, usd_to_eur
 from .providers.llm import LlmHandle, build_llm
 from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
+from .storyboard_checks import fix_instructions, flag_testimonials
 from .video_gen import plan_scene_video
 
 log = logging.getLogger(__name__)
@@ -88,8 +89,8 @@ def job_seed(job_id: str) -> int:
 
 
 # --- before approval (API) ------------------------------------------------------------
-def _run_llm_stage(ctx: Context, job_id: str, stage: str, llm: LlmHandle, call):
-    sr = repo.start_stage(ctx.db, job_id, stage, -1, provider=llm.provider, model=llm.model_name, attempt=1)
+def _run_llm_stage(ctx: Context, job_id: str, stage: str, llm: LlmHandle, call, *, attempt: int = 1):
+    sr = repo.start_stage(ctx.db, job_id, stage, -1, provider=llm.provider, model=llm.model_name, attempt=attempt)
     est = cost_usd(
         llm.model_name, Usage(input_tokens=LLM_EST_INPUT_TOKENS, output_tokens=ctx.settings.llm_max_output_tokens)
     )
@@ -126,16 +127,42 @@ def _run_llm_stage(ctx: Context, job_id: str, stage: str, llm: LlmHandle, call):
 
 
 def prepare_storyboard(ctx: Context, job: dict, photo: bytes, content_type: str) -> tuple[ProductAnalysis, Storyboard]:
-    """Analyze the photo and write the storyboard. Cheap LLM calls only; nothing renders."""
+    """Analyze the photo and write the storyboard. Cheap LLM calls only; nothing renders.
+
+    Testimonial rule: if the code check flags lines, the storyboard is written once more
+    with those lines as feedback. Lines still flagged after that are left for the user to
+    edit on the Storyboard step (Approve is refused while any remain).
+    """
     job_id = str(job["id"])
     brief = Brief.model_validate(job["brief"])
+    brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
     llm = ctx.llm_factory("analyze")
     analysis = _run_llm_stage(
         ctx, job_id, "analyze", llm, lambda: analyze.analyze_product(llm, brief, photo, content_type)
     )
     repo.set_analysis(ctx.db, job_id, analysis.model_dump(mode="json"))
     llm2 = ctx.llm_factory("storyboard")
-    board = _run_llm_stage(ctx, job_id, "storyboard", llm2, lambda: storyboard.write_storyboard(llm2, brief, analysis))
+    board = _run_llm_stage(
+        ctx, job_id, "storyboard", llm2, lambda: storyboard.write_storyboard(llm2, brief, analysis, brand=brand)
+    )
+    flags = flag_testimonials(board, brief)
+    if flags:
+        log.info("storyboard for job %s broke the testimonial rule (%d lines); rewriting once", job_id, len(flags))
+        feedback = fix_instructions(flags)
+        try:
+            board = _run_llm_stage(
+                ctx,
+                job_id,
+                "storyboard",
+                llm2,
+                lambda: storyboard.write_storyboard(llm2, brief, analysis, brand=brand, feedback=feedback),
+                attempt=2,
+            )
+        except Exception:  # noqa: BLE001 - keep the first storyboard; its flagged lines go to the user
+            log.exception("storyboard rewrite failed for job %s; keeping the first version", job_id)
+            sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
+            if sr:
+                repo.stage_done(ctx.db, sr["id"], {"model": llm2.model_name, "rewrite_failed": True})
     repo.set_storyboard(ctx.db, job_id, board.model_dump(mode="json"))
     return analysis, board
 

@@ -329,3 +329,17 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
 html { background: #2e1065; }
 .advanced-panel { max-width: 280px; }
 .advanced-panel label { margin-top: 4px; }
+
+/* M2: campaign, brand kit, flagged storyboard lines, scene clips */
+.campaign-hint { margin: 28px 0 0; }
+.logo-row { display: flex; align-items: center; gap: 10px; }
+.logo-preview { height: 40px; max-width: 120px; object-fit: contain; border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.08); padding: 4px; }
+.flag-notice { border-color: rgba(252, 165, 165, 0.5); margin-bottom: 16px; }
+.flag-notice ul { margin: 8px 0 10px 18px; display: grid; gap: 4px; }
+input.flagged, textarea.flagged { border-color: #fca5a5; box-shadow: 0 0 0 1px #fca5a5; }
+.hook-edit { display: flex; align-items: center; gap: 10px; }
+.hook-edit .pill { min-width: 104px; justify-content: center; text-align: center; margin: 0; }
+.hook-edit input { flex: 1; min-width: 0; }
+.scene-clips { display: grid; gap: 10px; width: 100%; }
+.scene-clips.n2, .scene-clips.n3 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.scene-clips figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }

@@ -80,11 +80,23 @@ async function request(path, { method = 'GET', json, form } = {}) {
 export const api = {
   config: () => request('/config'),
   checkAccess: (code) => request('/access/check', { method: 'POST', json: { code } }),
-  createJob: (brief, photo) => {
+  // options: { campaignId, campaignName, useBrandKit }
+  createJob: (brief, photo, options = {}) => {
     const form = new FormData();
     form.append('brief', JSON.stringify(brief));
     form.append('photo', photo);
+    if (options.campaignId) form.append('campaign_id', options.campaignId);
+    if (options.campaignName) form.append('campaign_name', options.campaignName);
+    form.append('use_brand_kit', options.useBrandKit ? 'true' : 'false');
     return request('/jobs', { method: 'POST', form });
+  },
+  campaigns: () => request('/campaigns'),
+  getBrandKit: () => request('/brand-kit'),
+  saveBrandKit: (kit) => request('/brand-kit', { method: 'PUT', json: kit }),
+  uploadLogo: (file) => {
+    const form = new FormData();
+    form.append('logo', file);
+    return request('/brand-kit/logo', { method: 'POST', form });
   },
   getJob: (id) => request(`/jobs/${encodeURIComponent(id)}`),
   saveStoryboard: (id, storyboard) =>

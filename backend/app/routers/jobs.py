@@ -17,10 +17,22 @@ from pydantic import ValidationError
 from .. import repository as repo
 from ..deps import get_ctx, require_access_code, session_hash
 from ..errors import BudgetExceeded, ProviderNotConfigured, UploadRejected
-from ..models import AssetView, Brief, JobView, Money, ProductAnalysis, StageView, Storyboard
+from ..models import (
+    AssetView,
+    BrandKit,
+    BrandSnapshot,
+    Brief,
+    JobView,
+    Money,
+    ProductAnalysis,
+    StageView,
+    Storyboard,
+    VariantView,
+)
 from ..services import job_trigger
 from ..services.llm_trace import money
 from ..services.pipeline import Context, prepare_storyboard
+from ..services.storyboard_checks import flag_testimonials
 from ..services.uploads import sanitise_image
 
 log = logging.getLogger(__name__)
@@ -52,12 +64,21 @@ def job_view(ctx: Context, job: dict) -> JobView:
                 expires_in_s=ttl,
             )
         )
+    brief = Brief.model_validate(job["brief"])
+    board = Storyboard.model_validate(job["storyboard"]) if job.get("storyboard") else None
     return JobView(
         id=job_id,
         status=job["status"],
-        brief=Brief.model_validate(job["brief"]),
+        brief=brief,
+        campaign_id=str(job["campaign_id"]) if job.get("campaign_id") else None,
+        brand=BrandKit.model_validate(job["brand"]) if job.get("brand") else None,
+        flags=flag_testimonials(board, brief) if board is not None and job["status"] == "draft" else [],
+        variants=[
+            VariantView(label=v["label"], hook_idx=v["hook_idx"], status=v["status"])
+            for v in repo.list_variants(ctx.db, job_id)
+        ],
         analysis=ProductAnalysis.model_validate(job["analysis"]) if job.get("analysis") else None,
-        storyboard=Storyboard.model_validate(job["storyboard"]) if job.get("storyboard") else None,
+        storyboard=board,
         attempts=job["attempts"],
         last_error=job.get("last_error"),
         stages=stages,
@@ -79,10 +100,44 @@ def _own_job(ctx: Context, job_id: str, sess: str) -> dict:
     return job
 
 
+def _campaign_for(ctx: Context, sess: str, brief: Brief, campaign_id: str | None, campaign_name: str) -> str:
+    """The ad's campaign: one of this session's campaigns, or a new one built from the brief."""
+    if campaign_id:
+        try:
+            uuid.UUID(campaign_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Campaign not found.") from None
+        row = repo.get_campaign_for_session(ctx.db, campaign_id, sess)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Campaign not found.")
+        return str(row["id"])
+    row = repo.create_campaign(
+        ctx.db,
+        session_hash=sess,
+        name=(campaign_name.strip() or brief.product_name)[:80],
+        goal=brief.goal,
+        audience=brief.audience,
+        offer=brief.offer,
+        landing_url=str(brief.landing_url) if brief.landing_url else None,
+    )
+    return str(row["id"])
+
+
+def _brand_snapshot(ctx: Context, sess: str) -> dict | None:
+    kit = repo.get_brand_kit(ctx.db, sess)
+    if kit is None:
+        return None
+    snap = BrandSnapshot(tone=kit["tone"], colors=kit["colors"] or {}, font=kit["font"], logo_key=kit["logo_key"])
+    return snap.model_dump(mode="json")
+
+
 @router.post("", status_code=201, dependencies=[Depends(require_access_code)])
 def create_job(
     brief: str = Form(..., description="Brief as JSON"),
     photo: UploadFile = File(...),
+    campaign_id: str | None = Form(default=None, description="An existing campaign of this session"),
+    campaign_name: str = Form(default="", max_length=80, description="Name for a new campaign"),
+    use_brand_kit: bool = Form(default=False, description="Apply this session's brand kit"),
     sess: str = Depends(session_hash),
     ctx: Context = Depends(get_ctx),
 ) -> JobView:
@@ -97,6 +152,8 @@ def create_job(
     except UploadRejected as e:
         raise HTTPException(status_code=422, detail=str(e)) from None
 
+    campaign = _campaign_for(ctx, sess, parsed, campaign_id, campaign_name)
+    brand = _brand_snapshot(ctx, sess) if use_brand_kit else None
     job_id = str(uuid.uuid4())
     key = f"jobs/{job_id}/upload.{clean.ext}"
     ctx.storage.put(key, clean.data, clean.content_type)
@@ -107,6 +164,8 @@ def create_job(
         brief=parsed.model_dump(mode="json"),
         upload_key=key,
         upload_sha256=clean.sha256,
+        campaign_id=campaign,
+        brand=brand,
     )
     repo.add_asset(
         ctx.db,
@@ -159,8 +218,20 @@ def _start_worker(ctx: Context) -> None:
 
 @router.post("/{job_id}/approve", status_code=202, dependencies=[Depends(require_access_code)])
 def approve(job_id: str, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)) -> JobView:
-    """Idempotent: a double-click or retry changes nothing after the first approval."""
-    _own_job(ctx, job_id, sess)
+    """Idempotent: a double-click or retry changes nothing after the first approval.
+
+    Refused while the storyboard has lines that break the testimonial rule."""
+    current = _own_job(ctx, job_id, sess)
+    if current["status"] == "draft" and current.get("storyboard"):
+        flags = flag_testimonials(
+            Storyboard.model_validate(current["storyboard"]), Brief.model_validate(current["brief"])
+        )
+        if flags:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Edit the {len(flags)} flagged line(s) first: claims of use, results or reviews "
+                "need to come from your brief.",
+            )
     job, _ = repo.approve_job(ctx.db, job_id, sess)
     if job["status"] == "draft":
         raise HTTPException(status_code=409, detail="There is no storyboard to approve yet.")

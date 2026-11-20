@@ -79,7 +79,7 @@ from app.services.providers.media import MockMedia  # noqa: E402
 from app.services.providers.storage import LocalStorage  # noqa: E402
 
 TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "")
-TABLES = ["llm_calls", "media_cache", "assets", "stage_runs", "scenes", "jobs"]
+TABLES = ["llm_calls", "media_cache", "assets", "stage_runs", "scenes", "variants", "jobs", "campaigns", "brand_kits"]
 
 
 def make_settings(**overrides) -> Settings:

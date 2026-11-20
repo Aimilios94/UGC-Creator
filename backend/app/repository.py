@@ -87,14 +87,30 @@ def _all(conn: psycopg.Connection, sql: str, params: Any = None) -> list[dict]:
 
 # --- jobs ---------------------------------------------------------------------
 def create_job(
-    db: Database, *, job_id: str, session_hash: str, brief: dict, upload_key: str, upload_sha256: str
+    db: Database,
+    *,
+    job_id: str,
+    session_hash: str,
+    brief: dict,
+    upload_key: str,
+    upload_sha256: str,
+    campaign_id: str | None = None,
+    brand: dict | None = None,
 ) -> dict:
     with db.tx() as c:
         return _one(
             c,
-            """insert into jobs (id, session_hash, brief, upload_key, upload_sha256)
-               values (%s, %s, %s, %s, %s) returning *""",
-            (job_id, session_hash, Jsonb(brief), upload_key, upload_sha256),
+            """insert into jobs (id, session_hash, brief, upload_key, upload_sha256, campaign_id, brand)
+               values (%s, %s, %s, %s, %s, %s, %s) returning *""",
+            (
+                job_id,
+                session_hash,
+                Jsonb(brief),
+                upload_key,
+                upload_sha256,
+                campaign_id,
+                Jsonb(brand) if brand is not None else None,
+            ),
         )
 
 
@@ -153,6 +169,12 @@ def approve_job(db: Database, job_id: str, session_hash: str) -> tuple[dict | No
                    on conflict (job_id, idx) do nothing""",
                 (job_id, idx, scene["role"], Jsonb(scene)),
             )
+        # Variant A uses the first hook; B and C come from Hook Lab on request (M3).
+        c.execute(
+            """insert into variants (job_id, label, hook_idx) values (%s, 'A', 0)
+               on conflict (job_id, label) do nothing""",
+            (job_id,),
+        )
         return row, True
 
 
@@ -168,6 +190,7 @@ def retry_job(db: Database, job_id: str, session_hash: str) -> tuple[dict | None
         )
         if row is None:
             return _one(c, "select * from jobs where id = %s and session_hash = %s", (job_id, session_hash)), False
+        _set_variants(c, job_id, "queued", only="failed")
         return row, True
 
 
@@ -188,23 +211,36 @@ def claim_next_job(db: Database, max_attempts: int) -> dict | None:
         )
 
 
+def _set_variants(c: psycopg.Connection, job_id: str, status: str, *, only: str = "queued") -> None:
+    c.execute(
+        "update variants set status = %s, updated_at = now() where job_id = %s and status = %s",
+        (status, job_id, only),
+    )
+
+
 def finish_job(db: Database, job_id: str) -> None:
     with db.tx() as c:
-        c.execute(
+        row = _one(
+            c,
             """update jobs set status = 'done', finished_at = now(), last_error = null, updated_at = now()
-               where id = %s and status = 'running'""",
+               where id = %s and status = 'running' returning id""",
             (job_id,),
         )
+        if row:
+            _set_variants(c, job_id, "done")
 
 
 def fail_job(db: Database, job_id: str, error: str) -> None:
     """Terminal failure (for example a budget refusal): no automatic retry."""
     with db.tx() as c:
-        c.execute(
+        row = _one(
+            c,
             """update jobs set status = 'failed', last_error = %s, finished_at = now(), updated_at = now()
-               where id = %s and status in ('running', 'queued')""",
+               where id = %s and status in ('running', 'queued') returning id""",
             (error[:1000], job_id),
         )
+        if row:
+            _set_variants(c, job_id, "failed")
 
 
 def handle_job_failure(db: Database, job_id: str, error: str, max_attempts: int) -> str:
@@ -220,7 +256,78 @@ def handle_job_failure(db: Database, job_id: str, error: str, max_attempts: int)
                returning status""",
             {"max": max_attempts, "err": error[:1000], "id": job_id},
         )
+        if row and row["status"] == "failed":
+            _set_variants(c, job_id, "failed")
         return row["status"] if row else "unknown"
+
+
+def list_variants(db: Database, job_id: str) -> list[dict]:
+    with db.tx() as c:
+        return _all(c, "select * from variants where job_id = %s order by label", (job_id,))
+
+
+# --- campaigns (private to the browser session) -------------------------------------
+def create_campaign(
+    db: Database,
+    *,
+    session_hash: str,
+    name: str,
+    goal: str | None,
+    audience: str,
+    offer: str,
+    landing_url: str | None,
+) -> dict:
+    with db.tx() as c:
+        return _one(
+            c,
+            """insert into campaigns (session_hash, name, goal, audience, offer, landing_url)
+               values (%s, %s, %s, %s, %s, %s) returning *""",
+            (session_hash, name, goal, audience, offer, landing_url),
+        )
+
+
+def get_campaign_for_session(db: Database, campaign_id: str, session_hash: str) -> dict | None:
+    with db.tx() as c:
+        return _one(c, "select * from campaigns where id = %s and session_hash = %s", (campaign_id, session_hash))
+
+
+def list_campaigns(db: Database, session_hash: str) -> list[dict]:
+    with db.tx() as c:
+        return _all(
+            c,
+            """select c.*, (select count(*) from jobs j where j.campaign_id = c.id) as ads
+               from campaigns c where c.session_hash = %s order by c.created_at desc""",
+            (session_hash,),
+        )
+
+
+# --- brand kit (one per browser session) -----------------------------------------
+def get_brand_kit(db: Database, session_hash: str) -> dict | None:
+    with db.tx() as c:
+        return _one(c, "select * from brand_kits where session_hash = %s", (session_hash,))
+
+
+def save_brand_kit(db: Database, session_hash: str, *, tone: str | None, colors: dict, font: str | None) -> dict:
+    with db.tx() as c:
+        return _one(
+            c,
+            """insert into brand_kits (session_hash, tone, colors, font) values (%s, %s, %s, %s)
+               on conflict (session_hash) do update
+                 set tone = excluded.tone, colors = excluded.colors, font = excluded.font, updated_at = now()
+               returning *""",
+            (session_hash, tone, Jsonb(colors), font),
+        )
+
+
+def set_brand_logo(db: Database, session_hash: str, logo_key: str) -> dict:
+    with db.tx() as c:
+        return _one(
+            c,
+            """insert into brand_kits (session_hash, logo_key) values (%s, %s)
+               on conflict (session_hash) do update set logo_key = excluded.logo_key, updated_at = now()
+               returning *""",
+            (session_hash, logo_key),
+        )
 
 
 # --- scenes, stages, assets -----------------------------------------------------

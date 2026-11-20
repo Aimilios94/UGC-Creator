@@ -104,7 +104,9 @@ def test_eur_conversion_and_usd_display():
     assert money(0.35, 0.87) == {"usd": 0.35, "eur": 0.3045}
 
 
-def test_job_estimate_matches_table_and_fits_m1_cap():
+def test_job_estimate_matches_table_and_fits_the_cap():
+    """M2: three scenes, each one reference image and one 5 s clip (D2)."""
     s = Settings(_env_file=None)
-    assert estimate_job_usd(s) == pytest.approx(0.0398 + 0.35)
+    assert s.render_scenes == 3
+    assert estimate_job_usd(s) == pytest.approx(3 * (0.0398 + 0.35))
     assert estimate_job_usd(s) * s.usd_to_eur_rate < s.job_cost_cap_eur

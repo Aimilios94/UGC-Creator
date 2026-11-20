@@ -37,20 +37,27 @@ export default function Privacy() {
   return (
     <div className="page prose">
       <h1>Privacy notice</h1>
-      <p className="muted">Last updated: 19 November 2026. The app is in early access.</p>
+      <p className="muted">Last updated: 20 November 2026. The app is in early access.</p>
 
       <h2>What we collect</h2>
       <ul>
         <li>The product photo you upload. Location and camera data (EXIF/GPS) are removed when it arrives.</li>
-        <li>The brief you type: product name, description, audience, offer and landing page.</li>
+        <li>
+          The brief you type: product name, description, audience, offer, landing page, goal, theme and ad type. Ads
+          are grouped into campaigns, which keep a copy of the brief.
+        </li>
+        <li>
+          Your brand kit, if you save one: logo (location and camera data removed, like photos), colours, font and tone
+          of voice. It belongs to this browser only.
+        </li>
         <li>What the app makes from them: the storyboard, images and video, and what each step cost.</li>
         <li>
           A random ID stored in your browser, so only this browser can open your ads. There is no account, no
           sign-in, no analytics and no tracking cookies.
         </li>
         <li>
-          Fields marked &ldquo;Soon&rdquo; on the Create page (such as email, logo and brand colours) are previews:
-          what you type or pick there stays in your browser and is not sent to us.
+          Fields marked &ldquo;Soon&rdquo; on the Create page (such as email, voice and music) are previews: what you
+          type or pick there stays in your browser and is not sent to us.
         </li>
       </ul>
 
@@ -79,9 +86,9 @@ export default function Privacy() {
 
       <h2>How long we keep it</h2>
       <p>
-        Coming in the next version: uploads and generated files are deleted automatically after 30 days, and a
-        &ldquo;Delete my data&rdquo; button removes your ads at once. Until then, generation is limited to people with an
-        access code.
+        Coming in the next version: uploads, generated files, campaigns and brand kits are deleted automatically after
+        30 days without use, and a &ldquo;Delete my data&rdquo; button removes them at once. Until then, generation is
+        limited to people with an access code.
       </p>
 
       <h2>AI-generated content</h2>

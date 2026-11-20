@@ -12,18 +12,128 @@ const PLATFORMS = {
 };
 const RATIOS = { '9:16': '9:16 vertical', '1:1': '1:1 square', '4:5': '4:5 portrait', '16:9': '16:9 landscape' };
 
-// Planned options (plan §7–§9). Shown so visitors can see what is coming; not sent to the API yet.
-const GOALS = ['Sales', 'Awareness', 'Website visits'];
-const THEMES = ['Sport', 'Beauty', 'Tech', 'Food', 'Fashion'];
-const AD_TYPES = ['Testimonial', 'Product demo', 'Unboxing', 'Problem → solution'];
+// Brief options sent to the API (values match backend/app/models.py).
+const GOALS = { sales: 'Sales', awareness: 'Awareness', traffic: 'Website visits' };
+const THEMES = { '': 'No theme', sport: 'Sport', beauty: 'Beauty', tech: 'Tech', food: 'Food', fashion: 'Fashion' };
+const AD_TYPES = {
+  product_demo: 'Product demo',
+  problem_solution: 'Problem → solution',
+  unboxing: 'Unboxing',
+  testimonial: 'Testimonial (your quotes only)',
+};
+const TONES = { '': 'Theme default', energetic: 'Energetic', calm: 'Calm', playful: 'Playful', premium: 'Premium' };
+const FONTS = ['Inter', 'Montserrat', 'Bebas Neue', 'Playfair Display'];
+const DEFAULT_COLORS = { primary: '#6366f1', secondary: '#f0abfc', background: '#0f172a' };
+
+// Planned options (plan §7–§10). Shown so visitors can see what is coming; not sent to the API yet.
 const PRESETS = ['Balanced', 'Budget', 'Best quality'];
-const TONES = ['Energetic', 'Calm', 'Playful', 'Premium'];
 const VOICES = ['Warm female', 'Calm male', 'Upbeat female', 'Deep male'];
 const MUSIC = ['Upbeat', 'Chill', 'Cinematic', 'None'];
 const CAPTIONS = ['Bold word-by-word', 'Clean subtitles', 'Off'];
 
 function Soon() {
   return <span className="soon">Soon</span>;
+}
+
+function Select({ id, label, value, onChange, options }) {
+  return (
+    <div>
+      <label htmlFor={id}>{label}</label>
+      <select id={id} value={value} onChange={onChange}>
+        {Object.entries(options).map(([k, v]) => (
+          <option key={k} value={k}>
+            {v}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function BrandKitFields({ kit, setKit, locked, onSaved }) {
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
+  const [error, setError] = useState('');
+  const colors = { ...DEFAULT_COLORS, ...(kit.colors || {}) };
+  const setColor = (name) => (e) => setKit({ ...kit, colors: { ...colors, [name]: e.target.value } });
+
+  async function save() {
+    setBusy('save');
+    setError('');
+    setMsg('');
+    try {
+      const saved = await api.saveBrandKit({ tone: kit.tone || null, font: kit.font || null, colors });
+      onSaved(saved);
+      setMsg('Brand kit saved. It is reused for every ad from this browser.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function uploadLogo(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy('logo');
+    setError('');
+    setMsg('');
+    try {
+      onSaved(await api.uploadLogo(file));
+      setMsg('Logo saved.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  return (
+    <>
+      <div>
+        <label htmlFor="logo">Logo (PNG with transparency works best)</label>
+        <div className="logo-row">
+          {kit.logo_url && <img src={kit.logo_url} alt="Your logo" className="logo-preview" />}
+          <input id="logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={uploadLogo} disabled={locked || !!busy} />
+        </div>
+      </div>
+      <div>
+        <span className="label-like">Brand colours</span>
+        <div className="swatches">
+          <input type="color" value={colors.primary} onChange={setColor('primary')} aria-label="Primary colour" />
+          <input type="color" value={colors.secondary} onChange={setColor('secondary')} aria-label="Secondary colour" />
+          <input type="color" value={colors.background} onChange={setColor('background')} aria-label="Background colour" />
+        </div>
+      </div>
+      <Select
+        id="tone"
+        label="Tone of voice"
+        value={kit.tone || ''}
+        onChange={(e) => setKit({ ...kit, tone: e.target.value })}
+        options={TONES}
+      />
+      <Select
+        id="font"
+        label="Caption font"
+        value={kit.font || 'Inter'}
+        onChange={(e) => setKit({ ...kit, font: e.target.value })}
+        options={Object.fromEntries(FONTS.map((f) => [f, f]))}
+      />
+      <div className="span-2 row">
+        <button type="button" className="btn btn-secondary btn-small" onClick={save} disabled={locked || !!busy}>
+          {busy === 'save' ? 'Saving…' : 'Save brand kit'}
+        </button>
+        {locked && <span className="muted small">Enter the access code to save a brand kit.</span>}
+        {msg && <span className="ok small">{msg}</span>}
+        {error && (
+          <span className="error small" role="alert">
+            {error}
+          </span>
+        )}
+      </div>
+    </>
+  );
 }
 
 function PreviewSelect({ id, label, options }) {
@@ -104,13 +214,54 @@ export default function Brief() {
     landing_url: '',
     platform: 'tiktok',
     aspect_ratio: '9:16',
+    goal: 'sales',
+    theme: '',
+    ad_type: 'product_demo',
   });
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignId, setCampaignId] = useState('');
+  const [campaignName, setCampaignName] = useState('');
+  const [kit, setKit] = useState({});
+  const [hasKit, setHasKit] = useState(false);
+  const [useKit, setUseKit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     api.config().then(setConfig, (err) => setError(err.message));
+    api.campaigns().then(setCampaigns, () => {});
+    api.getBrandKit().then(
+      (k) => {
+        if (k) {
+          setKit(k);
+          setHasKit(true);
+          setUseKit(true);
+        }
+      },
+      () => {},
+    );
   }, []);
+
+  function pickCampaign(e) {
+    const id = e.target.value;
+    setCampaignId(id);
+    const c = campaigns.find((x) => x.id === id);
+    if (c) {
+      setForm((f) => ({
+        ...f,
+        goal: c.goal || f.goal,
+        audience: c.audience,
+        offer: c.offer,
+        landing_url: c.landing_url || '',
+      }));
+    }
+  }
+
+  function brandSaved(saved) {
+    setKit(saved);
+    setHasKit(true);
+    setUseKit(true);
+  }
 
   const preview = useMemo(() => (photo ? URL.createObjectURL(photo) : ''), [photo]);
   useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview]);
@@ -142,9 +293,13 @@ export default function Brief() {
     }
     setBusy(true);
     setError('');
-    const brief = { ...form, landing_url: form.landing_url.trim() || null };
+    const brief = { ...form, landing_url: form.landing_url.trim() || null, theme: form.theme || null };
     try {
-      const job = await api.createJob(brief, photo);
+      const job = await api.createJob(brief, photo, {
+        campaignId,
+        campaignName: campaignId ? '' : campaignName.trim(),
+        useBrandKit: hasKit && useKit,
+      });
       rememberJob(job.id);
       navigate(`/job/${job.id}`);
     } catch (err) {
@@ -185,6 +340,33 @@ export default function Brief() {
           </p>
 
           <div className="grid-2 tight">
+            <div>
+              <label htmlFor="campaign">Campaign</label>
+              <select id="campaign" value={campaignId} onChange={pickCampaign}>
+                <option value="">New campaign</option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.ads} {c.ads === 1 ? 'ad' : 'ads'})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              {campaignId ? (
+                <p className="muted small campaign-hint">This ad joins the campaign. Its brief is filled in below; edit it if this ad differs.</p>
+              ) : (
+                <>
+                  <label htmlFor="cname">Campaign name (optional)</label>
+                  <input
+                    id="cname"
+                    value={campaignName}
+                    onChange={(e) => setCampaignName(e.target.value)}
+                    maxLength={80}
+                    placeholder="Defaults to the product name"
+                  />
+                </>
+              )}
+            </div>
             <div className="span-2">
               <label htmlFor="name">Product name</label>
               <input id="name" value={form.product_name} onChange={set('product_name')} maxLength={80} required />
@@ -234,44 +416,55 @@ export default function Brief() {
                 ))}
               </select>
             </div>
-            <PreviewSelect id="goal" label="Goal" options={GOALS} />
-            <PreviewSelect id="theme" label="Theme" options={THEMES} />
-            <PreviewSelect id="adtype" label="Ad type" options={AD_TYPES} />
+            <Select id="goal" label="Goal" value={form.goal} onChange={set('goal')} options={GOALS} />
+            <Select id="theme" label="Theme" value={form.theme} onChange={set('theme')} options={THEMES} />
+            <Select id="adtype" label="Ad type" value={form.ad_type} onChange={set('ad_type')} options={AD_TYPES} />
             <PreviewSelect id="preset" label="Model preset" options={PRESETS} />
           </div>
 
           <details className="advanced">
             <summary>
-              <Sparkles size={16} aria-hidden="true" /> Advanced options <Soon />
+              <Sparkles size={16} aria-hidden="true" /> Advanced options
               <ChevronDown size={16} aria-hidden="true" className="chev" />
             </summary>
-            <p className="muted small">Hook Lab, brand kit, voice, music and captions. The brand kit is set once and reused.</p>
+            <p className="muted small">
+              Brand kit (set once, reused for every ad from this browser), Hook Lab, voice, music and captions.
+            </p>
             <div className="grid-2 tight">
               <div className="span-2">
-                <span className="label-like">Hook Lab</span>
+                <span className="label-like">Brand kit</span>
+                <label className="toggle" htmlFor="usekit">
+                  <input
+                    id="usekit"
+                    type="checkbox"
+                    checked={hasKit && useKit}
+                    disabled={!hasKit}
+                    onChange={(e) => setUseKit(e.target.checked)}
+                  />
+                  <span>
+                    {hasKit
+                      ? 'Use my brand kit in this ad (its tone is used in the script; logo, colours and font in the edit)'
+                      : 'Save a brand kit below to use it in your ads'}
+                  </span>
+                </label>
+              </div>
+              <BrandKitFields kit={kit} setKit={setKit} locked={locked} onSaved={brandSaved} />
+              <div className="span-2">
+                <span className="label-like">
+                  Hook Lab <Soon />
+                </span>
                 <label className="toggle" htmlFor="hooklab">
                   <input id="hooklab" type="checkbox" />
                   <span>Test three opening hooks and keep the best one (about 0.10 EUR more)</span>
                 </label>
               </div>
-              <div>
-                <label htmlFor="logo">Logo</label>
-                <input id="logo" type="file" accept="image/png,image/svg+xml" />
-              </div>
-              <div>
-                <span className="label-like">Brand colours</span>
-                <div className="swatches">
-                  <input type="color" defaultValue="#6366f1" aria-label="Primary colour" />
-                  <input type="color" defaultValue="#f0abfc" aria-label="Secondary colour" />
-                  <input type="color" defaultValue="#0f172a" aria-label="Background colour" />
-                </div>
-              </div>
-              <PreviewSelect id="tone" label="Tone of voice" options={TONES} />
               <PreviewSelect id="voice" label="Voiceover" options={VOICES} />
               <PreviewSelect id="music" label="Music" options={MUSIC} />
               <PreviewSelect id="captions" label="Captions" options={CAPTIONS} />
               <div className="span-2">
-                <label htmlFor="email">Email me when it is ready</label>
+                <label htmlFor="email">
+                  Email me when it is ready <Soon />
+                </label>
                 <input id="email" type="email" placeholder="you@example.com" autoComplete="off" />
               </div>
             </div>

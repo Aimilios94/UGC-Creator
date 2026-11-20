@@ -3,12 +3,18 @@
 All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https://keepachangelog.com). The *why* behind changes lives in [DECISIONS.md](DECISIONS.md).
 
 ## [Unreleased]
+### Added
+- Campaign brief and brand kit (M2 item 1, [D25](DECISIONS.md)). New tables `campaigns`, `brand_kits`, `variants`; `jobs` gain `campaign_id` and a `brand` snapshot. The brief gains goal, theme and ad type. `GET /campaigns`; `GET` and `PUT /brand-kit`, `POST /brand-kit/logo` (sanitised like product photos; transparency kept). All of it is private to the browser session; saving needs the access code. The first ad of a campaign creates it from the brief; later ads join with `campaign_id`. Variant A (the first hook) is created at approval.
+- The storyboard rule against invented testimonials, checked in code (`services/storyboard_checks.py`): first-person claims of use, experience or results, reviews, ratings, awards and time-based results are flagged unless the brief states them. A flagged storyboard is rewritten once with the lines as feedback; lines still flagged are marked on the Storyboard step and Approve is refused until they are edited.
+- Create page: goal, theme, ad type, campaign and brand kit (logo, three colours, caption font, tone) are live and their "Soon" tags are gone. Model preset, Hook Lab, voiceover, music, captions and email stay "Soon". Storyboard step: title, call to action and hooks are editable. Generate step: progress and clips for every scene.
+
 ### Changed
+- Every ad renders three scenes in code and tests (`RENDER_SCENES=3`, estimate 1.17 USD ≈ 1.02 EUR). Cloud Run stays pinned to 1 scene (`RENDER_SCENES: "1"` in `deploy/gcp/*.env.yaml`) until the M2 deploy, which sets 3 with the owner's go.
 - CI: `actions/checkout`, `actions/setup-python` and `actions/setup-node` moved to their current major version (v7), and every job runs on a pinned `ubuntu-24.04` runner instead of `ubuntu-latest` ([D23](DECISIONS.md)). The Node 20 deprecation warnings are gone.
 - GitHub ruleset "main protection" on `main`: force pushes and deletion blocked; the CI checks `frontend`, `backend` and `docker` must pass on an up-to-date branch; no required reviews, no bypass ([D23](DECISIONS.md), settings in `docs/SETUP.md`).
 
 ### Docs
-- Privacy notice (in-app and `docs/PRIVACY.md`): the "Soon" fields on the Create page stay in the browser and are not sent.
+- Privacy notice (in-app and `docs/PRIVACY.md`): the "Soon" fields on the Create page stay in the browser and are not sent. Updated for M2 item 1: campaigns and the brand kit (with the logo) are stored per browser session, and the M2 cleanup deletes them after 30 days without use.
 - M2 design note started (`docs/notes/m2-full-ads.md`); feedback round 2 records what the landing assets taught for the video pipeline; D24 records the project spend so far (about 8.9 EUR of the ~26 EUR API budget).
 
 M2 (full 3-scene ads) continues.

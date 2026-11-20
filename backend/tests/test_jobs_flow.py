@@ -31,7 +31,8 @@ def test_brief_to_storyboard_to_playable_video(client, ctx, session_id, photo_by
     done = client.get(f"/jobs/{job['id']}", headers={"X-Session-Id": session_id}).json()
     assert done["status"] == "done", done["last_error"]
     kinds = {(a["kind"], a["scene_idx"]) for a in done["assets"]}
-    assert kinds == {("upload", None), ("image", 0), ("video", 0)}
+    assert kinds == {("upload", None)} | {(k, i) for k in ("image", "video") for i in range(3)}  # 3 scenes (M2)
+    assert done["variants"] == [{"label": "A", "hook_idx": 0, "status": "done"}]
     assert done["spend"]["eur"] > 0 and done["spend"]["eur"] <= done["cost_cap"]["eur"]
 
     video = next(a for a in done["assets"] if a["kind"] == "video")
@@ -86,7 +87,7 @@ def test_double_clicked_approve_creates_one_job(client, ctx, session_id, photo_b
     assert rows == 1 and scenes == 3
     assert worker.run_once(ctx) is True
     assert worker.run_once(ctx) is False  # only one job was ever queued
-    assert len([r for r in ctx.media.submits if r.kind == "video"]) == 1
+    assert len([r for r in ctx.media.submits if r.kind == "video"]) == 3  # one clip per scene, once
 
 
 def test_storyboard_is_editable_until_approved(client, session_id, photo_bytes):
