@@ -428,3 +428,13 @@ textarea.auto-grow { resize: vertical; overflow: hidden; line-height: 1.5; }
 .scene-head .btn { flex-shrink: 0; }
 .add-scene { margin-top: 12px; }
 .make-explain { margin: 4px 0 0; }
+
+/* Clearer prompts, lengths and prices */
+.ai-instructions { margin-top: 14px; padding: 12px; border: 1px dashed rgba(99, 102, 241, 0.5); border-radius: var(--radius-md); background: rgba(99, 102, 241, 0.06); display: grid; gap: 12px; }
+.ai-instructions .ai-title { margin: 0; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.ai-field .hint { margin: 0 0 6px; }
+.scene .field-row { flex-wrap: wrap; }
+.length-note { flex-basis: 100%; }
+.cost-box .row.total { border-top: 1px solid var(--card-border); padding-top: 6px; margin-top: 2px; }
+.cost-box p { margin: 4px 0 0; max-width: 360px; }
+.cost-box { max-width: 420px; }

@@ -182,8 +182,11 @@ def mock_storyboard(brief: dict) -> dict:
         template = scenes
         scenes = [dict(template[0 if i == 0 else (2 if i == len(parts) - 1 else 1)]) for i in range(len(parts))]
         for scene, part in zip(scenes, parts, strict=True):
-            scene["description"] = part[:800]
-            scene["image_prompt"] = (part + " " + keep)[:2500]
+            # Like the real writer: a short summary, a still first frame, and the timed movement.
+            plain = re.sub(r"^.*?\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\s*(\([^)]*\))?:?\s*", "", part).strip() or part
+            first = SENTENCE_END.split(plain)[0]
+            scene["description"] = (first if len(first) <= 160 else first[:157].rstrip() + "...")[:800]
+            scene["image_prompt"] = (f"Still first frame of this scene, before anything moves: {first} {keep}")[:2500]
             scene["motion_prompt"] = part[:2200]
             scene["voiceover"] = _spoken(part)
             scene["duration_s"] = _seconds(part) or 5

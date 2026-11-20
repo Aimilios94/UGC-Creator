@@ -144,7 +144,7 @@ function Chip({ name, value, checked, onChange, children, disabled }) {
   );
 }
 
-function CostBox({ rows, spend, cap, currency }) {
+function CostBox({ rows, spend, cap, currency, total: shownTotal = null, note = '' }) {
   const total = rows.reduce((acc, [, m]) => add(acc, m), ZERO);
   const over = spend.eur + total.eur > cap.eur + 1e-9;
   return (
@@ -152,9 +152,16 @@ function CostBox({ rows, spend, cap, currency }) {
       {rows.map(([label, m]) => (
         <div className="row" key={label}>
           <span>{label}</span>
-          <strong>{formatMoney(m, currency)}</strong>
+          <span>{formatMoney(m, currency)}</span>
         </div>
       ))}
+      {shownTotal && (
+        <div className="row total">
+          <strong>Total</strong>
+          <strong>{formatMoney(shownTotal, currency)}</strong>
+        </div>
+      )}
+      {note && <p className="muted small">{note}</p>}
       <div className="row muted small">
         <span>Spent so far on this ad</span>
         <span>{formatMoney(spend, currency)}</span>
@@ -188,17 +195,17 @@ function SceneLength({ id, value, onChange, disabled, prices, currency }) {
           disabled={disabled}
         />{' '}
         s
-        {prices && (
-          <span className="muted small">
-            {' '}
-            {renderSeconds(value)} s clip,{' '}
-            {formatMoney(
-              { usd: prices.video_per_second.usd * renderSeconds(value), eur: prices.video_per_second.eur * renderSeconds(value) },
-              currency,
-            )}
-          </span>
-        )}
       </span>
+      {prices && (
+        <span className="muted small length-note">
+          This scene: the AI makes a {renderSeconds(value)} s clip
+          {value < renderSeconds(value) ? ` and the first ${value} s are used` : ''} ·{' '}
+          {formatMoney(
+            { usd: prices.video_per_second.usd * renderSeconds(value), eur: prices.video_per_second.eur * renderSeconds(value) },
+            currency,
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -230,6 +237,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const [ownHook, setOwnHook] = useState('');
   const [mode, setMode] = useState('video');
   const [lengthText, setLengthText] = useState(null); // the length box while typing
+  const [lengthNote, setLengthNote] = useState('');
   const [sound, setSound] = useState({ voice: job.brief.voice, music: job.brief.music, captions: job.brief.captions });
   const n = board?.scenes.length ?? 3;
   const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice), [board, config, n, sound.voice]);
@@ -266,8 +274,16 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const minVideo = MIN_SCENE_S * n + endCard;
   const maxVideo = MAX_SCENE_S * n + endCard;
   const applyVideoLength = (text) => {
-    const total = Math.max(minVideo, Math.min(maxVideo, Math.round(Number(text) || videoLength)));
+    const wanted = Math.round(Number(text) || videoLength);
+    const total = Math.max(minVideo, Math.min(maxVideo, wanted));
     setLengthText(null);
+    setLengthNote(
+      wanted < minVideo
+        ? `${wanted} s is too short for ${n} ${n === 1 ? 'scene' : 'scenes'}: each scene needs at least 2 s, plus the ${endCard} s end card, so the shortest is ${minVideo} s. For a shorter video, remove a scene in Scenes below.`
+        : wanted > maxVideo
+          ? `${wanted} s is too long for ${n} ${n === 1 ? 'scene' : 'scenes'}: each scene can be at most 10 s, so the longest is ${maxVideo} s. For a longer video, add a scene in Scenes below.`
+          : '',
+    );
     if (total === videoLength) return;
     const parts = splitLength(total - endCard, n);
     change({ ...board, scenes: board.scenes.map((s, i) => (i < n ? { ...s, duration_s: parts[i] } : s)) });
@@ -485,6 +501,11 @@ function StoryboardStep({ job, onChange, readOnly }) {
               <br />
               With {n} {n === 1 ? 'scene' : 'scenes'} you can choose {minVideo} to {maxVideo} s (each scene 2–10 s).
             </p>
+            {lengthNote && (
+              <p className="notice small" role="status">
+                <AlertTriangle size={14} aria-hidden="true" /> <span>{lengthNote}</span>
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -516,7 +537,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   </button>
                 )}
               </div>
-              <FieldLabel htmlFor={`d${i}`} text="What we see" help={HELP.description} />
+              <FieldLabel htmlFor={`d${i}`} text="Summary (for you)" help={HELP.description} />
               <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} maxLength={800} disabled={disabled} />
               <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />
               <input id={`v${i}`} className={cls(`scenes.${i}.voiceover`)} value={s.voiceover} onChange={onScene(i, 'voiceover')} maxLength={220} disabled={disabled} />
@@ -552,13 +573,23 @@ function StoryboardStep({ job, onChange, readOnly }) {
               />
 
               {showPrompts && (
-                <>
-                  <FieldLabel htmlFor={`ip${i}`} text="Image prompt" help={HELP.image_prompt} />
-                  <AutoTextarea id={`ip${i}`} minRows={4} value={s.image_prompt} onChange={onScene(i, 'image_prompt')} maxLength={2500} disabled={disabled || s.image_source !== 'generate'} />
-                  {s.image_source !== 'generate' && <p className="muted small">Not used: this scene uses your own image.</p>}
-                  <FieldLabel htmlFor={`mp${i}`} text="Motion prompt (shot list)" help={HELP.motion_prompt} />
-                  <AutoTextarea id={`mp${i}`} minRows={4} value={s.motion_prompt} onChange={onScene(i, 'motion_prompt')} maxLength={2200} disabled={disabled} />
-                </>
+                <div className="ai-instructions">
+                  <p className="ai-title">Instructions sent to the AI for this scene</p>
+                  <div className="ai-field">
+                    <FieldLabel htmlFor={`ip${i}`} text="1. Starting picture" help={HELP.image_prompt} />
+                    <p className="muted small hint">What the first frame shows: people, place, light, colours. The clip starts from this picture.</p>
+                    {s.image_source === 'generate' ? (
+                      <AutoTextarea id={`ip${i}`} minRows={3} value={s.image_prompt} onChange={onScene(i, 'image_prompt')} maxLength={2500} disabled={disabled} />
+                    ) : (
+                      <p className="muted small">Not needed: this scene starts from your own picture.</p>
+                    )}
+                  </div>
+                  <div className="ai-field">
+                    <FieldLabel htmlFor={`mp${i}`} text="2. Movement in the clip" help={HELP.motion_prompt} />
+                    <p className="muted small hint">What moves, second by second: the camera, the people, the light, and how the scene ends.</p>
+                    <AutoTextarea id={`mp${i}`} minRows={3} value={s.motion_prompt} onChange={onScene(i, 'motion_prompt')} maxLength={2200} disabled={disabled} />
+                  </div>
+                </div>
               )}
             </article>
           );
@@ -645,13 +676,17 @@ function StoryboardStep({ job, onChange, readOnly }) {
           </p>
           {estimate && (
             <CostBox
-              rows={
-                mode === 'video' || newImages === 0
-                  ? [['Pictures and video', estimate.total]]
-                  : [
-                      ['Images (now)', estimate.images],
-                      ['Video (later, if you choose it)', estimate.video],
-                    ]
+              rows={[
+                ...(newImages > 0
+                  ? [[`${newImages} starting ${newImages === 1 ? 'picture' : 'pictures'}${mode === 'images' ? ' (now)' : ''}`, estimate.images]]
+                  : []),
+                [`Video: ${n} ${n === 1 ? 'clip' : 'clips'}${sound.voice !== 'none' ? ' and voiceover' : ''}${mode === 'images' && newImages > 0 ? ' (later, only if you choose it)' : ''}`, estimate.video],
+              ]}
+              total={mode === 'video' || newImages === 0 ? estimate.total : null}
+              note={
+                newImages > 0
+                  ? 'The video model animates a picture, so each scene without your own picture first gets a starting picture made from your product photo.'
+                  : 'Every scene starts from your own picture, so no pictures are made.'
               }
               spend={job.spend}
               cap={job.cost_cap}
@@ -749,7 +784,7 @@ function ImagesStep({ job, onChange, readOnly = false }) {
                 prices={config?.prices}
                 currency={currency}
               />
-              <FieldLabel htmlFor={`imp${i}`} text="Motion prompt (shot list)" help={HELP.motion_prompt} />
+              <FieldLabel htmlFor={`imp${i}`} text="Movement in the clip (sent to the AI)" help={HELP.motion_prompt} />
               <AutoTextarea id={`imp${i}`} minRows={4} value={s.motion_prompt} onChange={(e) => editScene(i, 'motion_prompt', e.target.value)} maxLength={2200} disabled={locked} />
             </article>
           );

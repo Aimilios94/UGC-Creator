@@ -7,7 +7,7 @@ export const HELP = {
   problem_first: 'Opens with a problem the viewer knows, then shows the product as the fix.',
   three_reasons: 'A quick list ("3 reasons…"): promises value in a few seconds.',
   unboxing_tease: 'Builds curiosity by revealing the product step by step.',
-  description: 'A plain description of the picture, for you. The image model uses the image prompt below.',
+  description: 'A short summary of the scene, for you to read. The AI uses the two instructions below it.',
   voiceover:
     'The line the AI voice says in this scene (about 12 words, about 4 seconds). It is also shown as captions.',
   on_screen_text: 'A short headline burned onto the top of the video during this scene.',
@@ -15,7 +15,7 @@ export const HELP = {
     'Exact instructions for the image model: subject, setting, framing, camera and lens, light, colours and style.',
   motion_prompt:
     'Shot list for the video model: what happens second by second, how the camera moves, and the final frame. More detail gives a better clip.',
-  clip: 'How long this scene is on screen: 2 to 10 seconds. The video model makes 5 s or 10 s clips (paid per second of clip); a shorter scene is cut from its clip.',
+  clip: 'How long this scene is on screen: 2 to 10 seconds. The video AI only makes 5 s or 10 s clips and is paid for the whole clip; for a shorter scene we use the first seconds of it.',
   ad_length: 'How long the whole finished video is, including the 2-second end card with your offer and button. It is split evenly over the scenes (each 2 to 10 s); you can still set each scene in Scenes.',
   scenes: 'Each scene: what we see, the spoken line, the headline, where its image comes from, its length and the prompts. Open it only if you want to check or change something.',
   make: 'Images first: you check the pictures and can still edit before paying for video. Video: images and video in one go, for when everything is ready.',
