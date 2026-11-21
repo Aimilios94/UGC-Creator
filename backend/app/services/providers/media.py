@@ -42,6 +42,9 @@ class MediaRequest:
     arguments: dict
     input_image: InputImage
     image_field: str  # "image_urls" (list) or "image_url"
+    # The picture the clip must end on (Kling `tail_image_url`, D30): the next scene's own picture.
+    tail_image: InputImage | None = None
+    tail_field: str = "tail_image_url"
 
 
 @dataclass
@@ -121,6 +124,8 @@ class FalMedia:
         url = self._input_url(req.input_image)
         args = dict(req.arguments)
         args[req.image_field] = [url] if req.image_field == "image_urls" else url
+        if req.tail_image is not None:
+            args[req.tail_field] = self._input_url(req.tail_image)
         handle = self._client.submit(req.model, args, headers=self.headers)
         return handle.request_id
 
@@ -184,7 +189,8 @@ class MockMedia:
         if kind == "video":
             if req is not None and req.input_image.data:
                 seconds = int(req.arguments.get("duration", "5"))
-                return MediaResult(content_type="video/mp4", data=_mock_clip(req.input_image.data, seconds))
+                tail = req.tail_image.data if req.tail_image is not None else None
+                return MediaResult(content_type="video/mp4", data=_mock_clip(req.input_image.data, seconds, tail))
             return MediaResult(content_type="video/mp4", data=MOCK_CLIP.read_bytes())
         ratio = prediction_id_ratio(self.submits, prediction_id)
         w, h = _RATIO_SIZES.get(ratio, (540, 960))
@@ -233,23 +239,55 @@ def _mock_picture(photo: bytes, w: int, h: int) -> bytes:
     return buf.getvalue()
 
 
-def _mock_clip(picture: bytes, seconds: int) -> bytes:
-    """Local preview of a clip: the scene's starting picture with a slow push-in (no AI motion)."""
+def _mock_clip(picture: bytes, seconds: int, tail: bytes | None = None) -> bytes:
+    """Local preview of a clip: the scene's starting picture with a slow push-in (no AI motion).
+    With an end picture, the clip moves on to it and its last frame is that picture, as Kling's
+    end frame does, so a cut to the next scene matches."""
     import subprocess
     import tempfile
 
+    from PIL import Image, ImageOps
+
     with tempfile.TemporaryDirectory() as tmp:
-        src = Path(tmp) / "in.jpg"
+        src = Path(tmp) / "in.png"
         dst = Path(tmp) / "out.mp4"
-        src.write_bytes(picture)
         frames = seconds * 25
-        subprocess.run(  # noqa: S603 - argument list, no shell
-            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),  # noqa: S607
-             "-vf", f"scale=720:-2,zoompan=z='min(zoom+0.0012,1.2)':d={frames}:x='iw/2-(iw/zoom/2)':"
-             f"y='ih/2-(ih/zoom/2)':s=540x960:fps=25,scale=trunc(iw/2)*2:trunc(ih/2)*2",
-             "-frames:v", str(frames), "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(dst)],
-            check=True,
-        )  # fmt: skip
+        with Image.open(io.BytesIO(picture)) as im:  # the clip keeps the picture's shape, as Kling does
+            w, h = (
+                (540, round(540 * im.height / im.width / 2) * 2)
+                if im.width < im.height
+                else (round(540 * im.width / im.height / 2) * 2, 540)
+            )
+            ImageOps.fit(im.convert("RGB"), (w, h)).save(src)
+        move = (
+            f"scale={w * 2}:{h * 2},zoompan=z='min(zoom+0.0012,1.2)':d={frames}:x='iw/2-(iw/zoom/2)':"
+            f"y='ih/2-(ih/zoom/2)':s={w}x{h}:fps=25"
+        )
+        args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src)]
+        if tail is None:
+            args += ["-vf", move]
+        else:
+            end = Path(tmp) / "tail.png"
+            with Image.open(io.BytesIO(tail)) as im:
+                ImageOps.fit(im.convert("RGB"), (w, h)).save(end)
+            fade = round(seconds * 0.4, 2)
+            args += [
+                "-loop",
+                "1",
+                "-t",
+                str(seconds),
+                "-i",
+                str(end),
+                "-filter_complex",
+                f"[0:v]{move},trim=duration={seconds},setpts=PTS-STARTPTS,fps=25[a];"
+                f"[1:v]fps=25,setsar=1,format=yuv420p,trim=duration={seconds},setpts=PTS-STARTPTS,fps=25[b];"
+                f"[a]format=yuv420p,setsar=1[a2];[a2][b]xfade=transition=fade:duration={fade}:"
+                f"offset={seconds - fade - 0.04:.2f}[v]",
+                "-map",
+                "[v]",
+            ]
+        args += ["-frames:v", str(frames), "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(dst)]
+        subprocess.run(args, check=True)  # noqa: S603 - argument list, no shell; ffmpeg from PATH
         return dst.read_bytes()
 
 

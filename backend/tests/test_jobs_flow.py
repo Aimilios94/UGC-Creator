@@ -9,7 +9,7 @@ import httpx
 
 from app import worker
 from conftest import BRIEF, new_session
-from helpers import approve, create_job, make_video
+from helpers import approve, create_job, make_video, separate_shots
 
 
 def test_brief_to_storyboard_to_playable_video(client, ctx, session_id, photo_bytes):
@@ -21,8 +21,14 @@ def test_brief_to_storyboard_to_playable_video(client, ctx, session_id, photo_by
     assert [s["role"] for s in job["storyboard"]["scenes"]] == ["hook", "demo", "cta"]
     assert {h["formula"] for h in job["storyboard"]["hooks"]} == {"pov", "problem_first", "three_reasons"}
     assert job["analysis"]["people_in_photo"] is False
-    assert {s["stage"]: s["status"] for s in job["stages"]} == {"analyze": "done", "storyboard": "done"}
+    assert {s["stage"]: s["status"] for s in job["stages"]} == {
+        "analyze": "done",
+        "storyboard": "done",
+        "continuity": "done",
+    }
     assert ctx.media.submits == []  # nothing paid renders before approval
+    assert job["storyboard"]["continuity"] == "continuous"  # the default since D30
+    job = separate_shots(client, session_id, job)  # this flow counts one picture per scene
 
     r = approve(client, session_id, job["id"])
     assert r.status_code == 202 and r.json()["status"] == "queued" and r.json()["phase"] == "images"
@@ -95,7 +101,7 @@ def test_an_asset_url_stops_working_after_it_expires(client, ctx, session_id, ph
 
 def test_double_clicked_approve_creates_one_job(client, ctx, session_id, photo_bytes):
     """Guardrail (M1): a double-clicked or retried Approve creates exactly one job row."""
-    job = create_job(client, session_id, photo_bytes).json()
+    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
     first = approve(client, session_id, job["id"])
     second = approve(client, session_id, job["id"])
     assert first.status_code == second.status_code == 202

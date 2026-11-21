@@ -56,6 +56,12 @@ function splitLength(total, n) {
 // A scene after the first, in a continuous shot, without a picture of its own, starts from the
 // previous scene's last frame (no new picture).
 const isChained = (board, i, s) => board?.continuity === 'continuous' && i > 0 && s.image_source === 'generate';
+// D30: in a connected video, a scene with its own picture is reached by the clip before it,
+// which ends on that picture.
+const endsOnNext = (board, i) => {
+  const next = board?.scenes?.[i + 1];
+  return board?.continuity === 'continuous' && Boolean(next) && next.image_source !== 'generate';
+};
 
 function estimateBoard(board, prices, n = 3, voice = 'marin') {
   let images = ZERO;
@@ -215,7 +221,7 @@ function CostBox({ rows, spend, cap, currency, total: shownTotal = null, note = 
   );
 }
 
-function SceneLength({ id, value, onChange, disabled, prices, currency }) {
+function SceneLength({ id, value, onChange, disabled, prices, currency, endsOnNext: fitsNext = false }) {
   return (
     <div className="field-row">
       <label htmlFor={id} className="label-like">
@@ -237,7 +243,12 @@ function SceneLength({ id, value, onChange, disabled, prices, currency }) {
       {prices && (
         <span className="muted small length-note">
           This scene: the AI makes a {renderSeconds(value)} s clip
-          {value < renderSeconds(value) ? ` and the first ${value} s are used` : ''} ·{' '}
+          {value < renderSeconds(value)
+            ? fitsNext
+              ? `, played a little faster in ${value} s so it ends on the next picture`
+              : ` and the first ${value} s are used`
+            : ''}{' '}
+          ·{' '}
           {formatMoney(
             { usd: prices.video_per_second.usd * renderSeconds(value), eur: prices.video_per_second.eur * renderSeconds(value) },
             currency,
@@ -420,7 +431,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
       ...board,
       scenes: (() => {
         const scenes = [...board.scenes];
-        const blank = { ...scenes[Math.max(0, scenes.length - 2)], uid: '', description: '', voiceover: '', on_screen_text: '', image_prompt: '', motion_prompt: '', image_source: 'generate', image_upload_key: null, duration_s: 3 };
+        const blank = { ...scenes[Math.max(0, scenes.length - 2)], uid: '', description: '', voiceover: '', on_screen_text: '', image_prompt: '', motion_prompt: '', starts: '', ends: '', image_source: 'generate', image_upload_key: null, duration_s: 3 };
         scenes.splice(Math.max(scenes.length - 1, 1), 0, blank);
         const roles = rolesFor(scenes.length);
         return scenes.map((x, k) => ({ ...x, role: roles[k] }));
@@ -449,6 +460,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
       on_screen_text: a.on_screen_text || b.on_screen_text,
       motion_prompt: both(a.motion_prompt, b.motion_prompt ? `Then, in the same take: ${shiftTimes(b.motion_prompt, a.duration_s)}` : '').slice(0, 2200),
       duration_s: Math.min(MAX_SCENE_S, a.duration_s + b.duration_s),
+      ends: b.ends || a.ends || '', // the joined shot opens like the first part and ends like the second
     };
     const next = [...scenes.slice(0, i), merged, ...scenes.slice(i + 2)];
     const roles = rolesFor(next.length);
@@ -533,16 +545,20 @@ function StoryboardStep({ job, onChange, readOnly }) {
           How the scenes connect <Help text={HELP.continuity} />
         </h2>
         <div className="choice-group" role="radiogroup" aria-label="How the scenes connect">
-          <Choice name="continuity" value="continuous" checked={board.continuity === 'continuous'} onChange={() => change({ ...board, continuity: 'continuous' })} disabled={disabled} title="One continuous shot">
+          <Choice name="continuity" value="continuous" checked={board.continuity === 'continuous'} onChange={() => change({ ...board, continuity: 'continuous' })} disabled={disabled} title="One connected video">
             <span className="muted small">
-              Each scene starts exactly where the previous one ended, so the camera never jumps. Only the first scene needs a starting picture.
+              Every scene flows into the next, with no jump. Only the first scene needs a picture; later scenes continue from the one before, or use your own picture.
             </span>
           </Choice>
           <Choice name="continuity" value="separate" checked={board.continuity === 'separate'} onChange={() => change({ ...board, continuity: 'separate' })} disabled={disabled} title="Separate shots">
-            <span className="muted small">Each scene starts from its own picture, like cuts between different shots.</span>
+            <span className="muted small">Each scene starts from its own picture, like cuts between different shots, with a soft blend at each cut.</span>
           </Choice>
         </div>
-        <p className="muted small">Either way, every cut gets a short soft blend.</p>
+        {board.continuity === 'continuous' && (
+          <p className="flow-note small">
+            Every scene connects to the next one, also when you use your own pictures: the clip before a scene with your picture ends on that picture, so the cut matches.
+          </p>
+        )}
       </section>
 
       <details className="card fold" open={Boolean(board.notes)}>
@@ -734,6 +750,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     </label>
                   )}
                   {s.image_source === 'upload' && own && <img className="scene-image" src={own.url} alt={`Your picture for scene ${i + 1}`} />}
+                  {i > 0 && endsOnNext(board, i - 1) && <p className="flow-note small">Scene {i}&rsquo;s clip ends on this picture, so the cut matches.</p>}
                   <SceneLength
                     id={`len${i}`}
                     value={s.duration_s}
@@ -741,6 +758,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     disabled={disabled}
                     prices={config?.prices}
                     currency={currency}
+                    endsOnNext={endsOnNext(board, i)}
                   />
                 </div>
               </div>
@@ -753,7 +771,9 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   <div className="ai-field">
                     <FieldLabel htmlFor={`ip${i}`} text="1. Starting picture (for the picture AI)" help={HELP.image_prompt} />
                     <p className="muted small hint">One frozen moment: the first frame, made from your product photo.</p>
-                    {s.image_source === 'generate' ? (
+                    {isChained(board, i, s) ? (
+                      <p className="muted small">Not needed: this scene starts from the last frame of scene {i}.</p>
+                    ) : s.image_source === 'generate' ? (
                       <AutoTextarea id={`ip${i}`} minRows={3} value={s.image_prompt} onChange={onScene(i, 'image_prompt')} maxLength={2500} disabled={disabled} />
                     ) : (
                       <p className="muted small">Not needed: this scene starts from your own picture.</p>
@@ -763,8 +783,28 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     <FieldLabel htmlFor={`mp${i}`} text="2. Movement (for the video AI)" help={HELP.motion_prompt} />
                     <p className="muted small hint">What changes, second by second: camera, people, light, the last frame.</p>
                     <AutoTextarea id={`mp${i}`} minRows={3} value={s.motion_prompt} onChange={onScene(i, 'motion_prompt')} maxLength={2200} disabled={disabled} />
+                    {endsOnNext(board, i) && (
+                      <p className="muted small hint">Ends on scene {i + 2}&rsquo;s picture, so the cut matches.</p>
+                    )}
                   </div>
                 </div>
+                {board.continuity === 'continuous' && (
+                  <div className="ai-flow">
+                    <FieldLabel htmlFor={`fs${i}`} text="3. How it joins the scenes around it (added for you)" help={HELP.flow} />
+                    <p className="muted small hint">Only the AI gets this; your story text stays as it is.</p>
+                    <div className="ai-pair">
+                      <div className="ai-field">
+                        <label className="muted small" htmlFor={`fs${i}`}>{i === 0 ? 'How the ad opens' : `How it starts (matches the end of scene ${i})`}</label>
+                        <AutoTextarea id={`fs${i}`} minRows={2} value={s.starts || ''} onChange={onScene(i, 'starts')} maxLength={800} disabled={disabled} placeholder="Nothing added" />
+                      </div>
+                      <div className="ai-field">
+                        <label className="muted small" htmlFor={`fe${i}`}>{i === n - 1 ? 'How it ends (before the end card)' : `How it ends (matches the start of scene ${i + 2})`}</label>
+                        <AutoTextarea id={`fe${i}`} minRows={2} value={s.ends || ''} onChange={onScene(i, 'ends')} maxLength={800} disabled={disabled} placeholder="Nothing added" />
+                      </div>
+                    </div>
+                    {board.keep_same && <p className="muted small">Same in every scene: {board.keep_same}</p>}
+                  </div>
+                )}
               </details>
             </article>
           );
@@ -966,8 +1006,9 @@ function ImagesStep({ job, onChange, readOnly = false }) {
                 <p className="muted small">No image.</p>
               )}
               <p className="muted small">
-                {s.image_source === 'generate' ? 'Generated' : s.image_source === 'product' ? 'Your product photo' : 'Your own image'}
+                {chained ? `The last frame of scene ${i}` : s.image_source === 'generate' ? 'Generated' : s.image_source === 'product' ? 'Your product photo' : 'Your own image'}
               </p>
+              {endsOnNext(board, i) && <p className="flow-note small">Its clip ends on scene {i + 2}&rsquo;s picture, so the cut matches.</p>}
               <FieldLabel htmlFor={`iv${i}`} text="Voiceover" help={HELP.voiceover} />
               <input id={`iv${i}`} value={s.voiceover} onChange={(e) => editScene(i, 'voiceover', e.target.value)} maxLength={400} disabled={locked} />
               <FieldLabel htmlFor={`it${i}`} text="On-screen text" help={HELP.on_screen_text} />
@@ -979,6 +1020,7 @@ function ImagesStep({ job, onChange, readOnly = false }) {
                 disabled={locked}
                 prices={config?.prices}
                 currency={currency}
+                endsOnNext={endsOnNext(board, i)}
               />
               <FieldLabel htmlFor={`imp${i}`} text="Movement in the clip (sent to the AI)" help={HELP.motion_prompt} />
               <AutoTextarea id={`imp${i}`} minRows={4} value={s.motion_prompt} onChange={(e) => editScene(i, 'motion_prompt', e.target.value)} maxLength={2200} disabled={locked} />

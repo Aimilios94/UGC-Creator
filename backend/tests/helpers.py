@@ -26,6 +26,15 @@ def create_job(
     )
 
 
+def separate_shots(client, session_id: str, job: dict) -> dict:
+    """Switch a draft to separate shots (each scene its own picture), as tests of rules that count
+    one picture per scene were written before the continuous shot became the default (D30)."""
+    board = {**job["storyboard"], "continuity": "separate"}
+    r = client.put(f"/jobs/{job['id']}/storyboard", json=board, headers={"X-Session-Id": session_id})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
 def approve(client, session_id: str, job_id: str, code: str | None = None):
     headers = {"X-Session-Id": session_id}
     if code is not None:

@@ -4,7 +4,7 @@ The milestone plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-p
 
 ## Now
 - **M1** ✅ secure base and first pipeline leg (merged and live, 19 Nov 2026).
-- **M2** (in progress on `v2`, not deployed): full ads. Done: CI on current actions and a ruleset on `main` (D23); campaign brief, brand kit and the testimonial rule (D25); compose, voice and music (D26); the user-steered storyboard, pictures then video, 1–5 scenes, video length, continuous shot and style notes (D27–D29). Still to do: themes, cost tracking and History, Sentry and the docs page, the cleanup cron and "delete my data", then the M2 deploy. Before M2: a landing refresh in the v1 look (D24, PR #4).
+- **M2** (in progress on `v2`, not deployed): full ads. Done: CI on current actions and a ruleset on `main` (D23); campaign brief, brand kit and the testimonial rule (D25); compose, voice and music (D26); the user-steered storyboard, pictures then video, 1–5 scenes, video length, continuous shot and style notes (D27–D29); every scene flows into the next, also with own pictures (D30). Still to do: themes, cost tracking and History, Sentry and the docs page, the cleanup cron and "delete my data", then the M2 deploy. Before M2: a landing refresh in the v1 look (D24, PR #4).
 - **Before 6 Jan 2027:** replace the voice model (OpenAI shuts `gpt-4o-mini-tts` down; D26).
 - Then: M3 judge + Hook Lab + Post Kit, M4 measured public MVP, then v2.1 (M5–M6).
 

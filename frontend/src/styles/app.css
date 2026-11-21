@@ -449,6 +449,10 @@ details.ai-instructions > summary::-webkit-details-marker { display: none; }
 details.ai-instructions > summary::before { content: '▸ '; color: var(--text-secondary); }
 details.ai-instructions[open] > summary::before { content: '▾ '; }
 .ai-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 12px; }
+.ai-flow { margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(99, 102, 241, 0.35); }
+.ai-flow .ai-pair { margin-top: 6px; }
+.ai-flow label.muted { display: block; margin-bottom: 4px; }
+.flow-note { margin: 10px 0 0; padding: 8px 12px; border-left: 3px solid var(--accent-primary); background: rgba(99, 102, 241, 0.08); border-radius: 6px; color: var(--text-secondary); }
 
 .hook-intro { margin: 12px 0 4px; max-width: 760px; }
 

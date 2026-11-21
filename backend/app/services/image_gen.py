@@ -37,8 +37,16 @@ def plan_scene_image(
     product_sha256: str,
     style: str = "realistic",
     notes: str = "",
+    keep_same: str | None = None,
 ) -> PlannedRender:
+    """`keep_same` is set in a continuous shot (D30): then the picture is also the scene's first moment
+    as the continuity check wrote it, with what stays the same in every scene."""
     prompt = scene.image_prompt.strip() or scene.description.strip()
+    if keep_same is not None:
+        if scene.starts.strip():
+            prompt += " First moment of the shot: " + scene.starts.strip()
+        if keep_same.strip():
+            prompt += " Same in every scene: " + keep_same.strip()
     if notes.strip():
         prompt += " Style and world for the whole ad: " + notes.strip()
     prompt += FIDELITY + " " + IMAGE_STYLE.get(style, IMAGE_STYLE["realistic"])

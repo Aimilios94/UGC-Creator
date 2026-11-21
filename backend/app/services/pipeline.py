@@ -29,7 +29,7 @@ from ..config import Settings
 from ..errors import BudgetExceeded
 from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Storyboard, render_seconds
 from ..repository import Database
-from . import analyze, storyboard
+from . import analyze, continuity, storyboard
 from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into, frame_at, probe_duration
 from .image_gen import PlannedRender, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
@@ -188,8 +188,27 @@ def write_board(
             sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
             if sr:
                 repo.stage_done(ctx.db, sr["id"], {"model": llm.model_name, "rewrite_failed": True})
+    board = check_scene_flow(ctx, job_id, board, brief, attempt=attempt)
     repo.set_storyboard(ctx.db, job_id, board.model_dump(mode="json"))
     return board
+
+
+def check_scene_flow(ctx: Context, job_id: str, board: Storyboard, brief: Brief, attempt: int = 1) -> Storyboard:
+    """The continuity check (D30): one cheap LLM call that writes how each scene starts and ends, so
+    every cut matches. It fills only the hidden AI instructions; if it fails, the storyboard is kept."""
+    llm = ctx.llm_factory("continuity")
+    try:
+        return _run_llm_stage(
+            ctx,
+            job_id,
+            "continuity",
+            llm,
+            lambda: continuity.check_continuity(llm, board, brief),
+            attempt=attempt,
+        )
+    except Exception:  # noqa: BLE001 - the ad still works without it; the scenes keep their own prompts
+        log.exception("continuity check failed for job %s; keeping the storyboard as written", job_id)
+        return board
 
 
 def prepare_storyboard(ctx: Context, job: dict, photo: bytes, content_type: str) -> tuple[ProductAnalysis, Storyboard]:
@@ -245,8 +264,12 @@ def _store_output(ctx: Context, job_id: str, stage: str, idx: int, data: bytes, 
     )
 
 
-def run_media_stage(ctx: Context, job: dict, stage: str, idx: int, plan: Callable[[], PlannedRender]) -> dict:
-    """Run one paid render, resuming from stage_runs. Returns the asset row."""
+def run_media_stage(
+    ctx: Context, job: dict, stage: str, idx: int, plan: Callable[[], PlannedRender], meta: dict | None = None
+) -> dict:
+    """Run one paid render, resuming from stage_runs. Returns the asset row. `meta` is kept with the
+    finished stage (for example that a clip ends on the next scene's picture)."""
+    meta = meta or {}
     job_id = str(job["id"])
     sr = repo.get_stage_run(ctx.db, job_id, stage, idx)
     if sr and sr["status"] == "done":
@@ -274,7 +297,7 @@ def run_media_stage(ctx: Context, job: dict, stage: str, idx: int, plan: Callabl
                 repo.record_cache_hit(
                     ctx.db, job_id=job_id, stage_run_id=sr["id"], kind=stage, provider=ctx.media.name, model=req.model
                 )
-                repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "cache_hit": True})
+                repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "cache_hit": True, **meta})
                 return asset
         try:
             res_id = _reserve(
@@ -344,7 +367,7 @@ def run_media_stage(ctx: Context, job: dict, stage: str, idx: int, plan: Callabl
         cost_usd=actual,
         meta={"prediction_id": prediction_id},
     )
-    repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "prediction_id": prediction_id})
+    repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "prediction_id": prediction_id, **meta})
     return asset
 
 
@@ -462,9 +485,19 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
             work = Path(tmp)
             scenes: list[SceneInput] = []
             last_image = None
-            for row in repo.list_scenes(ctx.db, job_id)[: s.render_scenes]:
+            rows = repo.list_scenes(ctx.db, job_id)[: s.render_scenes]
+            for pos, row in enumerate(rows):
                 idx = row["idx"]
                 scene = Scene.model_validate(row["data"])
+                video_sr = repo.get_stage_run(ctx.db, job_id, "video", idx) or {}
+                ends_on_next = bool((video_sr.get("output") or {}).get("ends_on_next"))
+                cut = "separate"
+                if pos + 1 < len(rows) and board.continuity == "continuous":
+                    nxt = Scene.model_validate(rows[pos + 1]["data"])
+                    if is_chained(board, rows[pos + 1]["idx"], nxt):
+                        cut = "chain"
+                    elif ends_on_next:
+                        cut = "end_frame"
                 video = repo.get_asset(ctx.db, str(row["video_asset_id"]))
                 clip = work / f"clip_{idx}.mp4"
                 clip.write_bytes(ctx.storage.get(video["storage_key"]))
@@ -485,6 +518,8 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
                         headline=scene.on_screen_text,
                         voice=voice_path,
                         voice_s=voice_s,
+                        fit_clip=ends_on_next,
+                        blend_out_s=CUT_BLEND_S[cut],
                     )
                 )
             end_image = None
@@ -571,6 +606,18 @@ def is_chained(board: Storyboard, idx: int, scene: Scene) -> bool:
     return board.continuity == "continuous" and idx > 0 and scene.image_source == "generate"
 
 
+def ends_on_next_picture(board: Storyboard, next_idx: int, next_scene: Scene) -> bool:
+    """Continuous mode (D30): a scene with its own picture is reached by the clip before it, which
+    ends on that picture (Kling's end frame), so the cut between them matches."""
+    return board.continuity == "continuous" and next_idx > 0 and next_scene.image_source != "generate"
+
+
+# How each cut is joined in compose (D30): a chained cut has the same frame on both sides, so a
+# clean cut; a cut onto the clip's end picture gets a very short blend for the model's small
+# difference; separate shots keep the 0.3 s soft blend (D29).
+CUT_BLEND_S = {"chain": 0.0, "end_frame": 0.1, "separate": 0.3}
+
+
 def chain_frame(ctx: Context, job: dict, idx: int, prev_video: dict, cut_s: float) -> dict:
     """The starting picture of a chained scene: the previous clip's frame at the cut. Free; resumable."""
     job_id = str(job["id"])
@@ -645,6 +692,7 @@ def run_job(ctx: Context, job: dict) -> None:
                     product_sha256=job["upload_sha256"],
                     style=brief.visual_style,
                     notes=board.notes,
+                    keep_same=board.keep_same if board.continuity == "continuous" else None,
                 )
 
             image = run_media_stage(ctx, job, "image", idx, plan_image)
@@ -660,33 +708,43 @@ def run_job(ctx: Context, job: dict) -> None:
             run_voice_stage(ctx, job, row["idx"], scene.voiceover, brief.voice, tone)
     prev_video = None
     prev_scene = None
-    for row in rows:
+    scenes = [Scene.model_validate(r["data"]) for r in rows]
+    for pos, row in enumerate(rows):
         idx = row["idx"]
-        scene = Scene.model_validate(row["data"])
+        scene = scenes[pos]
         if is_chained(board, idx, scene):
             images[idx] = chain_frame(ctx, job, idx, prev_video, float(prev_scene.duration_s))
             repo.set_scene_asset(ctx.db, job_id, idx, "image", str(images[idx]["id"]))
+        # D30: when the next scene has its own picture, this clip ends on it, so the cut matches.
+        end = None
+        if pos + 1 < len(rows) and ends_on_next_picture(board, idx + 1, scenes[pos + 1]):
+            end = images[rows[pos + 1]["idx"]]
 
-        def plan_video(image=images[idx], scene=scene, idx=idx):
-            ref = InputImage(
-                data=ctx.storage.get(image["storage_key"]),
-                content_type=image["content_type"],
-                url=ctx.storage.provider_url(image["storage_key"], 3600),
+        def as_input(asset: dict) -> InputImage:
+            return InputImage(
+                data=ctx.storage.get(asset["storage_key"]),
+                content_type=asset["content_type"],
+                url=ctx.storage.provider_url(asset["storage_key"], 3600),
             )
+
+        def plan_video(image=images[idx], scene=scene, idx=idx, end=end):
             return plan_scene_video(
                 model=s.video_model,
                 scene=scene,
                 duration_s=render_seconds(scene.duration_s),
                 used_s=scene.duration_s,
-                reference=ref,
+                reference=as_input(image),
                 reference_sha256=image["sha256"],
                 style=brief.visual_style,
                 notes=board.notes,
                 position=(idx, count),
                 continuous=board.continuity == "continuous",
+                end_image=as_input(end) if end else None,
+                end_image_sha256=end["sha256"] if end else None,
+                keep_same=board.keep_same,
             )
 
-        video = run_media_stage(ctx, job, "video", idx, plan_video)
+        video = run_media_stage(ctx, job, "video", idx, plan_video, meta={"ends_on_next": True} if end else None)
         repo.set_scene_asset(ctx.db, job_id, idx, "video", str(video["id"]))
         prev_video, prev_scene = video, scene
     run_compose_stage(ctx, job, brief, board)

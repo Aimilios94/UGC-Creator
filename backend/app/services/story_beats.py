@@ -65,8 +65,3 @@ def story_beats(story: str) -> list[Beat] | None:
         a, b = beats[i], beats[i + 1]
         beats[i : i + 2] = [Beat(text=f"{a.text} {b.text}", seconds=min(10, a.seconds + b.seconds))]
     return beats
-
-
-def asks_for_one_take(story: str) -> bool:
-    """The story asks for one continuous shot (so the scenes are chained by default)."""
-    return bool(re.search(r"\b(continuous|one take|single[- ]take|unbroken|seamless|no cuts?)\b", story or "", re.I))

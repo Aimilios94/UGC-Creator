@@ -21,6 +21,7 @@ from ...errors import ProviderNotConfigured
 
 BRIEF_RE = re.compile(r"<brief>(.*?)</brief>", re.S)
 STORY_RE = re.compile(r"<story>(.*?)</story>", re.S)
+SCENES_RE = re.compile(r"<scenes>(.*?)</scenes>", re.S)
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+|(?<=[.!?][\"”])\s+")  # a sentence may end inside quotes
 
 
@@ -53,6 +54,11 @@ def _brief_from(messages) -> dict:
         if match := STORY_RE.search(t):
             try:
                 brief["story"] = json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+        if match := SCENES_RE.search(t):
+            try:
+                brief["_scenes"] = json.loads(match.group(1))
             except json.JSONDecodeError:
                 pass
     return brief
@@ -220,7 +226,42 @@ def mock_storyboard(brief: dict) -> dict:
     return {"title": name, "scenes": scenes, "hooks": hooks, "cta_text": "Shop now"}
 
 
-MOCK_TASKS: dict[str, Callable[[dict], dict]] = {"analyze": mock_analysis, "storyboard": mock_storyboard}
+_BEAT_RE = re.compile(r"\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*s:")
+
+
+def _last_beat(movement: str) -> str:
+    """The last timed beat of a shot list, or its last sentence (mock only)."""
+    beats = [b.strip(" .") for b in _BEAT_RE.split(movement or "") if b.strip(" .")]
+    if beats:
+        return beats[-1][:300]
+    sentences = [s for s in SENTENCE_END.split((movement or "").strip()) if s.strip()]
+    return (sentences[-1] if sentences else "the camera keeps its slow move")[:300]
+
+
+def mock_continuity(brief: dict) -> dict:
+    """How each scene starts and ends, so the cuts match, as the real checker is asked (mock only)."""
+    scenes = brief.get("_scenes") or [{}]
+    flows = []
+    for i, sc in enumerate(scenes):
+        end = _last_beat(sc.get("movement", ""))
+        if i == 0:
+            starts = "The first picture, the camera already easing into a slow push-in at chest height."
+        else:
+            starts = f"Exactly the last moment of scene {i}: {flows[-1]['_end']}; the same move carries on."
+        ends = end if i == len(scenes) - 1 else f"{end}; the camera keeps moving at the same speed into scene {i + 2}."
+        flows.append({"starts": starts[:800], "ends": ends[:800], "_end": end})
+    return {
+        "keep_same": "Same camera height and lens feel, the same people and clothes, the same place, light and "
+        "colours as in scene 1, unless the story changes them.",
+        "scenes": [{"starts": f["starts"], "ends": f["ends"]} for f in flows],
+    }
+
+
+MOCK_TASKS: dict[str, Callable[[dict], dict]] = {
+    "analyze": mock_analysis,
+    "storyboard": mock_storyboard,
+    "continuity": mock_continuity,
+}
 
 
 def _mock_model(task: str) -> FunctionModel:

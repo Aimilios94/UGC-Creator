@@ -7,18 +7,18 @@ import pytest
 from app import repository as repo
 from app import worker
 from app.services.pipeline import run_media_stage
-from helpers import approve, create_job, to_video
+from helpers import approve, create_job, separate_shots, to_video
 
 
 def _approved_job(client, session_id, photo_bytes) -> str:
-    job = create_job(client, session_id, photo_bytes).json()
+    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
     assert approve(client, session_id, job["id"]).status_code == 202
     return job["id"]
 
 
 def _video_job(client, ctx, session_id, photo_bytes) -> str:
-    """A job whose images are done and whose video step is queued."""
-    job = create_job(client, session_id, photo_bytes).json()
+    """A job whose images are done and whose video step is queued (separate shots: 3 pictures)."""
+    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
     to_video(client, ctx, session_id, job["id"])
     return job["id"]
 

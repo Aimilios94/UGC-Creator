@@ -63,6 +63,10 @@ class SceneInput:
     headline: str = ""  # the scene's on-screen text
     voice: Path | None = None  # WAV
     voice_s: float = 0.0
+    # D30: the clip ends on the next scene's picture, so the whole clip is played in length_s
+    # (a little faster) and its last frame meets the cut.
+    fit_clip: bool = False
+    blend_out_s: float | None = None  # the blend into the next scene; None = the spec's crossfade_s
 
 
 @dataclass
@@ -89,7 +93,7 @@ class ComposeSpec:
     ratios: tuple[str, ...] = RATIOS
     scale: float = 1.0  # tests render small frames
     end_card_s: float = 2.0
-    crossfade_s: float = 0.3  # a soft blend at every cut between scenes (D29); 0 = hard cuts
+    crossfade_s: float = 0.3  # the blend at a cut whose scene sets none (D29); 0 = clean cuts
     loudness_lufs: float = -14.0
 
 
@@ -101,6 +105,8 @@ class SceneTiming:
     tempo: float
     voice_start: float
     voice_end: float
+    speed: float = 1.0  # >1: the whole clip is played faster to end on the cut (fit_clip)
+    blend_out: float = 0.0  # seconds of blend into the next scene; 0 = a clean cut
 
 
 @dataclass
@@ -214,10 +220,17 @@ def inside(box: tuple[int, int, int, int], area: tuple[int, int, int, int]) -> b
 def plan_timeline(spec: ComposeSpec) -> list[SceneTiming]:
     out: list[SceneTiming] = []
     t = 0.0
-    for scene in spec.scenes:
+    n = len(spec.scenes)
+    for i, scene in enumerate(spec.scenes):
         clip_s = probe_duration(scene.clip)
+        speed = 1.0
+        if scene.length_s and scene.fit_clip and clip_s > scene.length_s:
+            speed = clip_s / scene.length_s  # the whole clip, so its last frame is at the cut
         if scene.length_s:
             clip_s = min(clip_s, scene.length_s)
+        blend = 0.0
+        if i < n - 1:
+            blend = spec.crossfade_s if scene.blend_out_s is None else scene.blend_out_s
         target = scene.length_s or clip_s  # a clip shorter than its scene is held on its last frame
         tempo = 1.0
         need = scene.voice_s + VOICE_LEAD_S + VOICE_TAIL_S if scene.voice else 0.0
@@ -234,6 +247,8 @@ def plan_timeline(spec: ComposeSpec) -> list[SceneTiming]:
                 tempo=round(tempo, 4),
                 voice_start=round(vs, 3),
                 voice_end=round(vs + spoken, 3),
+                speed=round(speed, 4),
+                blend_out=round(max(0.0, blend), 3),
             )
         )
         t += duration
@@ -242,32 +257,43 @@ def plan_timeline(spec: ComposeSpec) -> list[SceneTiming]:
 
 # --- video: silent master ------------------------------------------------------------------
 def build_master(spec: ComposeSpec, timeline: list[SceneTiming], size: tuple[int, int], dst: Path) -> None:
-    """The scenes joined into one silent track. With a blend, each scene except the last runs
-    `crossfade_s` past its cut and fades into the next, so the total length stays the same."""
+    """The scenes joined into one silent track. A scene with a blend runs that long past its cut and
+    fades into the next; a scene without one meets the next in a clean cut (D30). The total length
+    stays the sum of the scenes either way. A clip with `speed` > 1 is played that much faster."""
     w, h = size
     n = len(spec.scenes)
-    d = spec.crossfade_s if n > 1 else 0.0
     args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     parts = []
     for i, (scene, tm) in enumerate(zip(spec.scenes, timeline, strict=True)):
         args += ["-i", str(scene.clip)]
-        extra = d if i < n - 1 else 0.0
+        extra = tm.blend_out
         hold = max(0.0, tm.duration - tm.clip_s) + extra + 0.1
+        retime = f"setpts=(PTS-STARTPTS)/{tm.speed:.4f}," if tm.speed > 1.0 else ""
         parts.append(
-            f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,fps={FPS},"
+            f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,{retime}fps={FPS},"
             f"format=yuv420p,tpad=stop_mode=clone:stop_duration={hold:.3f},"
             f"trim=duration={tm.duration + extra:.3f},setpts=PTS-STARTPTS,fps={FPS},settb=AVTB[v{i}]"
         )
-    if d > 0:
-        last, offset = "[v0]", 0.0
-        for i in range(1, n):
-            offset += timeline[i - 1].duration
-            out = "[v]" if i == n - 1 else f"[x{i}]"
-            parts.append(f"{last}[v{i}]xfade=transition=fade:duration={d:.3f}:offset={offset:.3f}{out}")
-            last = out
-        graph = ";".join(parts)
+    # Blended neighbours form groups (xfade); groups meet in clean cuts (concat). xfade cannot do a
+    # zero-length blend, so a clean cut always closes a group.
+    groups: list[str] = []
+    cur, offset = "[v0]", 0.0
+    for i in range(1, n):
+        offset += timeline[i - 1].duration
+        d = timeline[i - 1].blend_out
+        if d > 0:
+            out = f"[x{i}]"
+            parts.append(f"{cur}[v{i}]xfade=transition=fade:duration={d:.3f}:offset={offset:.3f}{out}")
+            cur = out
+        else:
+            groups.append(cur)
+            cur, offset = f"[v{i}]", 0.0
+    groups.append(cur)
+    if len(groups) == 1:
+        parts.append(f"{groups[0]}null[v]")
     else:
-        graph = ";".join(parts) + ";" + "".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v]"
+        parts.append("".join(groups) + f"concat=n={len(groups)}:v=1:a=0[v]")
+    graph = ";".join(parts)
     args += ["-filter_complex", graph, "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "veryfast"]
     args += ["-crf", "18", "-pix_fmt", "yuv420p", str(dst)]
     run(args)

@@ -29,13 +29,29 @@ def plan_scene_video(
     notes: str = "",
     position: tuple[int, int] = (0, 1),
     continuous: bool = False,
+    end_image: InputImage | None = None,
+    end_image_sha256: str | None = None,
+    keep_same: str = "",
 ) -> PlannedRender:
+    """One clip. In a continuous shot (D30) the clip also gets how it starts and ends (from the
+    continuity check) and what stays the same; when the next scene has its own picture, the clip
+    ends on that picture (`end_image`), and compose plays the whole clip in the scene's time."""
     if duration_s not in (5, 10):
         raise ValueError("Kling image-to-video accepts 5 or 10 seconds")
     used = min(used_s or duration_s, duration_s)
     tail = " One continuous take, no cuts. Keep the product unchanged in every frame. "
     tail += VIDEO_STYLE.get(style, VIDEO_STYLE["realistic"])
-    if used < duration_s:
+    if end_image is not None:
+        tail += (
+            " The last frame is the end image given: move steadily toward it through the whole clip, so the"
+            " clip lands on it exactly; it is the first frame of the next scene."
+        )
+        if used < duration_s:
+            tail += (
+                f" The clip is played {duration_s / used:.2g} times faster (in {used} seconds):"
+                " keep every movement slow and smooth."
+            )
+    elif used < duration_s:
         tail += f" Only the first {used} seconds are used: play all the beats within them, then hold the last frame."
     elif duration_s == 10:
         tail += " The clip is 10 seconds: spread these beats evenly over the 10 seconds."
@@ -51,21 +67,39 @@ def plan_scene_video(
             tail += " End mid-movement, so the next scene can carry the same camera move on."
         if continuous and idx > 0:
             tail += " The first frame is the last frame of the previous scene."
-    motion = scene.motion_prompt.strip() or scene.description.strip()
+    motion = (scene.motion_prompt.strip() or scene.description.strip())[: MAX_PROMPT - len(tail)]
+    # Then, while there is room: how the shot starts and ends, what stays the same, the style notes.
+    extras = []
+    if continuous:
+        if idx > 0 and scene.starts.strip():
+            extras.append(f" Starts: {scene.starts.strip()}")
+        if idx < count - 1 and scene.ends.strip():
+            extras.append(f" Ends: {scene.ends.strip()}")
+        if keep_same.strip():
+            extras.append(f" Same in every scene: {keep_same.strip()}")
+    if notes.strip():
+        extras.append(f" Style and world: {notes.strip()}")
     room = MAX_PROMPT - len(tail) - len(motion)
-    extra = f" Style and world: {notes.strip()}" if notes.strip() and room > 80 else ""
-    prompt = motion[: MAX_PROMPT - len(tail)] + extra[: max(0, room)] + tail
+    body = motion
+    for extra in extras:
+        if room <= 80:
+            break
+        body += extra[:room]
+        room -= len(extra[:room])
+    prompt = body + tail
     arguments = {"prompt": prompt, "duration": str(duration_s), "negative_prompt": VIDEO_NEGATIVE}
-    key = cache_key(
-        model=model,
-        prompt=prompt,
-        seed=None,
-        input_sha256=reference_sha256,
-        settings={"duration": duration_s},
-    )
+    settings: dict = {"duration": duration_s}
+    if end_image is not None:
+        settings["tail_image_sha256"] = end_image_sha256
+    key = cache_key(model=model, prompt=prompt, seed=None, input_sha256=reference_sha256, settings=settings)
     return PlannedRender(
         request=MediaRequest(
-            kind="video", model=model, arguments=arguments, input_image=reference, image_field="image_url"
+            kind="video",
+            model=model,
+            arguments=arguments,
+            input_image=reference,
+            image_field="image_url",
+            tail_image=end_image,
         ),
         cache_key=key,
         usage=Usage(seconds=duration_s),

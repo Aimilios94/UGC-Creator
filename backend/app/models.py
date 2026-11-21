@@ -100,6 +100,10 @@ class Scene(SceneDraft):
     uid: str = Field(default="", max_length=16)  # stable id, so joining or reordering keeps each scene's picture
     image_source: ImageSource = "generate"
     image_upload_key: str | None = None  # set by the server when the user uploads an image; never by the client
+    # How the shot opens and how it ends, so each cut matches (D30): written by the continuity check
+    # after the writer, only for the picture and video AI, never shown as story text.
+    starts: str = Field(default="", max_length=800)
+    ends: str = Field(default="", max_length=800)
 
 
 class Hook(BaseModel):
@@ -153,7 +157,11 @@ class Storyboard(BaseModel):
     notes: str = Field(
         default="", max_length=4000
     )  # optional style and world notes, added to every scene's instructions
-    continuity: Literal["continuous", "separate"] = "separate"  # continuous: each scene starts where the last ended
+    # continuous (the default since D30): every scene flows into the next; separate: cuts between shots
+    continuity: Literal["continuous", "separate"] = "continuous"
+    # What stays the same in every scene (camera language, people, clothes, place, light), from the
+    # continuity check (D30); added to the AI instructions in a continuous shot only.
+    keep_same: str = Field(default="", max_length=1200)
 
     @field_validator("scenes")
     @classmethod

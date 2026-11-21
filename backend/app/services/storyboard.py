@@ -12,7 +12,7 @@ from .analyze import brief_block
 from .llm_trace import LlmCall, Usage, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
 from .scene_plan import at_least_speech, fit_lengths, scenes_for_length
-from .story_beats import asks_for_one_take, story_beats, story_notes
+from .story_beats import story_beats, story_notes
 from .styles import LABELS as STYLE_LABELS
 
 PLATFORM_NAMES = {
@@ -193,7 +193,7 @@ def write_storyboard(
     data = draft.model_dump()
     if brief.story:
         data["notes"] = story_notes(brief.story)[:4000]
-        data["continuity"] = "continuous" if (beats or asks_for_one_take(brief.story)) else "separate"
+    data["continuity"] = "continuous"  # every scene flows into the next (D30); "separate" is the user's choice
     scenes = data["scenes"]
     lines = [sc.get("voiceover") or "" for sc in scenes]
     if beats and len(scenes) == len(beats):

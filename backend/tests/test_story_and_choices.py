@@ -10,7 +10,7 @@ from PIL import Image
 from app import worker
 from app.services.video_gen import MAX_PROMPT
 from conftest import BRIEF, new_session
-from helpers import approve, create_job, make_video, to_video
+from helpers import approve, create_job, make_video, separate_shots, to_video
 
 STORY = (
     'My grandad played every Sunday in boots that slipped. He said "My boots never held me." '
@@ -54,7 +54,7 @@ def test_my_own_story_rewrites_the_storyboard_keeping_my_lines(client, ctx, sess
         n = c.execute(
             "select count(*) as n from llm_calls where job_id = %s and kind = 'llm' and status = 'billed'", (job["id"],)
         ).fetchone()["n"]
-    assert n == 3  # analyze, storyboard, storyboard from the story
+    assert n == 5  # analyze, storyboard, continuity, then storyboard and continuity from the story
     approve(client, session_id, job["id"])
     late = client.post(f"/jobs/{job['id']}/story", json={"story": STORY}, headers=_h(session_id))
     assert late.status_code == 409
@@ -68,7 +68,7 @@ def test_a_too_short_story_is_refused(client, session_id, photo_bytes):
 
 # --- own images -----------------------------------------------------------------------------------
 def test_an_uploaded_scene_image_is_used_free_and_fitted_to_the_ratio(client, ctx, session_id, photo_bytes):
-    job = create_job(client, session_id, photo_bytes).json()
+    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
     before = job["estimate"]["images"]["eur"]
     r = client.post(
         f"/jobs/{job['id']}/scenes/1/image",
@@ -93,7 +93,7 @@ def test_an_uploaded_scene_image_is_used_free_and_fitted_to_the_ratio(client, ct
 
 
 def test_the_product_photo_can_be_a_scene_image(client, ctx, session_id, photo_bytes):
-    job = create_job(client, session_id, photo_bytes).json()
+    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
     board = job["storyboard"]
     board["scenes"][0]["image_source"] = "product"
     assert _put(client, session_id, job["id"], board).status_code == 200
@@ -209,7 +209,7 @@ def test_short_scenes_render_a_5_s_clip_and_are_cut_to_length(client, ctx, sessi
 
 
 def test_all_in_one_go_makes_images_and_video_without_stopping(client, ctx, session_id, photo_bytes):
-    job = create_job(client, session_id, photo_bytes).json()
+    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
     r = client.post(f"/jobs/{job['id']}/approve", json={"mode": "video"}, headers=_h(session_id))
     assert r.status_code == 202 and r.json()["phase"] == "video"
     worker.run_once(ctx)
