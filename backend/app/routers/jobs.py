@@ -149,8 +149,10 @@ def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool) -> Story
     if lock_images and len(new.scenes) != len(old.scenes):
         raise HTTPException(status_code=422, detail="The scenes are fixed once the images are made.")
     scenes = []
+    by_uid = {s.uid: s for s in old.scenes if s.uid}
     for i, n in enumerate(new.scenes):
-        o = old.scenes[i] if i < len(old.scenes) else None
+        # Match each scene to the stored one by its id (scenes can be joined, added or removed).
+        o = by_uid.get(n.uid) if n.uid else (old.scenes[i] if i < len(old.scenes) else None)
         keep = {"image_upload_key": o.image_upload_key if o else None}
         if lock_images:
             keep |= {"image_prompt": o.image_prompt, "image_source": o.image_source}

@@ -132,3 +132,55 @@ def test_a_writer_that_merges_beats_is_corrected_and_the_story_sets_text_and_len
     assert len(calls) == 2 and len(scenes) == 4
     assert [s["duration_s"] for s in scenes] == [2, 2, 2, 3]  # from the timestamps
     assert scenes[1]["description"].startswith("0:02 - 0:04 (Spark)")  # the user's own words
+
+
+def test_a_chosen_video_length_sets_the_scenes_and_their_lengths(client, session_id, photo_bytes):
+    for length, scenes_n in ((10, 3), (15, 5), (30, 5)):
+        job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "video_length_s": length}).json()
+        scenes = job["storyboard"]["scenes"]
+        assert len(scenes) == scenes_n, length
+        assert sum(s["duration_s"] for s in scenes) == min(length - 2, 10 * scenes_n)  # + the 2 s end card
+        assert all(2 <= s["duration_s"] <= 10 for s in scenes)
+    auto = create_job(client, session_id, photo_bytes).json()
+    assert len(auto["storyboard"]["scenes"]) == 3  # no length, no story: the usual 3
+    timed = create_job(client, session_id, photo_bytes, brief={**BRIEF, "video_length_s": 30, "story": FOUR_BEATS})
+    assert len(timed.json()["storyboard"]["scenes"]) == 4  # the story's timestamps win
+    assert create_job(client, session_id, photo_bytes, brief={**BRIEF, "video_length_s": 3}).status_code == 422
+
+
+def test_spoken_lines_get_the_time_they_need():
+    from app.services.scene_plan import at_least_speech, fit_lengths, speech_seconds
+
+    long_line = "Stop scrolling: this is the hoodie everyone asks me about on the street."
+    assert speech_seconds("") == 0 and speech_seconds(long_line) >= 5
+    lengths = fit_lengths([long_line, "", "Get yours."], 12)
+    assert sum(lengths) == 12 and lengths[0] >= speech_seconds(long_line) and min(lengths) >= 2
+    assert at_least_speech([2, 5], [long_line, ""])[0] >= speech_seconds(long_line)
+
+
+def test_joining_scenes_keeps_each_uploaded_picture_with_its_scene(client, session_id, photo_bytes):
+    import io
+
+    from PIL import Image
+
+    job = create_job(client, session_id, photo_bytes).json()
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 700), (200, 30, 30)).save(buf, "PNG")
+    h = {"X-Session-Id": session_id}
+    view = client.post(
+        f"/jobs/{job['id']}/scenes/2/image", files={"image": ("mine.png", buf.getvalue(), "image/png")}, headers=h
+    ).json()
+    scenes = view["storyboard"]["scenes"]
+    assert all(s["uid"] for s in scenes) and len({s["uid"] for s in scenes}) == 3
+    # Join scenes 1 and 2 (as "Apply the recommendation" does): scene 3 keeps its uploaded picture.
+    a, b, c = scenes
+    joined = {
+        **a,
+        "description": a["description"] + " " + b["description"],
+        "duration_s": a["duration_s"] + b["duration_s"],
+    }
+    view = client.put(f"/jobs/{job['id']}/storyboard", json={**view["storyboard"], "scenes": [joined, c]}, headers=h)
+    assert view.status_code == 200, view.text
+    kept = view.json()["storyboard"]["scenes"]
+    assert [s["uid"] for s in kept] == [a["uid"], c["uid"]] and kept[1]["image_source"] == "upload"
+    approve(client, session_id, job["id"])  # the upload key followed scene 3 to its new position

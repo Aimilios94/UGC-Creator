@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
@@ -42,6 +43,7 @@ class Brief(BaseModel):
     captions: CaptionStyle = "bold"
     visual_style: VisualStyle = "realistic"
     story: str = Field(default="", max_length=4000)  # the user's own story or script, if any
+    video_length_s: int | None = Field(default=None, ge=4, le=52)  # whole ad incl. end card; None = auto
 
     @field_validator("product_name", "description", "audience", "offer", "story", mode="before")
     @classmethod
@@ -95,6 +97,7 @@ def render_seconds(duration_s: int) -> int:
 class Scene(SceneDraft):
     """A scene with the user's choices: where its image comes from (and its length, above)."""
 
+    uid: str = Field(default="", max_length=16)  # stable id, so joining or reordering keeps each scene's picture
     image_source: ImageSource = "generate"
     image_upload_key: str | None = None  # set by the server when the user uploads an image; never by the client
 
@@ -112,10 +115,16 @@ def roles_for(n: int) -> list[str]:
 
 
 def _roles_in_order(scenes):
-    """The roles follow the scenes' order; they are set by position, whatever the writer sent."""
+    """The roles follow the scenes' order; they are set by position, whatever the writer sent.
+    Every user scene gets a unique id (a copied or new scene gets a fresh one)."""
     roles = roles_for(len(scenes))
+    seen: set[str] = set()
     for scene, role in zip(scenes, roles, strict=True):
         scene.role = role
+        if hasattr(scene, "uid"):
+            if not scene.uid or scene.uid in seen:
+                scene.uid = uuid.uuid4().hex[:8]
+            seen.add(scene.uid)
     return scenes
 
 

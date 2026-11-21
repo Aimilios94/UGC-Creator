@@ -484,3 +484,8 @@ details.fold-plain > summary { cursor: pointer; font-weight: 600; }
 .story-list .dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--accent-primary); }
 .story-list .story-text { display: grid; gap: 2px; min-width: 0; }
 .pill-time { font-size: 0.75rem; color: var(--text-secondary); border: 1px solid var(--card-border); border-radius: var(--radius-full); padding: 1px 8px; white-space: nowrap; }
+
+.notice.recommend { border-color: rgba(99, 102, 241, 0.6); background: rgba(99, 102, 241, 0.1); color: var(--text-primary); margin: 12px 0; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.link-btn { all: unset; color: var(--accent-primary); text-decoration: underline; cursor: pointer; }
+.length-custom { margin-top: 6px; max-width: 120px; }

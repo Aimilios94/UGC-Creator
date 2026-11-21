@@ -223,6 +223,9 @@ function AccessBar({ onUnlocked }) {
   );
 }
 
+// The recommended number of scenes for a video length (same rule as the server: about 2.5 s a scene).
+const scenesFor = (videoS) => Math.max(1, Math.min(5, Math.round(Math.max(2, videoS - 2) / 2.5)));
+
 // "Back to the brief" from a storyboard fills the form with that brief (the photo is picked again).
 function readPrefill() {
   try {
@@ -256,6 +259,7 @@ export default function Brief() {
     music: 'theme',
     captions: 'bold',
     visual_style: 'realistic',
+    video_length_s: '',
     story: '',
     ...readPrefill(),
   }));
@@ -334,7 +338,14 @@ export default function Brief() {
     }
     setBusy(true);
     setError('');
-    const brief = { ...form, landing_url: form.landing_url.trim() || null, theme: form.theme || null, story: form.story.trim() };
+    const length = Number(form.video_length_s);
+    const brief = {
+      ...form,
+      landing_url: form.landing_url.trim() || null,
+      theme: form.theme || null,
+      story: form.story.trim(),
+      video_length_s: length >= 4 ? Math.min(52, Math.round(length)) : null,
+    };
     try {
       const job = await api.createJob(brief, photo, {
         campaignId,
@@ -470,6 +481,40 @@ export default function Brief() {
             <Select id="theme" label="Theme" value={form.theme} onChange={set('theme')} options={THEMES} help={HELP.theme} />
             <Select id="adtype" label="Ad type" value={form.ad_type} onChange={set('ad_type')} options={AD_TYPES} help={HELP.ad_type} />
             <Select id="style" label="Visual style" value={form.visual_style} onChange={set('visual_style')} options={STYLES} help={HELP.visual_style} />
+            <div>
+              <label htmlFor="vlen">
+                Video length
+                <Help text={HELP.video_length} />
+              </label>
+              <select
+                id="vlen"
+                value={['', '10', '15', '20', '30'].includes(String(form.video_length_s)) ? String(form.video_length_s) : 'custom'}
+                onChange={(e) => setForm({ ...form, video_length_s: e.target.value === 'custom' ? '12' : e.target.value })}
+              >
+                <option value="">Auto (from your story)</option>
+                <option value="10">10 seconds</option>
+                <option value="15">15 seconds</option>
+                <option value="20">20 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="custom">Other…</option>
+              </select>
+              {!['', '10', '15', '20', '30'].includes(String(form.video_length_s)) && (
+                <input
+                  type="number"
+                  min={4}
+                  max={52}
+                  value={form.video_length_s}
+                  onChange={set('video_length_s')}
+                  aria-label="Video length in seconds"
+                  className="length-custom"
+                />
+              )}
+              <p className="muted small">
+                {form.video_length_s
+                  ? `About ${scenesFor(Number(form.video_length_s))} scenes (about 2.5 s each), plus a 2 s end card. Timestamps in your story win.`
+                  : 'The scenes follow your story (or 3 scenes without a story).'}
+              </p>
+            </div>
             <div className="span-2">
               <label htmlFor="story">
                 Your own story or script (optional)

@@ -11,6 +11,7 @@ from ..models import BrandKit, Brief, ProductAnalysis, Storyboard, StoryboardDra
 from .analyze import brief_block
 from .llm_trace import LlmCall, Usage, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
+from .scene_plan import at_least_speech, fit_lengths, scenes_for_length
 from .story_beats import story_beats
 from .styles import LABELS as STYLE_LABELS
 
@@ -95,8 +96,31 @@ def _beats_instruction(beats) -> str:
     )
 
 
+def _length_instruction(n: int, video_s: int, end_card_s: float) -> str:
+    return (
+        f"The finished video is {video_s} seconds: write exactly {n} scenes, whose duration_s add up to about "
+        f"{round(video_s - end_card_s)} seconds (a {end_card_s:g}-second end card follows). Give a scene with a "
+        "spoken line enough time to say it (about 2.5 words per second) and quiet scenes less."
+    )
+
+
+def target_scenes(brief: Brief, end_card_s: float) -> int | None:
+    """The number of scenes decided in code: from the story's timestamps, or from the chosen length."""
+    beats = story_beats(brief.story) if brief.story else None
+    if beats:
+        return len(beats)
+    if brief.video_length_s:
+        return scenes_for_length(brief.video_length_s, end_card_s)
+    return None
+
+
 def build_prompt(
-    brief: Brief, analysis: ProductAnalysis, *, brand: BrandKit | None = None, feedback: str | None = None
+    brief: Brief,
+    analysis: ProductAnalysis,
+    *,
+    brand: BrandKit | None = None,
+    feedback: str | None = None,
+    end_card_s: float = 2.0,
 ) -> str:
     parts = [
         f"Platform: {PLATFORM_NAMES[brief.platform]}. Aspect ratio: {brief.aspect_ratio}.",
@@ -109,6 +133,9 @@ def build_prompt(
         beats = story_beats(brief.story)
         if beats:
             parts.append(_beats_instruction(beats))
+    if brief.video_length_s and not (brief.story and story_beats(brief.story)):
+        n = scenes_for_length(brief.video_length_s, end_card_s)
+        parts.append(_length_instruction(n, brief.video_length_s, end_card_s))
     if brand is not None and brand.tone:
         parts.append("<brand>" + json.dumps({"tone_of_voice": brand.tone}) + "</brand>")
     if feedback:
@@ -127,21 +154,24 @@ def write_storyboard(
     *,
     brand: BrandKit | None = None,
     feedback: str | None = None,
+    end_card_s: float = 2.0,
 ) -> tuple[Storyboard, LlmCall]:
     """Write the storyboard. With a timed story, the number of scenes, each scene's text and
     its length come from the story itself; a draft with another number of scenes is sent back
     once with that correction (both calls are counted)."""
     started = time.perf_counter()
-    prompt = build_prompt(brief, analysis, brand=brand, feedback=feedback)
+    prompt = build_prompt(brief, analysis, brand=brand, feedback=feedback, end_card_s=end_card_s)
     result = _run(llm, prompt)
     usage = tokens_from_run_usage(result.usage)
     draft = result.output
     beats = story_beats(brief.story) if brief.story else None
-    if beats and len(draft.scenes) != len(beats):
+    want = target_scenes(brief, end_card_s)
+    if want and len(draft.scenes) != want:
         retry = _run(
             llm,
-            prompt + f"\nYour last storyboard had {len(draft.scenes)} scenes; it must have exactly {len(beats)}, "
-            "one per timed beat, in order.",
+            prompt
+            + f"\nYour last storyboard had {len(draft.scenes)} scenes; it must have exactly {want}"
+            + (", one per timed beat, in order." if beats else "."),
         )
         more = tokens_from_run_usage(retry.usage)
         usage = Usage(
@@ -159,9 +189,17 @@ def write_storyboard(
         cost_usd=cost_usd(llm.model_name, usage),
     )
     data = draft.model_dump()
-    if beats and len(data["scenes"]) == len(beats):
-        for scene, beat in zip(data["scenes"], beats, strict=True):
+    scenes = data["scenes"]
+    lines = [sc.get("voiceover") or "" for sc in scenes]
+    if beats and len(scenes) == len(beats):
+        for scene, beat in zip(scenes, beats, strict=True):
             scene["description"] = beat.text[:800]  # the user's own words for this scene
             scene["duration_s"] = beat.seconds
+    elif brief.video_length_s:
+        for scene, length in zip(scenes, fit_lengths(lines, round(brief.video_length_s - end_card_s)), strict=True):
+            scene["duration_s"] = length
+    else:
+        for scene, length in zip(scenes, at_least_speech([sc["duration_s"] for sc in scenes], lines), strict=True):
+            scene["duration_s"] = length
     # The user's choices (own images, hook) start at their defaults.
     return Storyboard.model_validate(data), call

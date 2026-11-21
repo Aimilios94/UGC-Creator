@@ -172,6 +172,14 @@ def mock_storyboard(brief: dict) -> dict:
             "on_screen_text": offer[:80],
         },
     ]
+    if not parts and brief.get("video_length_s"):
+        # A chosen length sets the number of scenes (scene_plan.py): repeat the middle scene as needed.
+        from ..scene_plan import scenes_for_length
+
+        n = scenes_for_length(int(brief["video_length_s"]), 2.0)
+        middle = scenes[1]
+        scenes = [scenes[2]] if n == 1 else [scenes[0], *[dict(middle) for _ in range(n - 2)], scenes[2]]
+        lines = [lines[2]] if n == 1 else [lines[0], *([lines[1]] * (n - 2)), lines[2]]
     hooks = [
         {"formula": "pov", "text": f"POV: you finally found {name}"},
         {"formula": "problem_first", "text": f"Tired of the old way? Try {name}"},

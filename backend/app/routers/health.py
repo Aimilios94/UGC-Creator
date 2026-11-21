@@ -10,6 +10,7 @@ from ..deps import access_ok, get_ctx
 from ..models import MAX_SCENES, Money
 from ..services.llm_trace import Usage, cost_usd, money
 from ..services.pipeline import Context, estimate_job_usd, voice_est_usd
+from ..services.scene_plan import SECONDS_PER_SCENE
 
 router = APIRouter(tags=["health"])
 
@@ -69,6 +70,7 @@ def public_config(settings: Settings = Depends(get_settings)) -> dict:
         },
         "clip_lengths": [5, 10],  # what the video model renders; a scene can be 2-10 s (cut in compose)
         "end_card_s": settings.end_card_s,
+        "seconds_per_scene": SECONDS_PER_SCENE,  # the recommended pace (scene_plan.py)
         # Local stack with mock providers: nothing is made by AI or paid; prices show a real run.
         "test_mode": settings.media_provider == "mock",
     }

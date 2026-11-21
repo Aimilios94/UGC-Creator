@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Circle, Clapperboard, Film, Loader2, RotateCcw, Upload, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Clapperboard, Film, Loader2, RotateCcw, Sparkles, Upload, XCircle } from 'lucide-react';
 import { api, rememberJob } from '../lib/api';
 import { navigate, useCurrency } from '../lib/hooks';
 import { formatMoney } from '../lib/money';
@@ -270,6 +270,8 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const [mode, setMode] = useState('video');
   const [lengthText, setLengthText] = useState(null); // the length box while typing
   const [lengthNote, setLengthNote] = useState('');
+  const [undoBoard, setUndoBoard] = useState(null); // the scenes before "Apply" joined some
+  const [keepMine, setKeepMine] = useState(false);
   const [sound, setSound] = useState({ voice: job.brief.voice, music: job.brief.music, captions: job.brief.captions });
   const n = board?.scenes.length ?? 3;
   const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice), [board, config, n, sound.voice]);
@@ -412,12 +414,44 @@ function StoryboardStep({ job, onChange, readOnly }) {
       ...board,
       scenes: (() => {
         const scenes = [...board.scenes];
-        const blank = { ...scenes[Math.max(0, scenes.length - 2)], description: '', voiceover: '', on_screen_text: '', image_prompt: '', motion_prompt: '', image_source: 'generate', image_upload_key: null, duration_s: 3 };
+        const blank = { ...scenes[Math.max(0, scenes.length - 2)], uid: '', description: '', voiceover: '', on_screen_text: '', image_prompt: '', motion_prompt: '', image_source: 'generate', image_upload_key: null, duration_s: 3 };
         scenes.splice(Math.max(scenes.length - 1, 1), 0, blank);
         const roles = rolesFor(scenes.length);
         return scenes.map((x, k) => ({ ...x, role: roles[k] }));
       })(),
     });
+  // Recommendation: about 2.5 s per scene for this video's length; joining neighbours keeps people
+  // and places more consistent (fewer separate clips) and costs less. Nothing is cut: texts are joined.
+  const perScene = config?.seconds_per_scene ?? 2.5;
+  const recommended = Math.max(1, Math.min(MAX_SCENES, Math.round(scenesLength / perScene)));
+  const joinScenes = (scenes, i) => {
+    const a = scenes[i];
+    const b = scenes[i + 1];
+    const both = (x, y, sep = ' ') => [x, y].filter((t) => t && t.trim()).join(sep);
+    const merged = {
+      ...a,
+      description: both(a.description, b.description),
+      voiceover: both(a.voiceover, b.voiceover).slice(0, 220),
+      on_screen_text: a.on_screen_text || b.on_screen_text,
+      motion_prompt: both(a.motion_prompt, b.motion_prompt ? `Then, in the same take: ${b.motion_prompt}` : '').slice(0, 2200),
+      duration_s: Math.min(MAX_SCENE_S, a.duration_s + b.duration_s),
+    };
+    const next = [...scenes.slice(0, i), merged, ...scenes.slice(i + 2)];
+    const roles = rolesFor(next.length);
+    return next.map((x, k) => ({ ...x, role: roles[k] }));
+  };
+  const applyRecommendation = () => {
+    let scenes = board.scenes;
+    while (scenes.length > recommended) {
+      let best = 0;
+      for (let k = 1; k < scenes.length - 1; k += 1) {
+        if (scenes[k].duration_s + scenes[k + 1].duration_s < scenes[best].duration_s + scenes[best + 1].duration_s) best = k;
+      }
+      scenes = joinScenes(scenes, best);
+    }
+    setUndoBoard(board);
+    change({ ...board, scenes });
+  };
   const removeScene = (i) => {
     const scenes = board.scenes.filter((_, k) => k !== i);
     const roles = rolesFor(scenes.length);
@@ -545,6 +579,43 @@ function StoryboardStep({ job, onChange, readOnly }) {
           </div>
         </div>
       </section>
+
+      {!readOnly && n > recommended && !keepMine && (
+        <div className="notice recommend" role="status">
+          <Sparkles size={16} aria-hidden="true" />
+          <div>
+            <strong>
+              Recommended for this story and length: {recommended} {recommended === 1 ? 'scene' : 'scenes'} instead of {n}.
+            </strong>{' '}
+            Each scene is a separate AI clip, so fewer scenes keep the person and the place more consistent, and cost less.
+            Applying joins neighbouring scenes into one continuous shot; nothing from your story is cut.
+            <div className="row-actions">
+              <button type="button" className="btn btn-secondary btn-small" onClick={applyRecommendation} disabled={disabled}>
+                Apply: {recommended} {recommended === 1 ? 'scene' : 'scenes'}
+              </button>
+              <button type="button" className="btn btn-ghost btn-small" onClick={() => setKeepMine(true)}>
+                Keep my {n} scenes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {!readOnly && undoBoard && (
+        <p className="muted small">
+          Scenes joined into {n}.{' '}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              change(undoBoard);
+              setUndoBoard(null);
+              setKeepMine(true);
+            }}
+          >
+            Undo
+          </button>
+        </p>
+      )}
 
       <details className="card fold" open={!hasStory}>
         <summary>

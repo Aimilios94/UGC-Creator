@@ -165,7 +165,7 @@ def write_board(
         job_id,
         "storyboard",
         llm,
-        lambda: storyboard.write_storyboard(llm, brief, analysis, brand=brand),
+        lambda: storyboard.write_storyboard(llm, brief, analysis, brand=brand, end_card_s=ctx.settings.end_card_s),
         attempt=attempt,
     )
     flags = flag_testimonials(board, brief)
@@ -178,7 +178,9 @@ def write_board(
                 job_id,
                 "storyboard",
                 llm,
-                lambda: storyboard.write_storyboard(llm, brief, analysis, brand=brand, feedback=feedback),
+                lambda: storyboard.write_storyboard(
+                    llm, brief, analysis, brand=brand, feedback=feedback, end_card_s=ctx.settings.end_card_s
+                ),
                 attempt=attempt + 1,
             )
         except Exception:  # noqa: BLE001 - keep the first storyboard; its flagged lines go to the user
