@@ -38,6 +38,7 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 - A time range inside a scene ("Around 0:02-0:04") was read as a new part, so a 4 s scene became 6 s (a 10 s clip).
 - The local mock clip with an end picture failed on ffmpeg 7.1 in the image (a blend needs a fixed frame rate on both inputs).
 - The length warning made the page jump, so the Scenes section did not open on click.
+- An own picture of another shape (for example a square photo in a 9:16 ad) was filled with a blurred copy, and Kling animated the blurred bands into every later scene. It is now extended to the full frame by Nano Banana (one picture's price, shown on the page); pictures close to the ad's shape are still cropped for free ([D31](DECISIONS.md)).
 
 ### Changed
 - The Docker image installs ffmpeg; CI installs it for the compose tests. PyYAML added.

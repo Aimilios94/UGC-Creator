@@ -121,7 +121,7 @@ Other fixed rules:
   - "Same in every scene: [keep_same]";
   - the **full** style notes;
   - the product-fidelity sentence, "no text anywhere", and the style line.
-- **Own pictures** are fitted to the shape.
+- **Own pictures** are made the ad's shape: a free centre crop when it keeps at least 75% of the picture, otherwise Nano Banana extends the picture to the full frame (one picture's price; since 21 Nov 2026 never a blurred fill, which Kling animated).
 - **"Continue" scenes get no picture yet;** their first frame comes from the previous clip (step 10).
 - The user sees the pictures before any clip is paid for, and can still edit the spoken line, headline, movement and length.
 

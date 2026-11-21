@@ -132,8 +132,9 @@ def test_a_mix_of_continued_scenes_and_own_pictures_connects_at_every_cut(client
     _put(client, session_id, job["id"], board)
     to_video(client, ctx, session_id, job["id"])
     worker.run_once(ctx)
-    images = {r["scene_idx"]: r["provider"] for r in repo.list_stage_runs(ctx.db, job["id"]) if r["stage"] == "image"}
-    assert images == {0: "mock", 1: "chain", 2: "own"}
+    runs = {r["scene_idx"]: r for r in repo.list_stage_runs(ctx.db, job["id"]) if r["stage"] == "image"}
+    assert {i: r["provider"] for i, r in runs.items()} == {0: "mock", 1: "chain", 2: "mock"}
+    assert runs[2]["output"]["fit"] == "extend"  # the 4:5 photo is extended to 9:16 by the image model
     clips = _clips(ctx)
     assert clips[0].tail_image is None  # scene 2 starts from scene 1's own last frame
     assert clips[1].tail_image.data == _image_bytes(ctx, job["id"], 2)

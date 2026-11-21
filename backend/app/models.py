@@ -222,6 +222,8 @@ class AssetView(BaseModel):
     url: str
     content_type: str
     expires_in_s: int
+    width: int | None = None  # pictures: lets the page show when an own picture must be extended (D31)
+    height: int | None = None
 
 
 class BrandKitView(BrandKit):

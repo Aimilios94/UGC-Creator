@@ -66,12 +66,33 @@ const endsOnNext = (board, i) => {
   return board?.continuity === 'continuous' && Boolean(next) && next.image_source !== 'generate';
 };
 
-function estimateBoard(board, prices, n = 3, voice = 'marin') {
+// D31: an own picture that a crop to the ad's shape would cut by more than a quarter is extended to
+// the full frame by the image model (one picture's price), never filled with a blurred copy.
+const RATIO_VALUE = { '9:16': 9 / 16, '1:1': 1, '4:5': 4 / 5, '16:9': 16 / 9 };
+const needsExtend = (asset, ratio) => {
+  if (!asset?.width || !asset?.height) return false;
+  const a = asset.width / asset.height;
+  const b = RATIO_VALUE[ratio] ?? 9 / 16;
+  return Math.min(a, b) / Math.max(a, b) < 0.75;
+};
+// The picture each scene would start from when it is not generated: the product photo or its upload.
+const ownPicture = (job, i, source) =>
+  source === 'product'
+    ? job.assets.find((a) => a.kind === 'upload' && a.scene_idx == null)
+    : job.assets.filter((a) => a.kind === 'upload' && a.scene_idx === i).at(-1);
+const extendedScenes = (job, board) =>
+  new Set(
+    (board?.scenes ?? [])
+      .map((s, i) => (s.image_source !== 'generate' && needsExtend(ownPicture(job, i, s.image_source), job.brief.aspect_ratio) ? i : -1))
+      .filter((i) => i >= 0),
+  );
+
+function estimateBoard(board, prices, n = 3, voice = 'marin', extend = new Set()) {
   let images = ZERO;
   let video = ZERO;
   if (!board || !prices) return null;
   board.scenes.slice(0, n).forEach((s, i) => {
-    if (s.image_source === 'generate' && !isChained(board, i, s)) images = add(images, prices.image);
+    if ((s.image_source === 'generate' && !isChained(board, i, s)) || extend.has(i)) images = add(images, prices.image);
     video = add(video, prices.video_per_second, renderSeconds(s.duration_s));
     if (s.voiceover.trim() && voice !== 'none') video = add(video, prices.voice_line);
   });
@@ -172,7 +193,7 @@ function Chip({ name, value, checked, onChange, children, disabled }) {
 }
 
 // What each scene's clip starts from, said plainly (the video AI animates one picture per scene).
-function pictureNote(scenes, board) {
+function pictureNote(scenes, board, extend = new Set()) {
   const chained = scenes.filter((s, i) => isChained(board, i, s)).length;
   const count = (src) => scenes.filter((s, i) => s.image_source === src && !isChained(board, i, s)).length;
   const [gen, product, own] = [count('generate'), count('product'), count('upload')];
@@ -182,11 +203,14 @@ function pictureNote(scenes, board) {
   if (product)
     parts.push(
       product === scenes.length
-        ? `all ${product} ${word(product)} start from your same product photo: each clip animates that photo differently, and no new pictures are made`
+        ? `all ${product} ${word(product)} start from your same product photo: each clip animates that photo differently`
         : `${product} ${word(product)} ${product === 1 ? 'starts' : 'start'} from your product photo itself`,
     );
   if (own) parts.push(`${own} ${word(own)} ${own === 1 ? 'starts' : 'start'} from the picture you uploaded for ${own === 1 ? 'it' : 'them'}`);
   if (chained) parts.push(`${chained} ${word(chained)} ${chained === 1 ? 'continues' : 'continue'} from where the previous scene ends (no new picture)`);
+  // D31: an own picture of another shape is extended by the AI, never filled with a blur.
+  const ext = scenes.filter((s, i) => extend.has(i)).length;
+  if (ext) parts.push(`${ext === 1 ? 'your picture is' : `${ext} of your pictures are`} a different shape from the ad, so the AI extends ${ext === 1 ? 'it' : 'them'} to fill the frame`);
   const text = parts.join('; ');
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}. The video AI animates one picture per scene.`.replace('Every scene get ', 'Every scene gets ');
 }
@@ -294,9 +318,11 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const [keepMine, setKeepMine] = useState(false);
   const [sound, setSound] = useState({ voice: job.brief.voice, music: job.brief.music, captions: job.brief.captions });
   const n = board?.scenes.length ?? 3;
-  const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice), [board, config, n, sound.voice]);
+  const extend = useMemo(() => extendedScenes(job, board), [job, board]);
+  const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice, extend), [board, config, n, sound.voice, extend]);
   const hasStory = storyMode === 'own' || Boolean(job.brief.story);
-  const newImages = board ? board.scenes.filter((s, i) => s.image_source === 'generate' && !isChained(board, i, s)).length : 0;
+  // New pictures: generated ones, plus own pictures the AI extends to the ad's shape (D31).
+  const newImages = board ? board.scenes.filter((s, i) => (s.image_source === 'generate' && !isChained(board, i, s)) || extend.has(i)).length : 0;
   const clips = useClipTexts(job, board); // what each clip gets, as you type (D30)
   const [shortened, setShortened] = useState({}); // scene -> its text before "Shorten it for me"
 
@@ -771,7 +797,9 @@ function StoryboardStep({ job, onChange, readOnly }) {
                         {src === 'generate' && isChained(board, i, { image_source: 'generate' }) ? `Continue from scene ${i}` : SOURCE_LABEL[src]}
                         {config && (
                           <span className="muted small">
-                            {src === 'generate' && !isChained(board, i, { image_source: 'generate' }) ? formatMoney(config.prices.image, currency) : 'free'}
+                            {(src === 'generate' && !isChained(board, i, { image_source: 'generate' })) || (src !== 'generate' && needsExtend(ownPicture(job, i, src), job.brief.aspect_ratio))
+                              ? formatMoney(config.prices.image, currency)
+                              : 'free'}
                           </span>
                         )}
                       </Chip>
@@ -784,6 +812,9 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     </label>
                   )}
                   {s.image_source === 'upload' && own && <img className="scene-image" src={own.url} alt={`Your picture for scene ${i + 1}`} />}
+                  {extend.has(i) && (
+                    <p className="muted small">This picture is a different shape from the ad, so the AI extends it to fill the frame (one picture&rsquo;s price).</p>
+                  )}
                   {i > 0 && endsOnNext(board, i - 1) && <p className="flow-note small">Scene {i}&rsquo;s clip ends on this picture, so the cut matches.</p>}
                   <SceneLength
                     id={`len${i}`}
@@ -943,7 +974,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 [`Video: ${n} ${n === 1 ? 'clip' : 'clips'}${sound.voice !== 'none' ? ' and voiceover' : ''}${mode === 'images' && newImages > 0 ? ' (later, only if you choose it)' : ''}`, estimate.video],
               ]}
               total={mode === 'video' || newImages === 0 ? estimate.total : null}
-              note={pictureNote(board.scenes.slice(0, n), board)}
+              note={pictureNote(board.scenes.slice(0, n), board, extend)}
               spend={job.spend}
               cap={job.cost_cap}
               currency={currency}

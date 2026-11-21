@@ -67,14 +67,18 @@ def test_a_too_short_story_is_refused(client, session_id, photo_bytes):
 
 
 # --- own images -----------------------------------------------------------------------------------
-def test_an_uploaded_scene_image_is_used_free_and_fitted_to_the_ratio(client, ctx, session_id, photo_bytes):
-    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
-    before = job["estimate"]["images"]["eur"]
-    r = client.post(
-        f"/jobs/{job['id']}/scenes/1/image",
-        files={"image": ("mine.png", _png(1600, 900), "image/png")},
+def _upload_scene_image(client, session_id, job_id, idx, w, h):
+    return client.post(
+        f"/jobs/{job_id}/scenes/{idx}/image",
+        files={"image": ("mine.png", _png(w, h), "image/png")},
         headers=_h(session_id),
     )
+
+
+def test_an_uploaded_scene_image_close_to_the_ratio_is_cropped_free(client, ctx, session_id, photo_bytes):
+    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
+    before = job["estimate"]["images"]["eur"]
+    r = _upload_scene_image(client, session_id, job["id"], 1, 1000, 1600)  # 5:8, a crop keeps 90%
     assert r.status_code == 200, r.text
     view = r.json()
     scene = view["storyboard"]["scenes"][1]
@@ -89,7 +93,33 @@ def test_an_uploaded_scene_image_is_used_free_and_fitted_to_the_ratio(client, ct
     own = next(a for a in done["assets"] if a["kind"] == "image" and a["scene_idx"] == 1)
     got = client.get(own["url"].replace("http://testserver", ""))
     with Image.open(io.BytesIO(got.content)) as im:
-        assert im.size == (1080, 1920)  # a 16:9 photo fitted to the 9:16 ad (blurred fill)
+        assert im.size == (1080, 1920)  # cropped to the 9:16 ad
+
+
+def test_an_uploaded_scene_image_far_from_the_ratio_is_extended_not_blurred(client, ctx, session_id, photo_bytes):
+    """A blurred fill was animated by Kling into every later scene (real test, 21 Nov 2026), so a
+    picture a crop would cut too much is extended to the full frame by the image model (D31)."""
+    job = separate_shots(client, session_id, create_job(client, session_id, photo_bytes).json())
+    before = job["estimate"]["images"]["eur"]
+    view = _upload_scene_image(client, session_id, job["id"], 1, 1600, 900).json()  # 16:9 into a 9:16 ad
+    assert view["estimate"]["images"]["eur"] == before  # one picture's price: extended instead of generated
+
+    approve(client, session_id, job["id"])
+    worker.run_once(ctx)
+    assert [r.kind for r in ctx.media.submits] == ["image"] * 3
+    extend = ctx.media.submits[1]
+    assert extend.arguments["prompt"].startswith("This photo was placed in a frame")
+    assert extend.arguments["aspect_ratio"] == "9:16"
+    with Image.open(io.BytesIO(extend.input_image.data)) as im:
+        assert im.size == (1080, 1920)  # the model gets the picture already placed at the ad's shape
+    run = next(r for r in ctx_runs(ctx, job["id"]) if r["scene_idx"] == 1)
+    assert run["output"]["fit"] == "extend" and run["output"]["own"] == "upload"
+
+
+def ctx_runs(ctx, job_id):
+    from app import repository as repo
+
+    return [r for r in repo.list_stage_runs(ctx.db, job_id) if r["stage"] == "image"]
 
 
 def test_the_product_photo_can_be_a_scene_image(client, ctx, session_id, photo_bytes):
@@ -99,7 +129,20 @@ def test_the_product_photo_can_be_a_scene_image(client, ctx, session_id, photo_b
     assert _put(client, session_id, job["id"], board).status_code == 200
     approve(client, session_id, job["id"])
     worker.run_once(ctx)
-    assert len(ctx.media.submits) == 2
+    # The 4:5 test photo would lose 30% in a 9:16 crop, so the image model extends it.
+    assert len(ctx.media.submits) == 3
+    assert ctx.media.submits[0].arguments["prompt"].startswith("This photo was placed in a frame")
+
+
+def test_own_fit_crops_when_it_keeps_enough_else_extends():
+    from app.services.pipeline import own_fit
+
+    assert own_fit(1080, 1920, "9:16") == "crop"
+    assert own_fit(1000, 1600, "9:16") == "crop"  # keeps 90%
+    assert own_fit(800, 1000, "9:16") == "extend"  # keeps 70%
+    assert own_fit(1600, 900, "9:16") == "extend"
+    assert own_fit(1600, 900, "16:9") == "crop"
+    assert own_fit(1000, 1000, "4:5") == "crop"  # keeps 80%
 
 
 def test_the_browser_cannot_point_a_scene_at_another_file(client, ctx, session_id, photo_bytes):

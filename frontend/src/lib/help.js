@@ -20,7 +20,7 @@ export const HELP = {
   scenes: 'Each scene: what we see, the spoken line, the headline, where its image comes from, its length and the prompts. Open it only if you want to check or change something.',
   make: 'Images first: you check the pictures and can still edit before paying for video. Video: images and video in one go, for when everything is ready.',
   image_source:
-    'Generate a new picture from your product photo, use your product photo as it is, or upload a picture you already have (free).',
+    'Generate a new picture from your product photo, use your product photo as it is, or upload a picture you already have (free). A picture much wider or squarer than the ad is extended by the AI to fill the frame, for one picture\'s price.',
   story:
     'AI storyboard: written from your brief. My own story: paste your story or script (up to 12,000 characters); your spoken lines are kept word for word and the scenes, prompts and hooks follow it.',
   hooks: 'Optional. The opening line decides if people keep watching. Keep yours, pick one of three ideas, or write your own; it replaces scene 1\'s first line.',

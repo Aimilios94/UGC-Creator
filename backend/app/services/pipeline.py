@@ -31,7 +31,7 @@ from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Sto
 from ..repository import Database
 from . import analyze, continuity, shorten, storyboard
 from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into, frame_at, probe_duration
-from .image_gen import PlannedRender, plan_scene_image
+from .image_gen import PlannedRender, plan_extend_image, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
 from .music import music_for
 from .output_checks import check_compose
@@ -580,11 +580,20 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
     repo.stage_done(ctx.db, sr["id"], {k: output[k] for k in ("duration_s", "ratios", "skipped")})
 
 
-def use_own_image(ctx: Context, job: dict, idx: int, scene: Scene, ratio: str) -> dict:
-    """A scene image the user already has (their upload, or the product photo): free, no render.
+def own_fit(width: int, height: int, ratio: str) -> str:
+    """How an own picture becomes the ad's shape: "crop" when a centre crop keeps at least 75% of
+    it (free), else "extend" (the image model continues the scene to the full frame, one picture's
+    price). Never a blurred fill: Kling animates the bands into every scene that follows (D31)."""
+    w, h = frame_size(ratio)
+    return "crop" if crop_keep_image(width / height, w / h) >= MIN_CROP_KEEP else "extend"
 
-    It is fitted to the ad's master ratio first (crop, or a blurred fill when a crop would cut
-    too much), because the video model takes the clip's shape from its input image."""
+
+def use_own_image(ctx: Context, job: dict, idx: int, scene: Scene, ratio: str) -> dict:
+    """A scene image the user already has (their upload, or the product photo).
+
+    It is made the ad's master shape first, because the video model takes the clip's shape from
+    its input image: a free centre crop, or, when that would cut too much, extended to the full
+    frame by the image model (see `own_fit`)."""
     job_id = str(job["id"])
     sr = repo.get_stage_run(ctx.db, job_id, "image", idx)
     if sr and sr["status"] == "done":
@@ -592,16 +601,36 @@ def use_own_image(ctx: Context, job: dict, idx: int, scene: Scene, ratio: str) -
     source_key = job["upload_key"] if scene.image_source == "product" else scene.image_upload_key
     if not source_key:
         raise RuntimeError(f"scene {idx + 1} has no uploaded image")
-    sr = repo.start_stage(ctx.db, job_id, "image", idx, provider="own", model=f"own-{scene.image_source}", attempt=1)
     from PIL import Image
 
     w, h = frame_size(ratio)
     with Image.open(io.BytesIO(ctx.storage.get(source_key))) as im:
-        mode = "crop" if crop_keep_image(im.width / im.height, w / h) >= MIN_CROP_KEEP else "pad"
-        fitted = fit_into(im, w, h, mode)
+        mode = own_fit(im.width, im.height, ratio)
+        fitted = fit_into(im, w, h, "crop" if mode == "crop" else "pad")
     buf = io.BytesIO()
     fitted.save(buf, "JPEG", quality=92)
-    asset = _store_output(ctx, job_id, "image", idx, buf.getvalue(), "image/jpeg")
+    data = buf.getvalue()
+    if mode == "extend":
+        # The picture on its blurred copy is only the model's input; it is never shown or animated.
+        key = f"jobs/{job_id}/scene-{idx}/own-placed.jpg"
+        ctx.storage.put(key, data, "image/jpeg")
+        placed = InputImage(data=data, content_type="image/jpeg", url=ctx.storage.provider_url(key, 3600))
+        return run_media_stage(
+            ctx,
+            job,
+            "image",
+            idx,
+            lambda: plan_extend_image(
+                model=ctx.settings.image_model,
+                aspect_ratio=ratio,
+                seed=job_seed(job_id),
+                placed=placed,
+                placed_sha256=hashlib.sha256(data).hexdigest(),
+            ),
+            meta={"own": scene.image_source, "fit": "extend"},
+        )
+    sr = repo.start_stage(ctx.db, job_id, "image", idx, provider="own", model=f"own-{scene.image_source}", attempt=1)
+    asset = _store_output(ctx, job_id, "image", idx, data, "image/jpeg")
     repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "own": scene.image_source, "fit": mode})
     return asset
 
@@ -829,13 +858,29 @@ def estimate_job_usd(s: Settings) -> float:
     return round(per_scene * min(DEFAULT_SCENES, s.render_scenes), 6)
 
 
-def estimate_board_usd(s: Settings, board: Storyboard, voice: str = "marin") -> tuple[float, float]:
-    """(images, video) estimate for this storyboard: own images are free; clips by each scene's length."""
+def own_to_extend(board: Storyboard, ratio: str, upload_key: str | None, sizes: dict[str, tuple[int, int]]) -> set[int]:
+    """The scenes whose own picture must be extended to the ad's shape (`own_fit`), from the
+    stored picture sizes (storage key -> width, height)."""
+    out = set()
+    for i, sc in enumerate(board.scenes):
+        if sc.image_source == "generate":
+            continue
+        size = sizes.get((upload_key if sc.image_source == "product" else sc.image_upload_key) or "")
+        if size and size[0] and size[1] and own_fit(size[0], size[1], ratio) == "extend":
+            out.add(i)
+    return out
+
+
+def estimate_board_usd(
+    s: Settings, board: Storyboard, voice: str = "marin", extend: set[int] | frozenset[int] = frozenset()
+) -> tuple[float, float]:
+    """(images, video) estimate for this storyboard: own pictures are free unless they must be
+    extended to the ad's shape (`extend`, from `own_to_extend`); clips by each scene's length."""
     scenes = board.scenes[: s.render_scenes]
     images = sum(
         cost_usd(s.image_model, Usage(images=1))
         for i, sc in enumerate(scenes)
-        if sc.image_source == "generate" and not is_chained(board, i, sc)
+        if (sc.image_source == "generate" and not is_chained(board, i, sc)) or i in extend
     )
     video = sum(cost_usd(s.video_model, Usage(seconds=render_seconds(sc.duration_s))) for sc in scenes)
     if voice != "none":

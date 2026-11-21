@@ -42,6 +42,7 @@ from ..services.pipeline import (
     Context,
     clip_texts,
     estimate_board_usd,
+    own_to_extend,
     prepare_storyboard,
     scenes_too_long,
     shorten_scene,
@@ -81,6 +82,8 @@ def job_view(ctx: Context, job: dict) -> JobView:
                 url=ctx.storage.signed_url(a["storage_key"], ttl),
                 content_type=a["content_type"],
                 expires_in_s=ttl,
+                width=a.get("width"),
+                height=a.get("height"),
             )
         )
     brief = Brief.model_validate(job["brief"])
@@ -139,7 +142,8 @@ def public_board(board: Storyboard) -> Storyboard:
 def _estimate(ctx: Context, board: Storyboard, spent_usd: float, job: dict) -> Estimate:
     s = ctx.settings
     rate = s.usd_to_eur_rate
-    images, video = estimate_board_usd(s, board, job["brief"].get("voice", "marin"))
+    extend = _to_extend(ctx, board, job) if job["status"] == "draft" else frozenset()
+    images, video = estimate_board_usd(s, board, job["brief"].get("voice", "marin"), extend)
     if job["status"] != "draft":
         images = 0.0  # already made
     if job["status"] != "draft" and (job.get("phase") or "video") == "video":
@@ -151,6 +155,18 @@ def _estimate(ctx: Context, board: Storyboard, spent_usd: float, job: dict) -> E
         total=Money(**money(total, rate)),
         fits_cap=spent_usd + total <= s.job_cost_cap_usd + 1e-9,
     )
+
+
+def _to_extend(ctx: Context, board: Storyboard, job: dict) -> set[int]:
+    """Scenes whose own picture is too far from the ad's shape to crop: the image model extends it."""
+    if all(sc.image_source == "generate" for sc in board.scenes):
+        return set()
+    sizes = {
+        a["storage_key"]: (a["width"], a["height"])
+        for a in repo.list_assets(ctx.db, str(job["id"]))
+        if a["kind"] == "upload" and a.get("width") and a.get("height")
+    }
+    return own_to_extend(board, job["brief"].get("aspect_ratio", "9:16"), job.get("upload_key"), sizes)
 
 
 def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool) -> Storyboard:
@@ -197,7 +213,7 @@ def _check_ready(ctx: Context, job: dict, board: Storyboard, *, phase: str) -> N
             detail=f"The video AI reads at most 2,500 characters per clip, and the movement text is too long in "
             f'{parts}. Shorten it, or press "Shorten it for me".',
         )
-    images, video = estimate_board_usd(s, board, job["brief"].get("voice", "marin"))
+    images, video = estimate_board_usd(s, board, job["brief"].get("voice", "marin"), _to_extend(ctx, board, job))
     need = (images + video) if phase == "images" else video
     if repo.job_spend_usd(ctx.db, str(job["id"])) + need > s.job_cost_cap_usd + 1e-9:
         raise HTTPException(
