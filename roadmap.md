@@ -4,7 +4,8 @@ The milestone plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-p
 
 ## Now
 - **M1** ✅ secure base and first pipeline leg (merged and live, 19 Nov 2026).
-- **M2** (in progress): full 3-scene ads. Done so far: CI on current action versions with a pinned runner, and a ruleset on `main` (D23). Before it: a landing-page refresh in the v1 look (D24, PR #4).
+- **M2** (in progress on `v2`, not deployed): full ads. Done: CI on current actions and a ruleset on `main` (D23); campaign brief, brand kit and the testimonial rule (D25); compose, voice and music (D26); the user-steered storyboard, pictures then video, 1–5 scenes, video length, continuous shot and style notes (D27–D29). Still to do: themes, cost tracking and History, Sentry and the docs page, the cleanup cron and "delete my data", then the M2 deploy. Before M2: a landing refresh in the v1 look (D24, PR #4).
+- **Before 6 Jan 2027:** replace the voice model (OpenAI shuts `gpt-4o-mini-tts` down; D26).
 - Then: M3 judge + Hook Lab + Post Kit, M4 measured public MVP, then v2.1 (M5–M6).
 
 ## Later extras
@@ -23,6 +24,8 @@ The milestone plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-p
 - Live ad-platform APIs
 - Email and subject-line writer
 - Digital Fairness Act follow-up (M5 adds the "watching" line)
+- Upload your own voice recording instead of the AI voice (asked about on 20 Nov 2026; not chosen for now)
+- Pin each clip's last frame to the next scene's picture with Kling's end-frame input (separate-shots mode)
 
 ## Insights (future section)
 - Performance aggregates by hook formula, theme and platform

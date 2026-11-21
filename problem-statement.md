@@ -11,6 +11,7 @@ AI image and video models can now make convincing footage, but a naive pipeline 
 ## What v2 must do
 - Keep the real product: edit the uploaded photo into each scene, then animate that image.
 - Put a human gate before any paid render: the user approves the storyboard.
+- Follow the user's own story, structure and length when they have one, and keep the scenes visually continuous.
 - Know the cost before and after every step, cap it per ad and per day, and show it in euros.
 - Measure quality with code checks and a calibrated AI judge, and gate changes in CI.
 - Run as a deployed service (not a laptop with a tunnel), keep each user's ads private, and delete them on request.

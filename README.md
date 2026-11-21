@@ -14,13 +14,17 @@
 
 > **Try it:** [v2, current](https://ugc-creator-delta.vercel.app) · [v1, the original n8n prototype (frozen)](https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app)
 >
-> **Status: v2, milestone M1 of 6 complete and live** at https://ugc-creator-delta.vercel.app (generation needs an access code while in early access). The first pipeline leg works end to end on the deployed stack: brief → storyboard you approve → a reference image of your product → a 5-second video clip, for about 0.34 EUR. **M2 (full ads with voiceover, captions and music) is in progress**: its first tasks are done (CI on current action versions and a pinned runner, a ruleset protecting `main`). Measured quality and the public demo arrive in M4. The plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-plan.md).
+> **Status: v2, milestone M1 of 6 complete and live** at https://ugc-creator-delta.vercel.app (generation needs an access code while in early access): brief → storyboard you approve → a reference image of your product → a 5-second clip, for about 0.34 EUR. **M2 (full ads) is in progress on the `v2` branch, not live yet:** 1–5 scenes that follow your own story and length, your own pictures or new ones, one continuous shot or separate shots, an AI voiceover, licensed music, burned-in captions, an end card, every platform shape, and "AI-generated" metadata on every file. Measured quality and the public demo arrive in M4. The plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-plan.md).
 
 ## What it does
 
+Live today (M1):
+
 1. **Brief.** Upload a product photo; say what it is, who it is for, and any offer.
 2. **Storyboard.** A vision LLM reads the photo and writes a 3-scene plan (hook, demo, call to action) with three hook ideas tagged by formula. You edit and approve it. Nothing paid renders before that.
-3. **Generate.** For each scene, the real photo is edited into a new setting (image editing, so the product stays the same), then animated into a clip (image-to-video). Progress and cost show live, in euros.
+3. **Generate.** The real photo is edited into the first scene (image editing, so the product stays the same), then animated into a clip (image-to-video). Progress and cost show live, in euros.
+
+Coming with M2 (on `v2`): your own story and video length set the scenes (1–5); starting pictures you make or bring; a continuous shot or separate shots; voice, music, captions and an end card; every shape; the model and cost of each step on the result page.
 
 ## How it is built
 
@@ -29,6 +33,7 @@
 | API and worker | FastAPI + a worker in one Docker image: a Cloud Run service and a Cloud Run Job (europe-west4) |
 | AI | Pydantic AI with structured outputs; OpenAI by default, switchable; a mock provider for tests |
 | Image and video | fal: Nano Banana edit (0.0398 USD/image), Kling 2.5 Turbo Pro image-to-video (0.07 USD/s) |
+| Voice and edit (M2) | OpenAI `gpt-4o-mini-tts` voiceover; ffmpeg + Pillow compose captions, music (CC0), end card, every shape |
 | Queue and data | Postgres on Neon (Frankfurt) with pgvector; the `jobs` table is the queue (`SKIP LOCKED`) |
 | Files | Private Google Cloud Storage bucket, signed expiring URLs |
 | Frontend | React + Vite on Vercel |

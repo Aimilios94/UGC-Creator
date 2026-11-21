@@ -37,14 +37,18 @@ export default function Privacy() {
   return (
     <div className="page prose">
       <h1>Privacy notice</h1>
-      <p className="muted">Last updated: 20 November 2026. The app is in early access.</p>
+      <p className="muted">Last updated: 21 November 2026. The app is in early access.</p>
 
       <h2>What we collect</h2>
       <ul>
-        <li>The product photo you upload. Location and camera data (EXIF/GPS) are removed when it arrives.</li>
         <li>
-          The brief you type: product name, description, audience, offer, landing page, goal, theme and ad type. Ads
-          are grouped into campaigns, which keep a copy of the brief.
+          The product photo you upload, and any picture you upload for a scene. Location and camera data (EXIF/GPS) are
+          removed when they arrive.
+        </li>
+        <li>
+          The brief you type: product name, description, audience, offer, landing page, goal, theme, ad type, video
+          length, and your own story with any style notes. Ads are grouped into campaigns, which keep a copy of the
+          brief.
         </li>
         <li>
           Your brand kit, if you save one: logo (location and camera data removed, like photos), colours, font and tone
@@ -56,7 +60,7 @@ export default function Privacy() {
           sign-in, no analytics and no tracking cookies.
         </li>
         <li>
-          Fields marked &ldquo;Soon&rdquo; on the Create page (such as email, voice and music) are previews: what you
+          Fields marked &ldquo;Soon&rdquo; on the Create page (model preset, Hook Lab and email) are previews: what you
           type or pick there stays in your browser and is not sent to us.
         </li>
       </ul>

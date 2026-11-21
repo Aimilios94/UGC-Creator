@@ -1,6 +1,6 @@
 # M2 — Full ads (design note)
 
-Status: **in progress** on `v2`. Started 19 Nov 2026. The plan is [§17, M2](../plan/ugc-v2-full-plan.md); this note records how it is built and what was decided on the way.
+Status: **in progress** on `v2` (not deployed; production still runs M1). Started 19 Nov 2026; last updated 21 Nov 2026. The plan is [§17, M2](../plan/ugc-v2-full-plan.md); this note records how it is built and what was decided on the way.
 
 ## Done
 - **Task 0, CI maintenance ([D23](../../DECISIONS.md)):** `actions/checkout@v7`, `actions/setup-python@v7`, `actions/setup-node@v7`, every job on a pinned `ubuntu-24.04` runner (the image `ubuntu-latest` points to). The first run after the change was green with no annotations (commit `cab5768`).
@@ -12,19 +12,28 @@ Status: **in progress** on `v2`. Started 19 Nov 2026. The plan is [§17, M2](../
   - *API:* `POST /jobs` takes `campaign_id`, `campaign_name`, `use_brand_kit`; the brief takes `goal`, `theme`, `ad_type`. `GET /campaigns`; `GET`/`PUT /brand-kit`; `POST /brand-kit/logo`. `JobView` adds `campaign_id`, `brand`, `flags`, `variants`. Saving needs the access code; reading does not.
   - *Prompt:* goal, theme and ad type steer the angle; the brand tone wins over the theme; image and motion prompts never ask for lettering, logos or brand colours (compose adds them).
   - *Testimonial rule:* `services/storyboard_checks.py` flags claims the brief does not state; the pipeline rewrites once with the lines as feedback; leftover flags are marked on the Storyboard step and Approve returns 409 until they are edited. Title, call to action and hooks became editable so every flagged field can be fixed.
-  - *3 scenes:* `RENDER_SCENES=3` in code and tests (estimate 1.17 USD ≈ 1.02 EUR); Cloud Run pinned to 1 until the M2 deploy.
+  - *3 scenes:* `RENDER_SCENES=3` in code and tests (estimate 1.17 USD ≈ 1.02 EUR; later 1–5 scenes, D28); Cloud Run pinned to 1 until the M2 deploy.
   - *UI:* Create page goal/theme/ad type/campaign/brand kit live (Soon tags removed); Generate step shows every scene's progress and clip.
   - *Checks:* 100 tests pass (39 new); lint and build clean; the flow checked in a browser on the mock stack.
 
 - **Item 2, compose, voiceover and music ([D26](../../DECISIONS.md), 20 Nov 2026; on `v2`, not deployed):**
   - *Order in the worker:* voice lines → image and video per scene → compose. A voice failure stops the job before any video is paid.
   - *Voice:* `providers/voice.py` (`openai` | `mock`), `gpt-4o-mini-tts`, voices marin/cedar/coral/onyx, tone from the brand kit. **OpenAI shuts the model down on 6 Jan 2027: choose and plug in a replacement before then.** Tokens estimated high; three lines cost well under a cent.
-  - *Compose:* silent master with hard cuts (hold or speed up ≤1.15× when a line is longer than its clip); ratios cropped (keeps ≥75%) or fitted on a blurred copy; captions (bold 3-word chunks, clean subtitles, or off) and headlines laid out by us inside the safe zone and burned in by libass; logo top-left; 2 s end card; voice over the ducked music bed, −14 LUFS; AI metadata on every MP4 and JPEG; cover, stills, 4:5 carousel; output checks stored on variant A.
+  - *Compose:* silent master (since D29: a 0.3 s blend at every cut; hold or speed up ≤1.15× when a line is longer than its clip); ratios cropped (keeps ≥75%) or fitted on a blurred copy; captions (bold 3-word chunks, clean subtitles, or off) and headlines laid out by us inside the safe zone and burned in by libass; logo top-left; 2 s end card; voice over the ducked music bed, −14 LUFS; AI metadata on every MP4 and JPEG; cover, stills, 4:5 carousel; output checks stored on variant A.
   - *Music:* five CC0 beds, one per theme ([MUSIC.md](../MUSIC.md)). *Fonts:* four OFL fonts.
   - *Checks:* 120 tests pass (20 new: compose on real ffmpeg, AI-metadata guardrail, safe zones, voice spend rules); the full flow checked in a browser on the Docker mock stack (4 ratios in about 26 s).
-  - *Deploy notes:* the worker needs the OpenAI key; schema, `RENDER_SCENES=3` and a paid smoke run (SETUP, "M2 deploy").
+  - *Deploy notes:* the worker needs the OpenAI key; schema, `RENDER_SCENES` and a paid smoke run (SETUP, "M2 deploy").
 
 - **After the owner's first manual test: the user steers the storyboard, images first ([D27](../../DECISIONS.md), 20 Nov 2026; on `v2`):** two steps (Approve → images; "Make the video" → voice, clips, compose), own scene images, own story, hook choice, 5/10 s clips with live prices and an up-front cap check, visual style, detailed image prompts and timed motion shot lists, clickable steps with Back, hover help. Second pass: the story drives scenes, prompts, lengths and hooks; folded sections; 2–10 s scenes and a typed ad length; Continue with "What to make" (images first, or all in one go). 132 tests pass. Third pass ([D28](../../DECISIONS.md)): 1–5 scenes following the story; Sound card with voice and music previews ("No voiceover", any track); "Next" in plain words; text boxes that grow. 138 tests pass. Voice previews cost about 0.006 EUR (real model, owner's go). Local note: the Docker stack prices mock renders like real ones (D14), so a day of local testing can reach the 4 EUR daily limit in the local database; clear it with `docker compose exec -T postgres psql -U postgres -d ugc -c "delete from llm_calls where provider = 'mock'"` (local only). Vite in Docker does not see file changes on a Windows bind mount: `docker compose restart frontend` after frontend edits.
+
+- **Fourth pass, after the first real tests ([D29](../../DECISIONS.md), 20–21 Nov 2026; on `v2`):**
+  - *Length and scenes:* "Video length" on the Create page (Auto, 10–30 s, or 4–52 s); about 2.5 s per scene; spoken lines get their time; timestamps in the story win and are read in code (`story_beats.py`, `scene_plan.py`), so the writer can no longer merge beats.
+  - *Recommendation:* "Recommended: N scenes instead of M" with Apply (joins neighbours, nothing cut, times carry on), Keep and Undo; stable scene ids keep uploaded pictures with their scene.
+  - *Continuity:* "One continuous shot" (scene 2 onward starts from the previous cut; only scene 1 gets a starting picture) or "Separate shots"; a 0.3 s blend at every cut; a continuity rule in every clip instruction.
+  - *Style and world notes (optional):* text outside the timed beats, in its own box, added to every picture and clip instruction.
+  - *Clarity:* total video length counts the end card and explains limits; per-scene clip notes; prices by part with the model names; platform picks its shape; title is the product name; plain "First line of the ad"; readable API errors; the Video step shows "About this ad" (tiles, story, model and cost per step) and each shape in its real size; local mock clips animate your own pictures.
+  - *Real test (owner's go, 5 EUR limit, local stack):* 0.94 EUR spent (one 3-scene video and storyboards). The look was good; scene changes jumped, which the continuous shot now addresses (**not yet re-tested with the real AI**). The owner plans a 20 s test next (5 × 4 s, continuous, about 1.55 EUR).
+  - *Checks:* 146 tests pass; lint and build clean; each pass checked in a browser on the mock stack.
 
 ## Next (plan §17, M2)
 1. ~~Campaign brief and brand kit; 3 scenes; testimonial rule~~ (done above). Still "Soon" on the Create page: model preset (M4), Hook Lab (M3), email (M3).
@@ -34,10 +43,16 @@ Status: **in progress** on `v2`. Started 19 Nov 2026. The plan is [§17, M2](../
 5. Sentry (backend and frontend, EU org, with the scrubber), the OpenAPI docs page and a curl example in the README.
 6. Token-protected cleanup endpoint on the GitHub Actions cron (retention and stale-job sweep) and "delete my data". **Must also cover item 1's data:** campaigns, brand kits and logo files under `brand/<session hash>/` (not covered by the `jobs/` bucket rule) after 30 days without use, and all of them on "delete my data" (D25, PRIVACY). The sweep token is generated by the agent when the endpoint is built: one value, never printed, stored in Secret Manager (accessor `ugc-api` only) and as a GitHub Actions secret via `gh secret set` from stdin, compared in constant time; recorded in DECISIONS and SETUP.
 
+Also before the M2 PR:
+- The owner's next real test (20 s, continuous shot) and any fixes it shows.
+- The M2 deploy (SETUP, "M2 deploy"): schema on Neon (now also `jobs.phase`, scene ids are in the storyboard JSON), worker access to the OpenAI key, `RENDER_SCENES`, the image with ffmpeg, then one paid smoke run, each with the owner's go. Deploying the new API changes what the live (M1) site talks to, so the M2 frontend must go live with it.
+- The voice model replacement before 6 Jan 2027 (D26).
+
 **Done when** (plan): a 3-scene ad with voiceover, captions, end card and music plays in its master ratio and every derived ratio that passes the safe-zone check; every export carries AI metadata; History shows cost per stage in EUR; a job killed mid-run is recovered or failed by the sweep within one cron interval; expired files are deleted; "delete my data" removes the session's jobs and files at once.
 
 ## Inputs for the build
 - **Video:** one continuous take per scene clip; a start frame (and an end frame where the model supports it) keeps people and places consistent. Kling's multi-shot mode made the subject jump between places. Avoid beats that depend on object physics. ([feedback round 2](../../feedback-notes.md))
 - **Text on screen:** the models write made-up lettering on signs and boards, so captions, offer and end card come only from `compose.py`.
 - **Trimming:** `compose.py` can cut a weak span with a short dissolve instead of paying for a re-render.
-- **Budget:** about 17 EUR of the 26 EUR project API budget is left for M2–M4 (D24). Every paid smoke run needs the owner's go with an estimate.
+- **Budget:** about 9.85 EUR of the ~26 EUR project API budget is used (D24, D28, D29), about 16.15 EUR left for M2–M4. Every paid run needs the owner's go with an estimate and a limit.
+- **Possible later:** Kling's end-frame input (`tail_image_url`) could pin each clip's last frame to the next scene's picture (separate-shots mode); choosing models per step (M4 model comparison).

@@ -16,18 +16,29 @@ All notable changes to UGC Ad Builder. Format based on [Keep a Changelog](https:
 - Storyboard, second pass ([D27](DECISIONS.md)): your story drives scenes, prompts, lengths and hooks; Scenes and Opening hook fold away when you have a story; scene length 2–10 s and a typed ad length (up to 30 s); a neutral Continue with "What to make": images first, or images and video in one go.
 - 1 to 5 scenes following your story, add or remove scenes; a Sound card (voice with ▶ previews or no voiceover, any of the five music tracks or none, captions) on the Storyboard and Images steps; "Next" in plain words; text boxes that show all their text ([D28](DECISIONS.md)). Voice previews made once with the real voice model (about 0.006 EUR).
 - Detailed prompts: image prompts describe subject, setting, framing, camera, light, colours and style; motion prompts are a timed shot list for one continuous take; Kling gets a negative prompt against lettering.
+- Storyboard clarity (owner's manual tests, 20 Nov 2026): the total video length box counts the end card and explains when a number is too short or too long; per-scene clip notes ("the AI makes a 5 s clip and the first 2 s are used"); prices broken down (starting pictures, clips and voice, total) with the AI model named for each; the platform picks its best shape; the suggested title is the product name; one scene per row with "Show what the AI gets"; "First line of the ad" explained in plain words.
+- Video step: the video first with "About this ad" (tiles, a dotted story list, the model and cost of each step, total), grouped progress, the player in each shape's real size, extra images folded away. On the local mock stack the clips now animate your own pictures (`MOCK_PREVIEW`).
+- Video length on the Create page (about 2.5 s per scene, timestamps win), the recommended number of scenes with Apply (joins neighbours, nothing cut) and Undo, one continuous shot (each scene starts where the previous ended) or separate shots, a 0.3 s blend at every cut, a continuity rule in every clip instruction, and optional style and world notes split from the story and added to every scene ([D29](DECISIONS.md)).
+
+### Fixed
+- The real writer could merge timed beats of a story into one scene: the number of scenes, their text and lengths now come from the story's timestamps in code ([D29](DECISIONS.md)).
+- Saving a storyboard with joined scenes failed on the old 800-character scene text limit (now 2,500; voiceover 400), and the page only said "Something went wrong"; refusals are now shown as a readable sentence.
+- Switching the shape on the Video step looked unchanged (fixed player box and a tall cover picture).
+- The length warning made the page jump, so the Scenes section did not open on click.
 
 ### Changed
 - The Docker image installs ffmpeg; CI installs it for the compose tests. PyYAML added.
-- Every ad renders three scenes in code and tests (`RENDER_SCENES=3`, estimate 1.17 USD ≈ 1.02 EUR). Cloud Run stays pinned to 1 scene (`RENDER_SCENES: "1"` in `deploy/gcp/*.env.yaml`) until the M2 deploy, which sets 3 with the owner's go.
+- Ads have 1 to 5 scenes in code and tests (`RENDER_SCENES=5` is the most rendered, [D28](DECISIONS.md); 3 without a story or length; a 3-scene ad of 5 s clips is estimated at 1.17 USD ≈ 1.02 EUR). Cloud Run stays pinned to 1 scene (`RENDER_SCENES: "1"` in `deploy/gcp/*.env.yaml`) until the M2 deploy, which sets it with the owner's go.
+- Docker Compose passes `DAILY_SPEND_LIMIT_EUR` through, for a local paid test (the owner's test used 5 EUR).
 - CI: `actions/checkout`, `actions/setup-python` and `actions/setup-node` moved to their current major version (v7), and every job runs on a pinned `ubuntu-24.04` runner instead of `ubuntu-latest` ([D23](DECISIONS.md)). The Node 20 deprecation warnings are gone.
 - GitHub ruleset "main protection" on `main`: force pushes and deletion blocked; the CI checks `frontend`, `backend` and `docker` must pass on an up-to-date branch; no required reviews, no bypass ([D23](DECISIONS.md), settings in `docs/SETUP.md`).
 
 ### Docs
 - Privacy notice (in-app and `docs/PRIVACY.md`): the "Soon" fields on the Create page stay in the browser and are not sent. Updated for M2 item 1: campaigns and the brand kit (with the logo) are stored per browser session, and the M2 cleanup deletes them after 30 days without use.
 - M2 design note started (`docs/notes/m2-full-ads.md`); feedback round 2 records what the landing assets taught for the video pipeline; D24 records the project spend so far (about 8.9 EUR of the ~26 EUR API budget).
+- Feedback round 3 (the owner's manual tests, 20–21 Nov 2026) and the first real test's spend (0.94 EUR, [D29](DECISIONS.md)); project spend about 9.85 EUR, about 16.15 EUR left.
 
-M2 (full 3-scene ads) continues.
+M2 continues: themes, cost tracking and History, Sentry and the docs page, the cleanup cron and "delete my data", then the M2 deploy.
 
 ## [Landing refresh and spend limits] — 2026-11-19 (PR #4, merge commit `b9ee79e`, merged 23:39 UTC)
 ### Changed

@@ -14,6 +14,20 @@ Real providers are paid. Use them only on purpose, with keys in `backend/.env`:
 LLM_PROVIDER=openai MEDIA_PROVIDER=fal docker compose up
 ```
 
+### Local stack: tips and a paid test
+
+- **Frontend changes:** Vite inside Docker does not see file changes on a Windows bind mount. After editing `frontend/`, run `docker compose restart frontend`.
+- **Backend changes:** `docker compose up --build -d` rebuilds the API and worker.
+- **Mock pictures and clips:** with `MOCK_PREVIEW=true` (the default) a "generated" picture is your product photo fitted to the frame (marked as a test) and a clip is its picture with a slow push-in, so timing, captions, music and the end card can be judged for free. Tests use plain placeholders.
+- **Mock spend and the daily limit:** mock renders are priced like the real models (D14), so a day of local testing can reach the daily limit in the local database. Clear it (local database only) with `docker compose exec -T postgres psql -U postgres -d ugc -c "delete from llm_calls where provider = 'mock'"`.
+- **A paid test with the real AI (only with the owner's go and limit):** keys come from `backend/.env`; the access code is off locally.
+
+  ```bash
+  LLM_PROVIDER=openai MEDIA_PROVIDER=fal VOICE_PROVIDER=openai DAILY_SPEND_LIMIT_EUR=5 docker compose up -d
+  ```
+
+  The same variables must be passed again on every `docker compose up`, or the stack falls back to mock. Real spend so far on the local stack: `docker compose exec -T postgres psql -U postgres -d ugc -c "select round(sum(coalesce(cost_usd, est_cost_usd))*0.87, 3) as eur from llm_calls where status in ('reserved','billed') and provider <> 'mock'"`.
+
 ## Run the backend without Docker
 
 Python 3.12 with [uv](https://docs.astral.sh/uv/):
@@ -132,9 +146,9 @@ Every site that calls the API must be listed in `CORS_ORIGINS` in `deploy/gcp/ap
 
 ### M2 deploy (not run yet; each step with the owner's go)
 
-1. Apply the schema to Neon (`scripts/apply_schema.py`): new tables `campaigns`, `brand_kits`, `variants`; new stage, asset and cache kinds; `jobs.phase` (D27).
+1. Apply the schema to Neon (`scripts/apply_schema.py`): new tables `campaigns`, `brand_kits`, `variants`; new stage, asset and cache kinds; `jobs.phase` (D27). Scene ids, notes and continuity live in the storyboard JSON (no schema change).
 2. The worker now makes the voiceover, so it needs the OpenAI key: grant `ugc-worker` `roles/secretmanager.secretAccessor` on `openai-api-key` and add `OPENAI_API_KEY=openai-api-key:latest` to the job's `--set-secrets` ([D26](../DECISIONS.md)).
-3. Set `RENDER_SCENES: "3"` in both `deploy/gcp/*.env.yaml` (pinned to 1 until then, [D25](../DECISIONS.md)), build the image (it now installs ffmpeg) and update the job and the service.
+3. Set `RENDER_SCENES: "5"` in both `deploy/gcp/*.env.yaml` (the most scenes rendered, D28; pinned to 1 until then, [D25](../DECISIONS.md)), build the image (it now installs ffmpeg) and update the job and the service. The new API changes what the live site talks to (pictures, then video), so the M2 frontend goes live with it.
 4. One paid smoke run of a full 3-scene ad (about 1.05 EUR), with the owner's go and limit.
 
 ### Rotate the access code

@@ -10,23 +10,24 @@ Small brands and marketers who need short social video ads (TikTok, Instagram Re
 
 ## Core ideas
 - **The real product stays in the ad.** The uploaded photo is edited into each scene (image editing, not text-to-image), and each scene image is animated (image-to-video).
-- **Nothing paid runs before approval.** The AI writes a 3-scene storyboard (hook, demo, call to action) with three hook ideas; the user edits and approves it first.
+- **Nothing paid runs before approval.** The AI writes a storyboard (3 scenes, or 1–5 following the user's own story and chosen video length) with three ideas for the first line; the user edits and approves it first.
+- **The user steers (M2, on `v2`).** Their own story and structure lead, pictures they already have can be used, and the scenes can be one continuous shot or separate shots.
 - **Cost is known and capped.** Every paid step is estimated from one price table, checked against a per-ad cap and a daily limit, and shown live in euros.
 - **Measured, not asserted** (from M3–M4): an AI judge scores images and clips, self-fix retries are counted, and the evaluation harness gates changes in CI.
 
 ## The flow
-Brief → Storyboard → Generate → Review → Launch kit → Performance. Milestones add the later steps:
+Brief → Storyboard → Generate → Review → Launch kit → Performance. On `v2` (M2) Generate is two steps, **Pictures** then **Video**, with "make the video now" when the pictures need no check. Milestones add the later steps:
 
 | Milestone | What ships |
 | --- | --- |
 | M1 ✅ (live since 19 Nov 2026) | Brief, storyboard, approval, scene 1 image + video, cost cap, privacy notice, CI, deploy |
-| M2 (in progress) | Full 3-scene ads: voiceover, captions, music, end card, ratios; themes; History; Sentry; cleanup cron |
+| M2 (in progress on `v2`) | Full ads (1–5 scenes, continuous or separate shots): voiceover, captions, music, end card, every shape; themes; History; Sentry; cleanup cron |
 | M3 | AI judge, Hook Lab, Post Kit (texts, checklist, ZIP), ad policy check |
 | M4 (MVP) | Self-fix loop, evaluation harness, model comparison, sample-product demo, public demo under limits |
 | v2.1 | Performance page, Ad Review, EU rules page, Ask assistant, batch runs |
 
 ## Architecture
-React/Vite frontend (Vercel) → FastAPI API (Cloud Run service) → Postgres jobs table (Neon, Frankfurt) as the queue → worker (Cloud Run Job, same image) → fal (image and video models), OpenAI (vision and text) → private Google Cloud Storage bucket (europe-west4), served through signed expiring URLs.
+React/Vite frontend (Vercel) → FastAPI API (Cloud Run service) → Postgres jobs table (Neon, Frankfurt) as the queue → worker (Cloud Run Job, same image) → fal (image and video models), OpenAI (vision, text and, from M2, voice) → ffmpeg compose in the worker (M2) → private Google Cloud Storage bucket (europe-west4), served through signed expiring URLs.
 
 Live: site https://ugc-creator-delta.vercel.app, API https://ugc-api-1002867777166.europe-west4.run.app. Locally, Docker Compose runs the same pieces with mock providers.
 

@@ -24,3 +24,15 @@ Made outside the app with Nano Banana Pro (image, edit) and Kling v3 Pro (image-
 - With the product photo as the reference, the edit model kept the product the same across scenes (basketball stripe, keyboard case, hoodie back print). → supports [D10](DECISIONS.md) (edit from the photo, not text-to-image).
 - An edit model keeps the style of its input (a stylised image stays stylised), and asking it for empty space at the top added a pasted band. → restyle with a fresh generation; leave room for text by cropping in code.
 - A highlight cut in ffmpeg (two segments with a 0.3 s dissolve) hid a failed moment at no cost. → `compose.py` can trim a weak span of a clip instead of paying for a re-render.
+
+## Round 3 — the owner's manual tests of M2 (20–21 Nov 2026)
+On the local stack, first with mock providers, then with the real AI (owner's go, 5 EUR limit; 0.94 EUR spent, [D29](DECISIONS.md)).
+- The owner wants to steer: use their own story, pick the opening line, use pictures they already have, choose clip lengths, go back a step. → [D27](DECISIONS.md).
+- "What we see" looked like it drove the picture, but the image model reads the hidden image prompt; one- or two-line prompts are too thin for a good clip. → detailed image prompts and timed motion shot lists, shown as "Show what the AI gets" (D27, D28).
+- The story must lead: scene count and lengths should follow the user's own structure (4 shots of 2 s), not a fixed 3. → 1–5 scenes (D28); timestamps read in code after the real writer merged two beats (D29).
+- Jargon and unclear choices confused: "Approve and make the images", "What to make", prices without parts, "Up to 40 s", "Every scene starts from your own picture", hook formulas. → plain wording, prices by part with the model names, explained limits, "First line of the ad" (D28, D29).
+- Without a length, the AI cannot know how many scenes to make. → "Video length" with about 2.5 s per scene, and a recommendation (Apply/Keep/Undo) that joins scenes without cutting the story (D29).
+- **First real video:** the look was good, but every scene change was obvious: each clip restarted from its own picture. → one continuous shot (each scene starts from the previous cut), a 0.3 s blend, and a continuity rule in every clip instruction (D29); to be re-tested with the real AI.
+- Long prompts with style, setting and light before the timeline should stay together and apply to every scene. → optional "Style and world notes" (D29).
+- Local test pitfalls: the mock clips showed placeholders (now your own pictures with a slow move), mock renders count toward the local daily limit, and Vite in Docker needs `docker compose restart frontend` after code changes (SETUP).
+
