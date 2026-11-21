@@ -104,3 +104,31 @@ def test_voice_and_music_lists_with_previews(client):
     assert got.status_code == 200 and got.headers["content-type"].startswith("audio/")
     assert client.get("/music/../config.m4a").status_code == 404
     assert client.get("/voices/robot.m4a").status_code == 404
+
+
+def test_a_writer_that_merges_beats_is_corrected_and_the_story_sets_text_and_lengths(
+    client, ctx, session_id, photo_bytes
+):
+    """The real writer once merged two timed beats; the app counts them itself (D28)."""
+    from pydantic_ai import ModelResponse, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    from app.services.providers.llm import LlmHandle, build_llm, mock_storyboard
+
+    calls = []
+
+    def respond(messages, info):
+        calls.append(1)
+        board = mock_storyboard({"product_name": "Hoodie"})  # 3 scenes, as if beats were merged
+        if len(calls) > 1:
+            board["scenes"] = board["scenes"][:2] + [dict(board["scenes"][1]), board["scenes"][2]]
+        return ModelResponse(parts=[ToolCallPart(tool_name=info.output_tools[0].name, args=board)])
+
+    handle = LlmHandle(model=FunctionModel(respond), provider="mock", model_name="mock", settings={})
+    ctx.llm_factory = lambda task: handle if task == "storyboard" else build_llm(ctx.settings, task)
+    story = FOUR_BEATS.replace("0:06 - 0:08", "0:06 - 0:09")
+    job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": story}).json()
+    scenes = job["storyboard"]["scenes"]
+    assert len(calls) == 2 and len(scenes) == 4
+    assert [s["duration_s"] for s in scenes] == [2, 2, 2, 3]  # from the timestamps
+    assert scenes[1]["description"].startswith("0:02 - 0:04 (Spark)")  # the user's own words
