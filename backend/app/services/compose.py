@@ -89,6 +89,7 @@ class ComposeSpec:
     ratios: tuple[str, ...] = RATIOS
     scale: float = 1.0  # tests render small frames
     end_card_s: float = 2.0
+    crossfade_s: float = 0.3  # a soft blend at every cut between scenes (D29); 0 = hard cuts
     loudness_lufs: float = -14.0
 
 
@@ -241,19 +242,32 @@ def plan_timeline(spec: ComposeSpec) -> list[SceneTiming]:
 
 # --- video: silent master ------------------------------------------------------------------
 def build_master(spec: ComposeSpec, timeline: list[SceneTiming], size: tuple[int, int], dst: Path) -> None:
+    """The scenes joined into one silent track. With a blend, each scene except the last runs
+    `crossfade_s` past its cut and fades into the next, so the total length stays the same."""
     w, h = size
+    n = len(spec.scenes)
+    d = spec.crossfade_s if n > 1 else 0.0
     args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     parts = []
     for i, (scene, tm) in enumerate(zip(spec.scenes, timeline, strict=True)):
         args += ["-i", str(scene.clip)]
-        hold = max(0.0, tm.duration - tm.clip_s) + 0.1
+        extra = d if i < n - 1 else 0.0
+        hold = max(0.0, tm.duration - tm.clip_s) + extra + 0.1
         parts.append(
             f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,fps={FPS},"
             f"format=yuv420p,tpad=stop_mode=clone:stop_duration={hold:.3f},"
-            f"trim=duration={tm.duration:.3f},setpts=PTS-STARTPTS[v{i}]"
+            f"trim=duration={tm.duration + extra:.3f},setpts=PTS-STARTPTS,fps={FPS},settb=AVTB[v{i}]"
         )
-    n = len(spec.scenes)
-    graph = ";".join(parts) + ";" + "".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v]"
+    if d > 0:
+        last, offset = "[v0]", 0.0
+        for i in range(1, n):
+            offset += timeline[i - 1].duration
+            out = "[v]" if i == n - 1 else f"[x{i}]"
+            parts.append(f"{last}[v{i}]xfade=transition=fade:duration={d:.3f}:offset={offset:.3f}{out}")
+            last = out
+        graph = ";".join(parts)
+    else:
+        graph = ";".join(parts) + ";" + "".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v]"
     args += ["-filter_complex", graph, "-map", "[v]", "-an", "-c:v", "libx264", "-preset", "veryfast"]
     args += ["-crf", "18", "-pix_fmt", "yuv420p", str(dst)]
     run(args)

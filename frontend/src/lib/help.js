@@ -32,6 +32,8 @@ export const HELP = {
   theme: 'Sets the settings, props, pace and the music track.',
   ad_type: 'The format of the story. Testimonial uses only quotes and claims you write yourself.',
   voice: 'The AI voice that reads the voiceover. Viewers must be told it is AI: turn on the AI label when you post.',
+  continuity: 'One continuous shot: each scene starts from the last frame of the one before, so the camera never jumps (best for flowing stories). Separate shots: each scene starts from its own picture (best for different places or angles).',
+  notes: 'Optional. Things true for the whole ad (look, place, weather, light, colours, camera rules). When your story has them before the timed parts, they are put here for you. They are added to every scene, so all scenes match.',
   video_length: 'How long the finished video should be. The app turns it into scenes of about 2.5 s each (more scenes give more detail). Auto follows your story. If your story has timestamps, they decide.',
   ratio: 'The shape of the video. Choosing the platform picks its best shape for you: 9:16 (full-screen vertical) for TikTok, Reels and Shorts, 4:5 for the Facebook feed. You can still change it.',
   music: 'A licensed background track for the theme, lowered while the voice speaks.',

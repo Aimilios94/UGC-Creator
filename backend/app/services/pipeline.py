@@ -30,7 +30,7 @@ from ..errors import BudgetExceeded
 from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Storyboard, render_seconds
 from ..repository import Database
 from . import analyze, storyboard
-from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into
+from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into, frame_at, probe_duration
 from .image_gen import PlannedRender, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
 from .music import music_for
@@ -565,6 +565,40 @@ def use_own_image(ctx: Context, job: dict, idx: int, scene: Scene, ratio: str) -
     return asset
 
 
+def is_chained(board: Storyboard, idx: int, scene: Scene) -> bool:
+    """Continuous mode: a scene after the first, without a picture of its own, starts from the frame
+    where the previous scene is cut (D29)."""
+    return board.continuity == "continuous" and idx > 0 and scene.image_source == "generate"
+
+
+def chain_frame(ctx: Context, job: dict, idx: int, prev_video: dict, cut_s: float) -> dict:
+    """The starting picture of a chained scene: the previous clip's frame at the cut. Free; resumable."""
+    job_id = str(job["id"])
+    sr = repo.get_stage_run(ctx.db, job_id, "image", idx)
+    if sr and sr["status"] == "done":
+        return repo.get_asset(ctx.db, sr["output"]["asset_id"])
+    sr = repo.start_stage(ctx.db, job_id, "image", idx, provider="chain", model="previous-clip-frame", attempt=1)
+    with tempfile.TemporaryDirectory(prefix="chain-") as tmp:
+        clip = Path(tmp) / "prev.mp4"
+        clip.write_bytes(ctx.storage.get(prev_video["storage_key"]))
+        t = max(0.0, min(cut_s, probe_duration(clip)) - 0.05)
+        frame = None
+        for back in (0.0, 0.2, 0.5, t):  # a seek just past the last frame gives no picture: step back
+            try:
+                frame = frame_at(clip, max(0.0, t - back), Path(tmp) / f"frame{back}.png")
+                t = max(0.0, t - back)
+                break
+            except (FileNotFoundError, OSError):
+                continue
+        if frame is None:
+            raise RuntimeError(f"could not read the last frame of scene {idx}")
+        buf = io.BytesIO()
+        frame.save(buf, "JPEG", quality=92)
+    asset = _store_output(ctx, job_id, "image", idx, buf.getvalue(), "image/jpeg")
+    repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "chained_from": idx - 1, "at_s": round(t, 3)})
+    return asset
+
+
 def crop_keep_image(a: float, b: float) -> float:
     return min(a, b) / max(a, b)
 
@@ -591,9 +625,12 @@ def run_job(ctx: Context, job: dict) -> None:
     )
     seed = job_seed(job_id)
     images: dict[int, dict] = {}
+    count = len(rows)
     for row in rows:
         idx = row["idx"]
         scene = Scene.model_validate(row["data"])
+        if is_chained(board, idx, scene):
+            continue  # its starting picture is the previous clip's last frame, made in the video phase
         if scene.image_source != "generate":
             image = use_own_image(ctx, job, idx, scene, brief.aspect_ratio)
         else:
@@ -607,6 +644,7 @@ def run_job(ctx: Context, job: dict) -> None:
                     product=product,
                     product_sha256=job["upload_sha256"],
                     style=brief.visual_style,
+                    notes=board.notes,
                 )
 
             image = run_media_stage(ctx, job, "image", idx, plan_image)
@@ -620,11 +658,16 @@ def run_job(ctx: Context, job: dict) -> None:
         for row in rows:
             scene = Scene.model_validate(row["data"])
             run_voice_stage(ctx, job, row["idx"], scene.voiceover, brief.voice, tone)
+    prev_video = None
+    prev_scene = None
     for row in rows:
         idx = row["idx"]
         scene = Scene.model_validate(row["data"])
+        if is_chained(board, idx, scene):
+            images[idx] = chain_frame(ctx, job, idx, prev_video, float(prev_scene.duration_s))
+            repo.set_scene_asset(ctx.db, job_id, idx, "image", str(images[idx]["id"]))
 
-        def plan_video(image=images[idx], scene=scene):
+        def plan_video(image=images[idx], scene=scene, idx=idx):
             ref = InputImage(
                 data=ctx.storage.get(image["storage_key"]),
                 content_type=image["content_type"],
@@ -638,10 +681,14 @@ def run_job(ctx: Context, job: dict) -> None:
                 reference=ref,
                 reference_sha256=image["sha256"],
                 style=brief.visual_style,
+                notes=board.notes,
+                position=(idx, count),
+                continuous=board.continuity == "continuous",
             )
 
         video = run_media_stage(ctx, job, "video", idx, plan_video)
         repo.set_scene_asset(ctx.db, job_id, idx, "video", str(video["id"]))
+        prev_video, prev_scene = video, scene
     run_compose_stage(ctx, job, brief, board)
     repo.finish_job(ctx.db, job_id)
 
@@ -665,7 +712,11 @@ def estimate_job_usd(s: Settings) -> float:
 def estimate_board_usd(s: Settings, board: Storyboard, voice: str = "marin") -> tuple[float, float]:
     """(images, video) estimate for this storyboard: own images are free; clips by each scene's length."""
     scenes = board.scenes[: s.render_scenes]
-    images = sum(cost_usd(s.image_model, Usage(images=1)) for sc in scenes if sc.image_source == "generate")
+    images = sum(
+        cost_usd(s.image_model, Usage(images=1))
+        for i, sc in enumerate(scenes)
+        if sc.image_source == "generate" and not is_chained(board, i, sc)
+    )
     video = sum(cost_usd(s.video_model, Usage(seconds=render_seconds(sc.duration_s))) for sc in scenes)
     if voice != "none":
         video += sum(voice_est_usd(s, sc.voiceover) for sc in scenes if sc.voiceover.strip())

@@ -150,6 +150,10 @@ class Storyboard(BaseModel):
     hooks: list[Hook] = Field(min_length=3, max_length=3)
     cta_text: str = Field(max_length=60)
     hook_choice: int | None = Field(default=None, ge=0, le=2)  # the hook idea used for scene 1, if any
+    notes: str = Field(
+        default="", max_length=4000
+    )  # optional style and world notes, added to every scene's instructions
+    continuity: Literal["continuous", "separate"] = "separate"  # continuous: each scene starts where the last ended
 
     @field_validator("scenes")
     @classmethod

@@ -489,3 +489,4 @@ details.fold-plain > summary { cursor: pointer; font-weight: 600; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .link-btn { all: unset; color: var(--accent-primary); text-decoration: underline; cursor: pointer; }
 .length-custom { margin-top: 6px; max-width: 120px; }
+.chained-note { padding: 16px; border: 1px dashed var(--card-border); border-radius: var(--radius-md); }

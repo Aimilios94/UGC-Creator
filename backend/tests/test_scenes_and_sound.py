@@ -31,7 +31,8 @@ def test_a_story_with_four_beats_makes_a_four_scene_ad(client, ctx, session_id, 
     worker.run_once(ctx)
     done = client.get(f"/jobs/{job['id']}", headers=_h(session_id)).json()
     assert done["status"] == "done"
-    assert [r.kind for r in ctx.media.submits] == ["image"] * 4 + ["video"] * 4
+    # A timed story is one continuous shot by default: only scene 1 gets a new picture (D29).
+    assert [r.kind for r in ctx.media.submits] == ["image"] + ["video"] * 4
     counts = {k: sum(a["kind"] == k for a in done["assets"]) for k in ("still", "carousel")}
     assert counts == {"still": 4, "carousel": 5}
 
@@ -196,3 +197,65 @@ def test_a_joined_scene_with_long_text_can_be_saved(client, session_id, photo_by
         f"/jobs/{job['id']}/storyboard", json={**board, "scenes": [joined, c]}, headers={"X-Session-Id": session_id}
     )
     assert r.status_code == 200, r.text
+
+
+STYLED = "\n".join(
+    [
+        "Style, Continuity & Transition Rules: hyper-realistic, single-take continuity, cyan and magenta neon.",
+        "Setting & Environment: an empty Shibuya intersection at midnight in steady rain.",
+        "20-Second Continuous Timeline (3 Scenes x 4 Seconds):",
+        "○ 0:00 - 0:04 | Scene 1: tracking shot behind the man on the wet crosswalk.",
+        "○ 0:04 - 0:08 | Scene 2: continuing, the camera orbits as he lights a cigarette.",
+        "○ 0:08 - 0:12 | Scene 3: slow push-in on the back print.",
+    ]
+)
+
+
+def test_style_notes_are_kept_apart_and_reach_every_instruction(client, ctx, session_id, photo_bytes):
+    job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": STYLED}).json()
+    board = job["storyboard"]
+    assert len(board["scenes"]) == 3 and [s["duration_s"] for s in board["scenes"]] == [4, 4, 4]
+    assert "Shibuya intersection" in board["notes"] and "Style, Continuity" in board["notes"]
+    assert "Shibuya intersection" not in board["scenes"][0]["description"]  # notes are not glued onto scene 1
+    assert board["continuity"] == "continuous"
+    to_video(client, ctx, session_id, job["id"])
+    worker.run_once(ctx)
+    image = next(r for r in ctx.media.submits if r.kind == "image")
+    clips = [r for r in ctx.media.submits if r.kind == "video"]
+    assert "Shibuya intersection" in image.arguments["prompt"]
+    assert all("Shibuya intersection" in c.arguments["prompt"] for c in clips)
+    assert "continues the previous scene" in clips[1].arguments["prompt"]
+    assert "End mid-movement" in clips[0].arguments["prompt"] and "End mid-movement" not in clips[2].arguments["prompt"]
+
+
+def test_continuous_scenes_start_from_the_previous_cut_and_separate_ones_do_not(client, ctx, session_id, photo_bytes):
+    from app import repository as repo
+
+    job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": STYLED}).json()
+    to_video(client, ctx, session_id, job["id"])
+    worker.run_once(ctx)
+    runs = {r["scene_idx"]: r for r in repo.list_stage_runs(ctx.db, job["id"]) if r["stage"] == "image"}
+    assert runs[0]["provider"] == "mock" and runs[1]["provider"] == "chain" and runs[2]["provider"] == "chain"
+    assert runs[1]["output"]["chained_from"] == 0
+    done = client.get(f"/jobs/{job['id']}", headers={"X-Session-Id": session_id}).json()
+    assert done["status"] == "done" and done["variants"][0]["ratios"]
+
+    other = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": STYLED}).json()
+    board = {**other["storyboard"], "continuity": "separate"}
+    client.put(f"/jobs/{other['id']}/storyboard", json=board, headers={"X-Session-Id": session_id})
+    before = len(ctx.media.submits)
+    to_video(client, ctx, session_id, other["id"])
+    assert [r.kind for r in ctx.media.submits[before:]] == ["image"] * 3  # each scene its own picture
+
+
+def test_the_blend_keeps_the_ad_length(tmp_path):
+    from app.services import compose as C
+    from app.services.providers.media import MOCK_CLIP
+
+    scenes = [C.SceneInput(clip=MOCK_CLIP, length_s=2.0) for _ in range(3)]
+    spec = C.ComposeSpec(
+        scenes=scenes, master_ratio="9:16", platform="tiktok", cta_text="Shop now", ratios=("9:16",), scale=0.25
+    )
+    result = C.compose(spec, tmp_path / "out")
+    assert result.duration_s == 8.0  # 3 x 2 s + 2 s end card, blends included
+    assert abs(C.probe_duration(result.exported[0].path) - 8.0) < 0.15

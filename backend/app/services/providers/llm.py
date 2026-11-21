@@ -70,6 +70,16 @@ def mock_analysis(brief: dict) -> dict:
 
 
 def _story_parts(story: str) -> list[str] | None:
+    """The story's parts, in order (mock only): its timed beats when it has them."""
+    from ..story_beats import story_beats
+
+    beats = story_beats(story)
+    if beats:
+        return [b.text for b in beats]
+    return _sentence_parts(story)
+
+
+def _sentence_parts(story: str) -> list[str] | None:
     """The story in three parts, in order (mock only): by its timestamped beats if it has them, else by sentences."""
     text = story.strip()
     if not text:

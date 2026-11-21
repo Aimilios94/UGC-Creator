@@ -12,7 +12,7 @@ from .analyze import brief_block
 from .llm_trace import LlmCall, Usage, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
 from .scene_plan import at_least_speech, fit_lengths, scenes_for_length
-from .story_beats import story_beats
+from .story_beats import asks_for_one_take, story_beats, story_notes
 from .styles import LABELS as STYLE_LABELS
 
 PLATFORM_NAMES = {
@@ -43,7 +43,9 @@ reference photo. Never ask for written words, captions, signs, labels or logos o
 on the product: on-screen text is added later, in editing.
 
 motion_prompt (100-200 words): a timed shot list for ONE continuous take of the scene's duration_s,
-no cuts, as three or four beats with times, for example "0-1 s: ... 1-3 s: ... 3-5 s: ...". For each beat give the
+no cuts, as three or four beats with times in seconds from the start of this scene, for example
+"0-1 s: ... 1-3 s: ... 3-5 s: ...". The scenes form one ad: start each scene's camera move in the direction
+and at the speed the previous scene ended with, and end it so the next scene can carry on. For each beat give the
 camera movement (static, slow push-in, pull-out, pan, tilt, orbit, handheld sway), its speed, what the
 subject and the product do, any change in light or focus, and finish with the final frame, which should
 lead naturally into the next scene. Keep the product fully visible and unchanged. Avoid beats that depend
@@ -189,6 +191,9 @@ def write_storyboard(
         cost_usd=cost_usd(llm.model_name, usage),
     )
     data = draft.model_dump()
+    if brief.story:
+        data["notes"] = story_notes(brief.story)[:4000]
+        data["continuity"] = "continuous" if (beats or asks_for_one_take(brief.story)) else "separate"
     scenes = data["scenes"]
     lines = [sc.get("voiceover") or "" for sc in scenes]
     if beats and len(scenes) == len(beats):

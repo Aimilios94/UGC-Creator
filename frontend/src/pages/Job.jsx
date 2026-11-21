@@ -53,12 +53,16 @@ function splitLength(total, n) {
 }
 
 // Live estimate from the server's unit prices (own images are free; clips by their length).
+// A scene after the first, in a continuous shot, without a picture of its own, starts from the
+// previous scene's last frame (no new picture).
+const isChained = (board, i, s) => board?.continuity === 'continuous' && i > 0 && s.image_source === 'generate';
+
 function estimateBoard(board, prices, n = 3, voice = 'marin') {
   let images = ZERO;
   let video = ZERO;
   if (!board || !prices) return null;
-  board.scenes.slice(0, n).forEach((s) => {
-    if (s.image_source === 'generate') images = add(images, prices.image);
+  board.scenes.slice(0, n).forEach((s, i) => {
+    if (s.image_source === 'generate' && !isChained(board, i, s)) images = add(images, prices.image);
     video = add(video, prices.video_per_second, renderSeconds(s.duration_s));
     if (s.voiceover.trim() && voice !== 'none') video = add(video, prices.voice_line);
   });
@@ -159,8 +163,9 @@ function Chip({ name, value, checked, onChange, children, disabled }) {
 }
 
 // What each scene's clip starts from, said plainly (the video AI animates one picture per scene).
-function pictureNote(scenes) {
-  const count = (src) => scenes.filter((s) => s.image_source === src).length;
+function pictureNote(scenes, board) {
+  const chained = scenes.filter((s, i) => isChained(board, i, s)).length;
+  const count = (src) => scenes.filter((s, i) => s.image_source === src && !isChained(board, i, s)).length;
   const [gen, product, own] = [count('generate'), count('product'), count('upload')];
   const word = (k) => (k === 1 ? 'scene' : 'scenes');
   const parts = [];
@@ -172,6 +177,7 @@ function pictureNote(scenes) {
         : `${product} ${word(product)} ${product === 1 ? 'starts' : 'start'} from your product photo itself`,
     );
   if (own) parts.push(`${own} ${word(own)} ${own === 1 ? 'starts' : 'start'} from the picture you uploaded for ${own === 1 ? 'it' : 'them'}`);
+  if (chained) parts.push(`${chained} ${word(chained)} ${chained === 1 ? 'continues' : 'continue'} from where the previous scene ends (no new picture)`);
   const text = parts.join('; ');
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}. The video AI animates one picture per scene.`.replace('Every scene get ', 'Every scene gets ');
 }
@@ -276,7 +282,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const n = board?.scenes.length ?? 3;
   const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice), [board, config, n, sound.voice]);
   const hasStory = storyMode === 'own' || Boolean(job.brief.story);
-  const newImages = board ? board.scenes.filter((s) => s.image_source === 'generate').length : 0;
+  const newImages = board ? board.scenes.filter((s, i) => s.image_source === 'generate' && !isChained(board, i, s)).length : 0;
 
   if (!board) {
     return (
@@ -424,6 +430,14 @@ function StoryboardStep({ job, onChange, readOnly }) {
   // and places more consistent (fewer separate clips) and costs less. Nothing is cut: texts are joined.
   const perScene = config?.seconds_per_scene ?? 2.5;
   const recommended = Math.max(1, Math.min(MAX_SCENES, Math.round(scenesLength / perScene)));
+  // "0-2 s" / "0:00-0:02" / "0.00-0.02 s" in the second part move on by the first part's length.
+  const shiftTimes = (text, by) =>
+    text
+      .replace(/(\d+(?:\.\d+)?)\s*[-\u2013]\s*(\d+(?:\.\d+)?)\s*s\b/g, (m, a, b) => `${+(Number(a) + by).toFixed(2)}-${+(Number(b) + by).toFixed(2)} s`)
+      .replace(/(\d{1,2}):(\d{2})/g, (m, mm, ss) => {
+        const t = Number(mm) * 60 + Number(ss) + by;
+        return `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
+      });
   const joinScenes = (scenes, i) => {
     const a = scenes[i];
     const b = scenes[i + 1];
@@ -433,7 +447,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
       description: both(a.description, b.description),
       voiceover: both(a.voiceover, b.voiceover).slice(0, 400),
       on_screen_text: a.on_screen_text || b.on_screen_text,
-      motion_prompt: both(a.motion_prompt, b.motion_prompt ? `Then, in the same take: ${b.motion_prompt}` : '').slice(0, 2200),
+      motion_prompt: both(a.motion_prompt, b.motion_prompt ? `Then, in the same take: ${shiftTimes(b.motion_prompt, a.duration_s)}` : '').slice(0, 2200),
       duration_s: Math.min(MAX_SCENE_S, a.duration_s + b.duration_s),
     };
     const next = [...scenes.slice(0, i), merged, ...scenes.slice(i + 2)];
@@ -513,6 +527,44 @@ function StoryboardStep({ job, onChange, readOnly }) {
       </section>
 
       <SoundCard value={sound} theme={job.brief.theme} onChange={changeSound} disabled={disabled} />
+
+      <section className="card">
+        <h2>
+          How the scenes connect <Help text={HELP.continuity} />
+        </h2>
+        <div className="choice-group" role="radiogroup" aria-label="How the scenes connect">
+          <Choice name="continuity" value="continuous" checked={board.continuity === 'continuous'} onChange={() => change({ ...board, continuity: 'continuous' })} disabled={disabled} title="One continuous shot">
+            <span className="muted small">
+              Each scene starts exactly where the previous one ended, so the camera never jumps. Only the first scene needs a starting picture.
+            </span>
+          </Choice>
+          <Choice name="continuity" value="separate" checked={board.continuity === 'separate'} onChange={() => change({ ...board, continuity: 'separate' })} disabled={disabled} title="Separate shots">
+            <span className="muted small">Each scene starts from its own picture, like cuts between different shots.</span>
+          </Choice>
+        </div>
+        <p className="muted small">Either way, every cut gets a short soft blend.</p>
+      </section>
+
+      <details className="card fold" open={Boolean(board.notes)}>
+        <summary>
+          <span className="fold-title">
+            Style and world notes (optional) <Help text={HELP.notes} />
+          </span>
+          <span className="muted small fold-sum">{board.notes ? 'Added to every scene' : 'None: the scenes speak for themselves'}</span>
+        </summary>
+        <p className="muted small">
+          Anything that is true for the whole ad: look, place, weather, light, colours, camera rules. It is added to every scene&rsquo;s instructions, so all scenes match. Leave it empty if you are not sure.
+        </p>
+        <AutoTextarea
+          minRows={3}
+          value={board.notes || ''}
+          onChange={(e) => change({ ...board, notes: e.target.value })}
+          maxLength={4000}
+          disabled={disabled}
+          placeholder="For example: realistic phone video at night in the rain, neon reflections, cyan and magenta light, one continuous camera move."
+          aria-label="Style and world notes"
+        />
+      </details>
 
       {flags.length > 0 && (
         <div className="notice flag-notice" role="status">
@@ -666,8 +718,12 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   <div className="choice-row stack" role="radiogroup" aria-label={`Starting picture for scene ${i + 1}`}>
                     {['generate', 'product', 'upload'].map((src) => (
                       <Chip key={src} name={`src${i}`} value={src} checked={s.image_source === src} disabled={disabled || (src === 'upload' && !own)} onChange={() => editScene(i, 'image_source', src)}>
-                        {SOURCE_LABEL[src]}
-                        {config && <span className="muted small">{src === 'generate' ? formatMoney(config.prices.image, currency) : 'free'}</span>}
+                        {src === 'generate' && isChained(board, i, { image_source: 'generate' }) ? `Continue from scene ${i}` : SOURCE_LABEL[src]}
+                        {config && (
+                          <span className="muted small">
+                            {src === 'generate' && !isChained(board, i, { image_source: 'generate' }) ? formatMoney(config.prices.image, currency) : 'free'}
+                          </span>
+                        )}
                       </Chip>
                     ))}
                   </div>
@@ -812,7 +868,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 [`Video: ${n} ${n === 1 ? 'clip' : 'clips'}${sound.voice !== 'none' ? ' and voiceover' : ''}${mode === 'images' && newImages > 0 ? ' (later, only if you choose it)' : ''}`, estimate.video],
               ]}
               total={mode === 'video' || newImages === 0 ? estimate.total : null}
-              note={pictureNote(board.scenes.slice(0, n))}
+              note={pictureNote(board.scenes.slice(0, n), board)}
               spend={job.spend}
               cap={job.cost_cap}
               currency={currency}
@@ -894,12 +950,15 @@ function ImagesStep({ job, onChange, readOnly = false }) {
       <div className="scenes">
         {board.scenes.slice(0, n).map((s, i) => {
           const image = job.assets.find((a) => a.kind === 'image' && a.scene_idx === i);
+          const chained = isChained(board, i, s);
           return (
             <article key={i} className="card scene">
               <h2>
                 {sceneTitle(s, i)} <Help text={HELP[s.role]} />
               </h2>
-              {image ? (
+              {chained && !image ? (
+                <p className="muted small chained-note">Starts where scene {i} ends (one continuous shot): its first frame is made with the video.</p>
+              ) : image ? (
                 <a href={image.url} target="_blank" rel="noreferrer">
                   <img className="scene-image" src={image.url} alt={`Scene ${i + 1}`} />
                 </a>
@@ -966,6 +1025,8 @@ function StageIcon({ status }) {
 // The steps in the order they happen, each grouped over the scenes.
 function progressGroups(job, n) {
   const videoPhase = job.phase === 'video';
+  const scenes = job.storyboard?.scenes || [];
+  const firstPictures = videoPhase ? n : scenes.slice(0, n).filter((s, i) => !isChained(job.storyboard, i, s)).length;
   const of = (stage) => job.stages.filter((s) => s.stage === stage);
   const status = (rows, expected) => {
     if (rows.some((r) => r.status === 'failed')) return 'failed';
@@ -976,7 +1037,7 @@ function progressGroups(job, n) {
   const voiced = job.brief.voice !== 'none' ? (job.storyboard?.scenes || []).filter((s) => s.voiceover?.trim()).length : 0;
   const groups = [
     { label: 'Read the photo and write the storyboard', rows: [...of('analyze'), ...of('storyboard')], expected: 2 },
-    { label: `Starting pictures (${n})`, rows: of('image'), expected: n },
+    { label: `Starting pictures (${firstPictures})`, rows: of('image'), expected: firstPictures },
   ];
   if (videoPhase) {
     if (voiced) groups.push({ label: `Voiceover (${voiced} ${voiced === 1 ? 'line' : 'lines'})`, rows: of('voice'), expected: voiced });

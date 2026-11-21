@@ -36,8 +36,12 @@ def plan_scene_image(
     product: InputImage,
     product_sha256: str,
     style: str = "realistic",
+    notes: str = "",
 ) -> PlannedRender:
-    prompt = scene.image_prompt.strip() + FIDELITY + " " + IMAGE_STYLE.get(style, IMAGE_STYLE["realistic"])
+    prompt = scene.image_prompt.strip() or scene.description.strip()
+    if notes.strip():
+        prompt += " Style and world for the whole ad: " + notes.strip()
+    prompt += FIDELITY + " " + IMAGE_STYLE.get(style, IMAGE_STYLE["realistic"])
     arguments = {
         "prompt": prompt,
         "num_images": 1,
