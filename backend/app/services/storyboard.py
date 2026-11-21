@@ -193,7 +193,7 @@ def write_storyboard(
     lines = [sc.get("voiceover") or "" for sc in scenes]
     if beats and len(scenes) == len(beats):
         for scene, beat in zip(scenes, beats, strict=True):
-            scene["description"] = beat.text[:800]  # the user's own words for this scene
+            scene["description"] = beat.text[:2500]  # the user's own words for this scene
             scene["duration_s"] = beat.seconds
     elif brief.video_length_s:
         for scene, length in zip(scenes, fit_lengths(lines, round(brief.video_length_s - end_card_s)), strict=True):

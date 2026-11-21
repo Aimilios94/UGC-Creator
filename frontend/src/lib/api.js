@@ -48,6 +48,21 @@ export function setAccessCode(code) {
   }
 }
 
+// A readable message from the API's error: a plain sentence, or the first field that was refused.
+const FIELD = { description: 'scene text', voiceover: 'voiceover', on_screen_text: 'on-screen text', image_prompt: 'starting picture instruction', motion_prompt: 'movement instruction', duration_s: 'length', title: 'title', cta_text: 'call to action', text: 'hook' };
+function errorText(detail) {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && detail.length) {
+    const d = detail[0];
+    const loc = (d.loc || []).filter((x) => x !== 'body');
+    const scene = loc[0] === 'scenes' && Number.isInteger(loc[1]) ? `Scene ${loc[1] + 1}, ` : '';
+    const field = FIELD[loc[loc.length - 1]] || loc[loc.length - 1] || 'a field';
+    const max = d.ctx?.max_length ? ` is too long (at most ${d.ctx.max_length} characters)` : `: ${d.msg}`;
+    return `${scene}${field}${max}.`;
+  }
+  return 'Something went wrong. Please try again.';
+}
+
 export class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -74,8 +89,7 @@ async function request(path, { method = 'GET', json, form } = {}) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const detail = typeof data.detail === 'string' ? data.detail : 'Something went wrong. Please try again.';
-    throw new ApiError(detail, res.status);
+    throw new ApiError(errorText(data.detail), res.status);
   }
   return data;
 }

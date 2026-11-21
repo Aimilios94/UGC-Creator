@@ -431,7 +431,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
     const merged = {
       ...a,
       description: both(a.description, b.description),
-      voiceover: both(a.voiceover, b.voiceover).slice(0, 220),
+      voiceover: both(a.voiceover, b.voiceover).slice(0, 400),
       on_screen_text: a.on_screen_text || b.on_screen_text,
       motion_prompt: both(a.motion_prompt, b.motion_prompt ? `Then, in the same take: ${b.motion_prompt}` : '').slice(0, 2200),
       duration_s: Math.min(MAX_SCENE_S, a.duration_s + b.duration_s),
@@ -647,11 +647,11 @@ function StoryboardStep({ job, onChange, readOnly }) {
               <div className="scene-grid">
                 <div className="scene-main">
                   <FieldLabel htmlFor={`d${i}`} text="What happens in this scene" help={HELP.description} />
-                  <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} maxLength={800} disabled={disabled} />
+                  <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} maxLength={2500} disabled={disabled} />
                   <div className="grid-2 tight">
                     <div>
                       <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />
-                      <input id={`v${i}`} className={cls(`scenes.${i}.voiceover`)} value={s.voiceover} onChange={onScene(i, 'voiceover')} maxLength={220} disabled={disabled} placeholder={sound.voice === 'none' ? 'No voiceover in this ad' : 'Nothing is said in this scene'} />
+                      <input id={`v${i}`} className={cls(`scenes.${i}.voiceover`)} value={s.voiceover} onChange={onScene(i, 'voiceover')} maxLength={400} disabled={disabled} placeholder={sound.voice === 'none' ? 'No voiceover in this ad' : 'Nothing is said in this scene'} />
                     </div>
                     <div>
                       <FieldLabel htmlFor={`t${i}`} text="On-screen text" help={HELP.on_screen_text} />
@@ -910,7 +910,7 @@ function ImagesStep({ job, onChange, readOnly = false }) {
                 {s.image_source === 'generate' ? 'Generated' : s.image_source === 'product' ? 'Your product photo' : 'Your own image'}
               </p>
               <FieldLabel htmlFor={`iv${i}`} text="Voiceover" help={HELP.voiceover} />
-              <input id={`iv${i}`} value={s.voiceover} onChange={(e) => editScene(i, 'voiceover', e.target.value)} maxLength={220} disabled={locked} />
+              <input id={`iv${i}`} value={s.voiceover} onChange={(e) => editScene(i, 'voiceover', e.target.value)} maxLength={400} disabled={locked} />
               <FieldLabel htmlFor={`it${i}`} text="On-screen text" help={HELP.on_screen_text} />
               <input id={`it${i}`} value={s.on_screen_text} onChange={(e) => editScene(i, 'on_screen_text', e.target.value)} maxLength={80} disabled={locked} />
               <SceneLength

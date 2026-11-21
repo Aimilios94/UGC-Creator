@@ -184,3 +184,15 @@ def test_joining_scenes_keeps_each_uploaded_picture_with_its_scene(client, sessi
     kept = view.json()["storyboard"]["scenes"]
     assert [s["uid"] for s in kept] == [a["uid"], c["uid"]] and kept[1]["image_source"] == "upload"
     approve(client, session_id, job["id"])  # the upload key followed scene 3 to its new position
+
+
+def test_a_joined_scene_with_long_text_can_be_saved(client, session_id, photo_bytes):
+    """Joining two story beats once made the text longer than the old 800-character limit (D28)."""
+    job = create_job(client, session_id, photo_bytes).json()
+    board = job["storyboard"]
+    a, b, c = board["scenes"]
+    joined = {**a, "description": "x" * 990, "voiceover": "See this backprint. That print hits night light right."}
+    r = client.put(
+        f"/jobs/{job['id']}/storyboard", json={**board, "scenes": [joined, c]}, headers={"X-Session-Id": session_id}
+    )
+    assert r.status_code == 200, r.text

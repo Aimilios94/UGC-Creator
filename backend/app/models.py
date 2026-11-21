@@ -69,7 +69,7 @@ class SceneDraft(BaseModel):
     """A scene as the AI writes it."""
 
     role: SceneRole
-    description: str = Field(max_length=800, description="What the viewer sees in this scene, in plain words")
+    description: str = Field(max_length=2500, description="What the viewer sees in this scene, in plain words")
     image_prompt: str = Field(
         max_length=2500,
         description="Detailed prompt for the scene's reference image (subject, setting, composition, camera, "
@@ -81,7 +81,7 @@ class SceneDraft(BaseModel):
         "motion, lighting, focus, and how the shot ends",
     )
     voiceover: str = Field(
-        default="", max_length=220, description="Spoken line for this scene (short enough for its length), or empty"
+        default="", max_length=400, description="Spoken line for this scene (short enough for its length), or empty"
     )
     on_screen_text: str = Field(default="", max_length=80)
     duration_s: int = Field(
