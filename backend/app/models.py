@@ -20,6 +20,7 @@ Voice = Literal["marin", "cedar", "coral", "onyx", "none"]  # gpt-4o-mini-tts vo
 Music = Literal["theme", "none", "sport", "beauty", "tech", "food", "fashion"]  # the theme's bed, none, or any bed
 MIN_SCENES, MAX_SCENES = 1, 5
 STORY_MAX = 12000  # the user's story and its style notes, in characters (D30)
+SPLIT_NOTE_MAX = 600  # the line saying how the story was split into scenes (D31)
 CaptionStyle = Literal["bold", "clean", "off"]
 VisualStyle = Literal["realistic", "cinematic", "3d", "2d"]
 ImageSource = Literal["generate", "product", "upload"]
@@ -166,6 +167,9 @@ class Storyboard(BaseModel):
     # What stays the same in every scene (camera language, people, clothes, place, light), from the
     # continuity check (D30); added to the AI instructions in a continuous shot only.
     keep_same: str = Field(default="", max_length=1200)
+    # How the story was read into scenes, in one plain line ("3 scenes from your scene headings ..."),
+    # with any scenes joined or split (D31); empty when the writer read the story whole.
+    split_note: str = Field(default="", max_length=SPLIT_NOTE_MAX)
 
     @field_validator("scenes")
     @classmethod

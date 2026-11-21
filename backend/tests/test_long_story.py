@@ -103,7 +103,7 @@ def test_a_scene_too_long_on_its_own_is_refused_until_shortened(client, ctx, ses
 
 
 def test_a_moment_inside_a_scene_does_not_make_a_new_scene():
-    from app.services.story_beats import story_beats
+    from app.services.scene_splitter import story_beats
 
     story = (
         "0:00 - 0:04 | Scene 1: he walks on. Around 0:02-0:04, still walking, he flicks the lighter open.\n"

@@ -691,6 +691,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
               <br />
               With {n} {n === 1 ? 'scene' : 'scenes'} you can choose {minVideo} to {maxVideo} s (each scene 2–10 s).
             </p>
+            {board.split_note && <p className="flow-note small">{board.split_note}</p>}
             {lengthNote && (
               <p className="notice small" role="status">
                 <AlertTriangle size={14} aria-hidden="true" /> <span>{lengthNote}</span>

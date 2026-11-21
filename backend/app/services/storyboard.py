@@ -7,12 +7,12 @@ import time
 
 from pydantic_ai import Agent
 
-from ..models import STORY_MAX, BrandKit, Brief, ProductAnalysis, Storyboard, StoryboardDraft
+from ..models import SPLIT_NOTE_MAX, STORY_MAX, BrandKit, Brief, ProductAnalysis, Storyboard, StoryboardDraft
 from .analyze import brief_block
 from .llm_trace import LlmCall, Usage, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
 from .scene_plan import at_least_speech, fit_lengths, scenes_for_length
-from .story_beats import story_beats, story_notes
+from .scene_splitter import split_story, story_beats
 from .styles import LABELS as STYLE_LABELS
 
 PLATFORM_NAMES = {
@@ -93,8 +93,8 @@ agent = Agent(output_type=StoryboardDraft, instructions=INSTRUCTIONS, name="stor
 def _beats_instruction(beats) -> str:
     lines = "\n".join(f"  scene {i + 1}: {b.text}" for i, b in enumerate(beats))
     return (
-        f"This story has exactly {len(beats)} timed beats. Write exactly {len(beats)} scenes, one per beat, "
-        f"in this order; never merge or split beats:\n{lines}"
+        f"This story has exactly {len(beats)} scenes (read in code from its timestamps, scene headings or list). "
+        f"Write exactly {len(beats)} scenes, one per beat, in this order; never merge or split beats:\n{lines}"
     )
 
 
@@ -107,7 +107,8 @@ def _length_instruction(n: int, video_s: int, end_card_s: float) -> str:
 
 
 def target_scenes(brief: Brief, end_card_s: float) -> int | None:
-    """The number of scenes decided in code: from the story's timestamps, or from the chosen length."""
+    """The number of scenes decided in code: from the story's shape (timestamps, headings, a list),
+    or from the chosen length."""
     beats = story_beats(brief.story) if brief.story else None
     if beats:
         return len(beats)
@@ -166,7 +167,8 @@ def write_storyboard(
     result = _run(llm, prompt)
     usage = tokens_from_run_usage(result.usage)
     draft = result.output
-    beats = story_beats(brief.story) if brief.story else None
+    split = split_story(brief.story) if brief.story else None
+    beats = split.beats if split else []
     want = target_scenes(brief, end_card_s)
     if want and len(draft.scenes) != want:
         retry = _run(
@@ -191,15 +193,21 @@ def write_storyboard(
         cost_usd=cost_usd(llm.model_name, usage),
     )
     data = draft.model_dump()
-    if brief.story:
-        data["notes"] = story_notes(brief.story)[:STORY_MAX]
+    if split is not None and split.beats:
+        data["notes"] = split.notes[:STORY_MAX]  # never dropped: shown and added to every scene
+        data["split_note"] = split.summary()[:SPLIT_NOTE_MAX]
     data["continuity"] = "continuous"  # every scene flows into the next (D30); "separate" is the user's choice
     scenes = data["scenes"]
     lines = [sc.get("voiceover") or "" for sc in scenes]
     if beats and len(scenes) == len(beats):
-        for scene, beat in zip(scenes, beats, strict=True):
+        # Scenes without seconds of their own share the chosen length, or keep the writer's (D31).
+        if brief.video_length_s:
+            plan = fit_lengths(lines, round(brief.video_length_s - end_card_s))
+        else:
+            plan = at_least_speech([sc["duration_s"] for sc in scenes], lines)
+        for scene, beat, length in zip(scenes, beats, plan, strict=True):
             scene["description"] = beat.text  # the user's own words for this scene, whole
-            scene["duration_s"] = beat.seconds
+            scene["duration_s"] = beat.seconds or length
     elif brief.video_length_s:
         for scene, length in zip(scenes, fit_lengths(lines, round(brief.video_length_s - end_card_s)), strict=True):
             scene["duration_s"] = length

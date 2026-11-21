@@ -412,6 +412,8 @@ It is built in phase 3, with the slot filler and the storyboard marks.
 - [x] Confirm the exact Nano Banana model ID and output size the code calls, and pin its price in config (v2.2). The code calls `fal-ai/nano-banana/edit` (not "2.1"), priced at 0.0398 USD per picture in the price table; no size setting is sent, so fal's default output. The owner decided to stay on it and compare other models later using the findings archive (D31).
 - [x] Raise the daily cap to at least 5 EUR before the first testing day (v2.2). Done: 10 EUR per day, 5 EUR per ad, 0.91 EUR per USD from the ECB rate of 20 Nov 2026 (D31); Cloud Run changes at the M2 deploy.
 - [x] Phase 1 built on 21 Nov 2026 (D31): structure models, the 3 rules files, the shorter fixed rules, golden prompts v2 (product names and photos changed to the owner's test photos, plus 07 for the A4 rule), and the local findings archive.
+- [x] Full-frame own pictures on 21 Nov 2026 (D31, from the owner's real 20 s test): an own picture a crop would cut by more than a quarter is extended by Nano Banana, never filled with a blurred copy.
+- [x] Phase 2 built on 21 Nov 2026 (D31): `scene_splitter.py` (time ranges, headings, lists; paragraphs wait for the phase 3 slot filler; no shape), notes kept, joins and "cut to" splits said on the storyboard; the 8 prompt shapes of the setup note in `tests/fixtures/prompt_shapes.json`; golden fixtures 04, 05 and 06 pass their scene count and length checks.
 
 **Future items: record in `DECISIONS.md`, don't build now**
 

@@ -1,9 +1,9 @@
 """Golden prompts v2 (strategy plan, D31): every fixture loads, maps to a brief, and every expected
 result is either checked now or reported with the phase that will check it. DB-free.
 
-Phase 1 checks what exists today: the fixed rules (A2, A6) and the projected cost under the safety
-cap. The rest arrive with the scene splitter (2), the slot filler and the length line (3), the clip
-builder (4), the questions (5) and the image path (6)."""
+Phase 1 checks the fixed rules (A2, A6) and the projected cost under the safety cap; phase 2 the
+scene count and lengths from the scene splitter. The rest arrive with the slot filler and the
+length line (3), the clip builder (4), the questions (5) and the image path (6)."""
 
 from __future__ import annotations
 
@@ -13,15 +13,18 @@ from pathlib import Path
 
 import pytest
 
-from app.models import Brief, Hook, Scene, Storyboard
+from app.models import Brief, Hook, ProductAnalysis, Scene, Storyboard
 from app.services.llm_trace import usd_to_eur
 from app.services.pipeline import estimate_board_usd
+from app.services.providers.llm import build_llm, mock_analysis
+from app.services.scene_splitter import split_story
+from app.services.storyboard import write_storyboard
 from app.services.video_gen import RULES_MAX, clip_rules
 from conftest import make_settings
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden_v2"
 FIXTURES = sorted(GOLDEN.glob("*.json"))
-CHECKED_NOW = 1
+CHECKED_NOW = 2
 
 # The phase of the plan that can check each expected result.
 PHASE = {
@@ -145,6 +148,26 @@ def test_phase_1_checks(path):
         assert eur <= s.job_cost_cap_eur  # quality first: the planned ad fits the safety cap as asked
         if "projected_cost_eur_approx" in expect:
             assert abs(eur - expect["projected_cost_eur_approx"]) <= expect["projected_cost_tolerance_eur"], eur
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
+def test_phase_2_checks(path):
+    """The scene splitter: the scene count and lengths come from the story in code, whatever the
+    writer does (the mock writer here; the real one gets the same corrections)."""
+    fx = _load(path)
+    expect = fx["expect"]
+    if "scene_count" not in expect and "scene_lengths_s" not in expect:
+        pytest.skip("no scene count or lengths to check")
+    brief = brief_from_fixture(fx["input"])
+    analysis = ProductAnalysis.model_validate(mock_analysis(brief.model_dump()))
+    board, _ = write_storyboard(build_llm(make_settings(), "storyboard"), brief, analysis)
+    if "scene_count" in expect:
+        assert expect["scene_count"]["min"] <= len(board.scenes) <= expect["scene_count"]["max"]
+    if "scene_lengths_s" in expect:
+        assert [s.duration_s for s in board.scenes] == expect["scene_lengths_s"]  # as asked, never stretched
+    split = split_story(brief.story)
+    for scene, beat in zip(board.scenes, split.beats, strict=False):
+        assert scene.description == beat.text  # the user's words for the scene, whole
 
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)

@@ -1,0 +1,80 @@
+{
+  "about": "The 8 prompt shapes of the setup note, section 4 (docs/notes/how-a-prompt-becomes-an-ad.md), for the scene splitter (strategy plan phase 2, D31). Each case: the story, the chosen length (null = Auto), and what the splitter and the mock writer must produce. Later phases add their checks to the same cases.",
+  "cases": [
+    {
+      "id": "no_story",
+      "story": "",
+      "length": null,
+      "expect": {"shape": "none", "scene_count": 3}
+    },
+    {
+      "id": "short_vague",
+      "story": "guy wearing my hoodie in the rain",
+      "length": null,
+      "expect": {"shape": "none", "scene_count": 3, "later": "phase 3: the slot filler marks every gap it fills as the AI's guess"}
+    },
+    {
+      "id": "long_without_times",
+      "story": "Style: moody, rainy city at night, neon reflections, handheld phone feel.\n\nA young man in the black City Harmony hoodie waits at a tram stop, hood up, rain dripping from the edge.\n\nHe steps under a shop awning, pulls the hood down and shakes the rain off with a grin.\n\nHe turns so the back print catches the neon light and walks off into the rain.",
+      "length": null,
+      "expect": {"shape": "paragraphs", "scene_count_min": 1, "scene_count_max": 5, "later": "phase 3: the AI marks the first paragraph as notes and the other three as scenes"}
+    },
+    {
+      "id": "scene_n_without_times",
+      "story": "Moody night, light rain, neon colours, one connected take.\n\nScene 1: he walks out of a concert, hood up. Scene 2: he stops under a neon sign and pulls the hood down. Scene 3: he smiles at the camera as the rain stops.",
+      "length": 17,
+      "expect": {
+        "shape": "headings",
+        "scene_count": 3,
+        "scene_texts": ["he walks out of a concert, hood up.", "he stops under a neon sign and pulls the hood down.", "he smiles at the camera as the rain stops."],
+        "total_seconds": 15,
+        "notes_contains": ["Moody night, light rain, neon colours"]
+      }
+    },
+    {
+      "id": "timed_shot_list",
+      "story": "Rainy night, handheld, 26 mm phone lens. Keep the same man and hoodie in every shot.\n0:00 - 0:03 (Hook): low-angle shot follows him across a wet zebra crossing.\n0:03 - 0:07 (Detail): he lifts his hands into the rain, neon on the wet fabric.\n0:07 - 0:10 (Close): slow push-in on the back print.",
+      "length": null,
+      "expect": {
+        "shape": "time_ranges",
+        "scene_count": 3,
+        "seconds": [3, 4, 3],
+        "notes_contains": ["26 mm phone lens", "same man and hoodie"]
+      }
+    },
+    {
+      "id": "more_than_5_timed",
+      "story": "0:00 - 0:02: he opens the door.\n0:02 - 0:04: he steps into the rain.\n0:04 - 0:06: he pulls the hood up.\n0:06 - 0:08: he crosses the street.\n0:08 - 0:10: he stops at the corner.\n0:10 - 0:12: he looks back at the camera.\n0:12 - 0:14: he smiles and walks on.",
+      "length": null,
+      "expect": {
+        "shape": "time_ranges",
+        "scene_count": 5,
+        "total_seconds": 14,
+        "message_contains": "at most 5 scenes"
+      }
+    },
+    {
+      "id": "spoken_lines",
+      "story": "1. She opens the box, lifts the green mug and says \"Finally, my own Hoca Cai.\"\n2. She pours hot tea at the kitchen window and says \"Every morning starts here.\"\n3. She holds the mug up to the camera and says \"Get yours today.\"",
+      "length": null,
+      "expect": {
+        "shape": "list",
+        "scene_count": 3,
+        "scene_texts_contain": ["\"Finally, my own Hoca Cai.\"", "\"Every morning starts here.\"", "\"Get yours today.\""]
+      }
+    },
+    {
+      "id": "scene_over_2500",
+      "story": "Scene 1 (5 seconds): he walks out of the station in the rain, hood up.\nScene 2 (5 seconds): {LONG}",
+      "long": {"text": "The camera drifts slowly around him as rain beads on the heavy black cotton of the hoodie. ", "times": 30},
+      "length": null,
+      "expect": {
+        "shape": "headings",
+        "scene_count": 2,
+        "seconds": [5, 5],
+        "scene_2_longer_than": 2500,
+        "later": "the storyboard refuses it with the exact excess and offers \"Shorten it for me\" (D30); never cut silently"
+      }
+    }
+  ]
+}

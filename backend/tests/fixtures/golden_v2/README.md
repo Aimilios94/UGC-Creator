@@ -18,5 +18,9 @@ Test prompts from the prompt-to-ad strategy plan (`docs/plan/prompt-to-ad-strate
 - Every key in `expect` is an assertion. The test maps each key to the phase that can check it;
   keys the code cannot check yet are reported as skipped with their phase, never deleted. A new
   key with no phase fails the test, so nothing is dropped silently.
+- Checked now (phase 2): the fixed rules and the projected cost (phase 1); the scene count and
+  lengths of every fixture through the mock writer, and each scene's text as the splitter read it
+  (phase 2). The 8 prompt shapes of the setup note are in `../prompt_shapes.json`
+  (`tests/test_scene_splitter.py`).
 - 01-06 come from the 21 Nov 2026 review (product names and photos changed to the owner's test
   photos); 07 tests the A4 rule (the person in the photo is the reference).

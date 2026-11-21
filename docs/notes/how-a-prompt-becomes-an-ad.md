@@ -40,15 +40,16 @@ Other fixed rules:
 - The vision model describes only what it sees: product type, shape, colours, materials, any printed text word for word, and whether a person is visible.
 - This description is used to keep the real product the same in every picture.
 
-### Step 3. Read the story in code, before any AI (`story_beats.py`)
-- **Timed scenes are detected only from time ranges** like `0:00 – 0:04` (also `0.00-0.04`, any dash). At least **two** ranges are needed.
+### Step 3. Read the story in code, before any AI (`scene_splitter.py`; `story_beats.py` before 21 Nov 2026)
+- **Since phase 2 of the strategy plan (D31)** the story's shape is read in this order: time ranges (below), "Scene N" / "Shot N" headings (seconds from the heading or a timeline inside the scene), a list of 2–5 actions, paragraphs (left to the writer until phase 3), no shape. Headings and lists follow the same rules as time ranges below: one scene each, the user's words, the rest as notes, more than 5 joined (and said), "cut to" splits a scene when there is room. The rest of this step describes the time-range rules, unchanged.
+- **Timed scenes are detected from time ranges** like `0:00 – 0:04` (also `0.00-0.04`, any dash). At least **two** ranges are needed.
 - **Each range starts a scene ("beat"):**
   - its seconds come from the stamps (2–10);
   - its text is the story's own words, up to the next range.
 - **A range inside the one before it** (for example "Around 0:02–0:04" inside "0:00 – 0:04") is part of that scene, not a new one.
 - **More than 5 ranges:** the two shortest neighbours are merged until there are 5.
 - **Notes:** in a timed story, everything that is not inside a range (style, characters, place, light, rules, headings) becomes the **"Style and world notes"**.
-- **A story without time ranges is not split at all.** This includes stories with "Scene 1:", "Scene 2:" headings but no times. The whole text goes to the writer, and the notes stay empty.
+- **Before phase 2, a story without time ranges was not split at all**, even with "Scene 1:", "Scene 2:" headings. Now only paragraphs and stories with no shape go to the writer whole (notes empty).
 
 ### Step 4. Decide the number of scenes and their lengths, in code (`scene_plan.py`)
 
@@ -175,7 +176,7 @@ Example, the owner's 20 s prompt (7,279 characters, 5 timed scenes, 3,371 charac
 | No story | 3 scenes (hook, demo, call to action), or the count from the chosen length; the writer invents everything from the brief | Generic; nothing asks the user what they picture |
 | Short, vague story ("guy wearing my hoodie in the rain") | Whole text to the writer; it picks 1–5 scenes and fills every gap itself; no notes | Gaps are filled silently; the user does not see what was assumed |
 | Long story without times | Same as above; nothing is split or kept as notes | Character and style details survive only if the writer copies them into every prompt |
-| "Scene 1: …, Scene 2: …" without times | Not detected as scenes; the writer usually follows them, but code does not enforce it | Scene count, text and length are not guaranteed |
+| "Scene 1: …, Scene 2: …" without times | Since phase 2 (D31): one scene per heading in code, seconds from the heading if given, the text around them as notes; numbered or bulleted lists of actions the same way | Fixed in phase 2; paragraphs still go to the writer until phase 3 |
 | Timed shot list (`0:00 – 0:04 …`) | Exact scenes and lengths; beat text kept as the description; notes extracted | The clip still gets the writer's rewrite of the beat (step 5) |
 | More than 5 timed scenes | Shortest neighbours merged | Merged scenes carry two beats into one clip |
 | Story with spoken lines | Lines go to the voiceover word for word (writer's job, not checked in code) | Not verified; a line too long for its scene is spoken faster or the scene is held |

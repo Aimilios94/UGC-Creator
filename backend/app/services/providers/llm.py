@@ -83,7 +83,7 @@ def mock_analysis(brief: dict) -> dict:
 
 def _story_parts(story: str) -> list[str] | None:
     """The story's parts, in order (mock only): its timed beats when it has them."""
-    from ..story_beats import story_beats
+    from ..scene_splitter import story_beats
 
     beats = story_beats(story)
     if beats:
