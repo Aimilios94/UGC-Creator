@@ -6,6 +6,7 @@ import { formatMoney } from '../lib/money';
 import { Help } from '../components/Help';
 import { HELP } from '../lib/help';
 import Stepper from '../components/Stepper';
+import CharCount, { STORY_MAX } from '../components/CharCount';
 
 const PLATFORMS = {
   tiktok: 'TikTok',
@@ -525,9 +526,9 @@ export default function Brief() {
                 rows={4}
                 value={form.story}
                 onChange={set('story')}
-                maxLength={4000}
                 placeholder="Leave empty and the AI writes the story from your brief. Or paste yours: your spoken lines are kept word for word."
               />
+              {form.story && <CharCount value={form.story} max={STORY_MAX} label="Your story" />}
             </div>
             <PreviewSelect id="preset" label="Model preset" options={PRESETS} />
           </div>
@@ -591,7 +592,7 @@ export default function Brief() {
               (a few cents); nothing is rendered until you approve it.
               {config && <> Rendering then costs about {formatMoney(config.job_estimate, currency)}.</>}
             </p>
-            <button className="btn btn-primary btn-wide" disabled={busy || locked}>
+            <button className="btn btn-primary btn-wide" disabled={busy || locked || form.story.length > STORY_MAX}>
               {busy ? (
                 <>
                   <Loader2 className="spin" size={18} aria-hidden="true" /> Reading the photo and writing the storyboard…

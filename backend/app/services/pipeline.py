@@ -29,7 +29,7 @@ from ..config import Settings
 from ..errors import BudgetExceeded
 from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Storyboard, render_seconds
 from ..repository import Database
-from . import analyze, continuity, storyboard
+from . import analyze, continuity, shorten, storyboard
 from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into, frame_at, probe_duration
 from .image_gen import PlannedRender, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
@@ -41,7 +41,7 @@ from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
 from .providers.voice import VoiceProvider, build_voice
 from .storyboard_checks import fix_instructions, flag_testimonials
-from .video_gen import plan_scene_video
+from .video_gen import ClipText, clip_prompt, plan_scene_video, too_long_by
 from .voice import plan_voice, usage_for
 
 log = logging.getLogger(__name__)
@@ -113,8 +113,12 @@ def job_seed(job_id: str) -> int:
 
 
 # --- before approval (API) ------------------------------------------------------------
-def _run_llm_stage(ctx: Context, job_id: str, stage: str, llm: LlmHandle, call, *, attempt: int = 1):
-    sr = repo.start_stage(ctx.db, job_id, stage, -1, provider=llm.provider, model=llm.model_name, attempt=attempt)
+def _run_llm_stage(
+    ctx: Context, job_id: str, stage: str, llm: LlmHandle, call, *, attempt: int = 1, scene_idx: int = -1
+):
+    sr = repo.start_stage(
+        ctx.db, job_id, stage, scene_idx, provider=llm.provider, model=llm.model_name, attempt=attempt
+    )
     est = cost_usd(
         llm.model_name, Usage(input_tokens=LLM_EST_INPUT_TOKENS, output_tokens=ctx.settings.llm_max_output_tokens)
     )
@@ -644,6 +648,60 @@ def chain_frame(ctx: Context, job: dict, idx: int, prev_video: dict, cut_s: floa
     asset = _store_output(ctx, job_id, "image", idx, buf.getvalue(), "image/jpeg")
     repo.stage_done(ctx.db, sr["id"], {"asset_id": str(asset["id"]), "chained_from": idx - 1, "at_s": round(t, 3)})
     return asset
+
+
+def clip_texts(s: Settings, board: Storyboard, brief: Brief) -> list[ClipText]:
+    """The exact text each scene's clip gets, as the worker will send it (D30), for the preview."""
+    scenes = board.scenes[: s.render_scenes]
+    n = len(scenes)
+    return [
+        clip_prompt(
+            sc,
+            idx=i,
+            count=n,
+            style=brief.visual_style,
+            notes=board.notes,
+            continuous=board.continuity == "continuous",
+            ends_on_next=i + 1 < n and ends_on_next_picture(board, i + 1, scenes[i + 1]),
+            keep_same=board.keep_same,
+        )
+        for i, sc in enumerate(scenes)
+    ]
+
+
+def scenes_too_long(s: Settings, board: Storyboard, brief: Brief) -> list[tuple[int, int]]:
+    """(scene number, characters over) for every scene whose own text cannot fit its clip."""
+    return [(i + 1, c.too_long_by) for i, c in enumerate(clip_texts(s, board, brief)) if c.too_long_by > 0]
+
+
+def shorten_scene(ctx: Context, job: dict, board: Storyboard, idx: int) -> str:
+    """ "Shorten it for me": one cheap LLM call; returns the scene's shorter movement text (not saved)."""
+    s = ctx.settings
+    brief = Brief.model_validate(job["brief"])
+    scenes = board.scenes[: s.render_scenes]
+    scene = scenes[idx]
+    over = too_long_by(
+        scene,
+        style=brief.visual_style,
+        idx=idx,
+        count=len(scenes),
+        ends_on_next=idx + 1 < len(scenes) and ends_on_next_picture(board, idx + 1, scenes[idx + 1]),
+        continuous=board.continuity == "continuous",
+    )
+    text = scene.motion_prompt.strip() or scene.description.strip()
+    # Fit with some room left for how the shot starts and ends and the style notes.
+    target = max(300, len(text) - over - 400)
+    llm = ctx.llm_factory("shorten")
+    sr = repo.get_stage_run(ctx.db, str(job["id"]), "shorten", idx)
+    return _run_llm_stage(
+        ctx,
+        str(job["id"]),
+        "shorten",
+        llm,
+        lambda: shorten.shorten_text(llm, text, target),
+        attempt=(sr["attempt"] + 1) if sr else 1,
+        scene_idx=idx,
+    )
 
 
 def crop_keep_image(a: float, b: float) -> float:

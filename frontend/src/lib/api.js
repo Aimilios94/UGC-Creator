@@ -129,6 +129,12 @@ export const api = {
   makeVideo: (id, storyboard) =>
     request(`/jobs/${encodeURIComponent(id)}/video`, { method: 'POST', json: storyboard ?? null }),
   retry: (id) => request(`/jobs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  // The exact text each clip gets for this (unsaved) storyboard; free (D30).
+  clipTexts: (id, storyboard) =>
+    request(`/jobs/${encodeURIComponent(id)}/clip-texts`, { method: 'POST', json: storyboard }),
+  // "Shorten it for me": one cheap AI call; returns { text }, nothing is saved.
+  shortenScene: (id, idx, storyboard) =>
+    request(`/jobs/${encodeURIComponent(id)}/scenes/${idx}/shorten`, { method: 'POST', json: storyboard }),
   setSound: (id, sound) => request(`/jobs/${encodeURIComponent(id)}/sound`, { method: 'PUT', json: sound }),
   voices: () => request('/voices'),
   music: () => request('/music'),

@@ -18,16 +18,19 @@ from .. import repository as repo
 from ..deps import get_ctx, require_access_code, session_hash
 from ..errors import BudgetExceeded, ProviderNotConfigured, UploadRejected
 from ..models import (
+    STORY_MAX,
     ApproveIn,
     AssetView,
     BrandKit,
     BrandSnapshot,
     Brief,
+    ClipView,
     CostLine,
     Estimate,
     JobView,
     Money,
     ProductAnalysis,
+    ShortenOut,
     SoundIn,
     StageView,
     Storyboard,
@@ -35,7 +38,15 @@ from ..models import (
 )
 from ..services import job_trigger
 from ..services.llm_trace import money
-from ..services.pipeline import Context, estimate_board_usd, prepare_storyboard, storyboard_from_story
+from ..services.pipeline import (
+    Context,
+    clip_texts,
+    estimate_board_usd,
+    prepare_storyboard,
+    scenes_too_long,
+    shorten_scene,
+    storyboard_from_story,
+)
 from ..services.storyboard_checks import flag_testimonials
 from ..services.uploads import sanitise_image
 
@@ -89,6 +100,7 @@ def job_view(ctx: Context, job: dict) -> JobView:
             for r in repo.job_costs(ctx.db, job_id)
         ],
         estimate=_estimate(ctx, board, spent, job) if board is not None else None,
+        clips=[ClipView(**c.__dict__) for c in clip_texts(s, board, brief)] if board is not None else [],
         brief=brief,
         campaign_id=str(job["campaign_id"]) if job.get("campaign_id") else None,
         brand=BrandKit.model_validate(job["brand"]) if job.get("brand") else None,
@@ -177,6 +189,14 @@ def _check_ready(ctx: Context, job: dict, board: Storyboard, *, phase: str) -> N
             "need to come from your brief.",
         )
     s = ctx.settings
+    long = scenes_too_long(s, board, Brief.model_validate(job["brief"]))
+    if long:
+        parts = ", ".join(f"scene {n} by {c:,} characters" for n, c in long)
+        raise HTTPException(
+            status_code=409,
+            detail=f"The video AI reads at most 2,500 characters per clip, and the movement text is too long in "
+            f'{parts}. Shorten it, or press "Shorten it for me".',
+        )
     images, video = estimate_board_usd(s, board, job["brief"].get("voice", "marin"))
     need = (images + video) if phase == "images" else video
     if repo.job_spend_usd(ctx.db, str(job["id"])) + need > s.job_cost_cap_usd + 1e-9:
@@ -324,7 +344,7 @@ def set_sound(
 
 
 class StoryIn(BaseModel):
-    story: str = Field(min_length=20, max_length=4000)
+    story: str = Field(min_length=20, max_length=STORY_MAX)
 
 
 @router.post("/{job_id}/story", dependencies=[Depends(require_access_code)])
@@ -345,6 +365,42 @@ def from_story(
             status_code=502, detail="Writing the storyboard from your story failed. Try again."
         ) from None
     return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+@router.post("/{job_id}/clip-texts")
+def preview_clips(
+    job_id: str, board: Storyboard, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)
+) -> list[ClipView]:
+    """The exact text each clip would get for this (unsaved) storyboard. Free: nothing is called or saved."""
+    job = _own_job(ctx, job_id, sess)
+    brief = Brief.model_validate(job["brief"])
+    return [ClipView(**c.__dict__) for c in clip_texts(ctx.settings, board, brief)]
+
+
+def _editable_text(job: dict) -> bool:
+    """The movement text can change on the Storyboard step and on the Images step, before the video."""
+    return job["status"] == "draft" or (job["status"] == "done" and job.get("phase") == "images")
+
+
+@router.post("/{job_id}/scenes/{idx}/shorten", dependencies=[Depends(require_access_code)])
+def shorten(
+    job_id: str, idx: int, board: Storyboard, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)
+) -> ShortenOut:
+    """ "Shorten it for me": one cheap LLM call that returns a shorter movement text for this scene.
+    Nothing is saved: the page shows it (with Undo) and saves it with the storyboard."""
+    job = _own_job(ctx, job_id, sess)
+    if not _editable_text(job):
+        raise HTTPException(status_code=409, detail="The scenes are fixed once the video is being made.")
+    if not 0 <= idx < min(len(board.scenes), ctx.settings.render_scenes):
+        raise HTTPException(status_code=404, detail="No such scene.")
+    try:
+        text = shorten_scene(ctx, job, board, idx)
+    except BudgetExceeded as e:
+        raise HTTPException(status_code=409, detail=e.message) from None
+    except Exception:  # noqa: BLE001 - details go to the log
+        log.exception("shortening scene %s failed for job %s", idx, job_id)
+        raise HTTPException(status_code=502, detail="Shortening failed. Try again, or shorten it yourself.") from None
+    return ShortenOut(text=text)
 
 
 @router.post("/{job_id}/scenes/{idx}/image", dependencies=[Depends(require_access_code)])

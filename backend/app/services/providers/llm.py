@@ -22,6 +22,9 @@ from ...errors import ProviderNotConfigured
 BRIEF_RE = re.compile(r"<brief>(.*?)</brief>", re.S)
 STORY_RE = re.compile(r"<story>(.*?)</story>", re.S)
 SCENES_RE = re.compile(r"<scenes>(.*?)</scenes>", re.S)
+NOTES_RE = re.compile(r"<notes>(.*?)</notes>", re.S)
+TEXT_RE = re.compile(r"<text>(.*?)</text>", re.S)
+TARGET_RE = re.compile(r"at most (\d+) characters")
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+|(?<=[.!?][\"”])\s+")  # a sentence may end inside quotes
 
 
@@ -56,11 +59,14 @@ def _brief_from(messages) -> dict:
                 brief["story"] = json.loads(match.group(1))
             except json.JSONDecodeError:
                 pass
-        if match := SCENES_RE.search(t):
-            try:
-                brief["_scenes"] = json.loads(match.group(1))
-            except json.JSONDecodeError:
-                pass
+        for key, rx in (("_scenes", SCENES_RE), ("_notes", NOTES_RE), ("_text", TEXT_RE)):
+            if match := rx.search(t):
+                try:
+                    brief[key] = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    pass
+        if match := TARGET_RE.search(t):
+            brief["_target"] = int(match.group(1))
     return brief
 
 
@@ -209,9 +215,9 @@ def mock_storyboard(brief: dict) -> dict:
             # Like the real writer: a short summary, a still first frame, and the timed movement.
             plain = re.sub(r"^.*?\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\s*(\([^)]*\))?:?\s*", "", part).strip() or part
             first = SENTENCE_END.split(plain)[0]
-            scene["description"] = part[:800]  # the story's own text for this scene
-            scene["image_prompt"] = (f"Still first frame of this scene, before anything moves: {first} {keep}")[:2500]
-            scene["motion_prompt"] = part[:2200]
+            scene["description"] = part  # the story's own text for this scene
+            scene["image_prompt"] = f"Still first frame of this scene, before anything moves: {first} {keep}"
+            scene["motion_prompt"] = part
             scene["voiceover"] = _spoken(part)
             scene["duration_s"] = _seconds(part) or 5
         # Short opening lines a viewer would hear (the real writer bases them on the story).
@@ -238,9 +244,20 @@ def _last_beat(movement: str) -> str:
     return (sentences[-1] if sentences else "the camera keeps its slow move")[:300]
 
 
+def _first_sentences(text: str, room: int) -> str:
+    """The text's first sentences that fit in `room` characters (mock only)."""
+    out = ""
+    for sentence in SENTENCE_END.split((text or "").strip()):
+        if len(out) + len(sentence) + 1 > room:
+            break
+        out = f"{out} {sentence}".strip()
+    return out
+
+
 def mock_continuity(brief: dict) -> dict:
     """How each scene starts and ends, so the cuts match, as the real checker is asked (mock only)."""
     scenes = brief.get("_scenes") or [{}]
+    notes = brief.get("_notes") or ""
     flows = []
     for i, sc in enumerate(scenes):
         end = _last_beat(sc.get("movement", ""))
@@ -249,18 +266,28 @@ def mock_continuity(brief: dict) -> dict:
         else:
             starts = f"Exactly the last moment of scene {i}: {flows[-1]['_end']}; the same move carries on."
         ends = end if i == len(scenes) - 1 else f"{end}; the camera keeps moving at the same speed into scene {i + 2}."
-        flows.append({"starts": starts[:800], "ends": ends[:800], "_end": end})
+        room = int(sc.get("notes_room") or 0)
+        short = _first_sentences(notes, room) if notes and room < len(notes) else ""
+        flows.append({"starts": starts[:800], "ends": ends[:800], "notes_short": short, "_end": end})
     return {
         "keep_same": "Same camera height and lens feel, the same people and clothes, the same place, light and "
         "colours as in scene 1, unless the story changes them.",
-        "scenes": [{"starts": f["starts"], "ends": f["ends"]} for f in flows],
+        "scenes": [{k: f[k] for k in ("starts", "ends", "notes_short")} for f in flows],
     }
+
+
+def mock_shorten(brief: dict) -> dict:
+    """A scene's movement shortened to the target, whole sentences kept in order (mock only)."""
+    text = brief.get("_text") or ""
+    target = int(brief.get("_target") or len(text))
+    return {"text": _first_sentences(text, target) or text[:target]}
 
 
 MOCK_TASKS: dict[str, Callable[[dict], dict]] = {
     "analyze": mock_analysis,
     "storyboard": mock_storyboard,
     "continuity": mock_continuity,
+    "shorten": mock_shorten,
 }
 
 

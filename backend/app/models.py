@@ -19,6 +19,7 @@ Font = Literal["Inter", "Montserrat", "Bebas Neue", "Playfair Display"]  # bundl
 Voice = Literal["marin", "cedar", "coral", "onyx", "none"]  # gpt-4o-mini-tts voices offered, or no voiceover
 Music = Literal["theme", "none", "sport", "beauty", "tech", "food", "fashion"]  # the theme's bed, none, or any bed
 MIN_SCENES, MAX_SCENES = 1, 5
+STORY_MAX = 12000  # the user's story and its style notes, in characters (D30)
 CaptionStyle = Literal["bold", "clean", "off"]
 VisualStyle = Literal["realistic", "cinematic", "3d", "2d"]
 ImageSource = Literal["generate", "product", "upload"]
@@ -42,7 +43,7 @@ class Brief(BaseModel):
     music: Music = "theme"
     captions: CaptionStyle = "bold"
     visual_style: VisualStyle = "realistic"
-    story: str = Field(default="", max_length=4000)  # the user's own story or script, if any
+    story: str = Field(default="", max_length=STORY_MAX)  # the user's own story or script, if any
     video_length_s: int | None = Field(default=None, ge=4, le=52)  # whole ad incl. end card; None = auto
 
     @field_validator("product_name", "description", "audience", "offer", "story", mode="before")
@@ -69,14 +70,14 @@ class SceneDraft(BaseModel):
     """A scene as the AI writes it."""
 
     role: SceneRole
-    description: str = Field(max_length=2500, description="What the viewer sees in this scene, in plain words")
+    description: str = Field(max_length=STORY_MAX, description="What the viewer sees in this scene, in plain words")
     image_prompt: str = Field(
-        max_length=2500,
+        max_length=STORY_MAX,
         description="Detailed prompt for the scene's reference image (subject, setting, composition, camera, "
         "lighting, colours, style), built around the real product from the photo",
     )
     motion_prompt: str = Field(
-        max_length=2200,
+        max_length=STORY_MAX,  # Kling reads 2,500 per clip: checked per clip, never cut (D30)
         description="Timed shot list for the image-to-video clip: what happens in each beat, camera and subject "
         "motion, lighting, focus, and how the shot ends",
     )
@@ -104,6 +105,9 @@ class Scene(SceneDraft):
     # after the writer, only for the picture and video AI, never shown as story text.
     starts: str = Field(default="", max_length=800)
     ends: str = Field(default="", max_length=800)
+    # The style and world notes cut down to what this scene needs, so its clip fits Kling's 2,500
+    # characters; used only when the full notes do not fit (D30).
+    notes_short: str = Field(default="", max_length=2500)
 
 
 class Hook(BaseModel):
@@ -155,7 +159,7 @@ class Storyboard(BaseModel):
     cta_text: str = Field(max_length=60)
     hook_choice: int | None = Field(default=None, ge=0, le=2)  # the hook idea used for scene 1, if any
     notes: str = Field(
-        default="", max_length=4000
+        default="", max_length=STORY_MAX
     )  # optional style and world notes, added to every scene's instructions
     # continuous (the default since D30): every scene flows into the next; separate: cuts between shots
     continuity: Literal["continuous", "separate"] = "continuous"
@@ -274,6 +278,20 @@ class ApproveIn(BaseModel):
     mode: Literal["images", "video"] = "images"
 
 
+class ClipView(BaseModel):
+    """The exact text a scene's clip gets (Kling reads at most 2,500 characters, D30)."""
+
+    text: str
+    chars: int
+    limit: int
+    too_long_by: int = 0  # the scene's own text is this much over: shorten it (or "Shorten it for me")
+    notes: str = "none"  # full | short | none: which style and world notes went in
+
+
+class ShortenOut(BaseModel):
+    text: str
+
+
 class JobView(BaseModel):
     id: str
     status: str
@@ -285,6 +303,7 @@ class JobView(BaseModel):
     flags: list[StoryboardFlag] = []
     variants: list[VariantView] = []
     estimate: Estimate | None = None
+    clips: list[ClipView] = []  # what each scene's clip gets (D30)
     analysis: ProductAnalysis | None = None
     storyboard: Storyboard | None = None
     attempts: int

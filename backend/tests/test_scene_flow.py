@@ -118,7 +118,7 @@ def test_with_a_picture_in_every_scene_each_clip_ends_on_the_next_picture(client
     assert clips[0].tail_image.data == _image_bytes(ctx, job["id"], 1)
     assert clips[1].tail_image.data == _image_bytes(ctx, job["id"], 2)
     assert clips[2].tail_image is None  # the last scene goes to the end card
-    assert "The last frame is the end image given" in clips[0].arguments["prompt"]
+    assert "Ends exactly on the end image given" in clips[0].arguments["prompt"]
     runs = {r["scene_idx"]: r for r in repo.list_stage_runs(ctx.db, job["id"]) if r["stage"] == "video"}
     assert runs[0]["output"]["ends_on_next"] and runs[1]["output"]["ends_on_next"]
     assert [t["blend_out"] for t in _timeline(ctx, job["id"])] == [0.1, 0.1, 0.0]  # a very short blend

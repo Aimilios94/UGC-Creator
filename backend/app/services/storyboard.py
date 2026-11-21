@@ -7,7 +7,7 @@ import time
 
 from pydantic_ai import Agent
 
-from ..models import BrandKit, Brief, ProductAnalysis, Storyboard, StoryboardDraft
+from ..models import STORY_MAX, BrandKit, Brief, ProductAnalysis, Storyboard, StoryboardDraft
 from .analyze import brief_block
 from .llm_trace import LlmCall, Usage, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
@@ -192,13 +192,13 @@ def write_storyboard(
     )
     data = draft.model_dump()
     if brief.story:
-        data["notes"] = story_notes(brief.story)[:4000]
+        data["notes"] = story_notes(brief.story)[:STORY_MAX]
     data["continuity"] = "continuous"  # every scene flows into the next (D30); "separate" is the user's choice
     scenes = data["scenes"]
     lines = [sc.get("voiceover") or "" for sc in scenes]
     if beats and len(scenes) == len(beats):
         for scene, beat in zip(scenes, beats, strict=True):
-            scene["description"] = beat.text[:2500]  # the user's own words for this scene
+            scene["description"] = beat.text  # the user's own words for this scene, whole
             scene["duration_s"] = beat.seconds
     elif brief.video_length_s:
         for scene, length in zip(scenes, fit_lengths(lines, round(brief.video_length_s - end_card_s)), strict=True):

@@ -22,7 +22,7 @@ export const HELP = {
   image_source:
     'Generate a new picture from your product photo, use your product photo as it is, or upload a picture you already have (free).',
   story:
-    'AI storyboard: written from your brief. My own story: paste your story or script; your spoken lines are kept word for word and the scenes, prompts and hooks follow it.',
+    'AI storyboard: written from your brief. My own story: paste your story or script (up to 12,000 characters); your spoken lines are kept word for word and the scenes, prompts and hooks follow it.',
   hooks: 'Optional. The opening line decides if people keep watching. Keep yours, pick one of three ideas, or write your own; it replaces scene 1\'s first line.',
   title: 'A name for this ad, for you and for the file names.',
   cta_text: 'The words on the button in the end card.',

@@ -8,6 +8,9 @@ import { HELP } from '../lib/help';
 import Stepper, { BackButton } from '../components/Stepper';
 import AutoTextarea from '../components/AutoTextarea';
 import SoundCard from '../components/SoundCard';
+import CharCount, { STORY_MAX } from '../components/CharCount';
+import { ClipExact, ClipTooLong } from '../components/ClipFit';
+import { useClipTexts } from '../lib/clips';
 import { KIND_LABEL, modelLabel } from '../lib/models';
 import { goToBrief } from '../lib/steps';
 
@@ -294,6 +297,8 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice), [board, config, n, sound.voice]);
   const hasStory = storyMode === 'own' || Boolean(job.brief.story);
   const newImages = board ? board.scenes.filter((s, i) => s.image_source === 'generate' && !isChained(board, i, s)).length : 0;
+  const clips = useClipTexts(job, board); // what each clip gets, as you type (D30)
+  const [shortened, setShortened] = useState({}); // scene -> its text before "Shorten it for me"
 
   if (!board) {
     return (
@@ -458,7 +463,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
       description: both(a.description, b.description),
       voiceover: both(a.voiceover, b.voiceover).slice(0, 400),
       on_screen_text: a.on_screen_text || b.on_screen_text,
-      motion_prompt: both(a.motion_prompt, b.motion_prompt ? `Then, in the same take: ${shiftTimes(b.motion_prompt, a.duration_s)}` : '').slice(0, 2200),
+      motion_prompt: both(a.motion_prompt, b.motion_prompt ? `Then, in the same take: ${shiftTimes(b.motion_prompt, a.duration_s)}` : ''),
       duration_s: Math.min(MAX_SCENE_S, a.duration_s + b.duration_s),
       ends: b.ends || a.ends || '', // the joined shot opens like the first part and ends like the second
     };
@@ -485,6 +490,27 @@ function StoryboardStep({ job, onChange, readOnly }) {
   };
   const uploads = (i) => job.assets.filter((a) => a.kind === 'upload' && a.scene_idx === i);
   const disabled = readOnly || Boolean(busy);
+  const tooLong = clips.filter((c) => c.too_long_by > 0).length;
+  const textOver = (board.notes || '').length > STORY_MAX;
+  const shortenFor = async (i) => {
+    setBusy(`shorten${i}`);
+    setError('');
+    try {
+      const { text } = await api.shortenScene(job.id, i, board);
+      setShortened({ ...shortened, [i]: board.scenes[i].motion_prompt });
+      editScene(i, 'motion_prompt', text);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy('');
+    }
+  };
+  const undoShorten = (i) => {
+    editScene(i, 'motion_prompt', shortened[i]);
+    const rest = { ...shortened };
+    delete rest[i];
+    setShortened(rest);
+  };
 
   return (
     <div className="page">
@@ -515,13 +541,13 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   minRows={5}
                   value={story}
                   onChange={(e) => setStory(e.target.value)}
-                  maxLength={4000}
                   placeholder="For example: My grandad played every Sunday in boots that slipped. Now the whole team wears…"
                   disabled={disabled}
                   aria-label="Your story"
                 />
+                <CharCount value={story} max={STORY_MAX} label="Your story" />
                 <div>
-                  <button type="button" className="btn btn-secondary btn-small" onClick={buildFromStory} disabled={disabled || story.trim().length < 20}>
+                  <button type="button" className="btn btn-secondary btn-small" onClick={buildFromStory} disabled={disabled || story.trim().length < 20 || story.length > STORY_MAX}>
                     {busy === 'story' ? (
                       <>
                         <Loader2 className="spin" size={14} aria-hidden="true" /> Writing the scenes…
@@ -575,11 +601,11 @@ function StoryboardStep({ job, onChange, readOnly }) {
           minRows={3}
           value={board.notes || ''}
           onChange={(e) => change({ ...board, notes: e.target.value })}
-          maxLength={4000}
           disabled={disabled}
           placeholder="For example: realistic phone video at night in the rain, neon reflections, cyan and magenta light, one continuous camera move."
           aria-label="Style and world notes"
         />
+        {board.notes && <CharCount value={board.notes} max={STORY_MAX} label="The notes" />}
       </details>
 
       {flags.length > 0 && (
@@ -712,10 +738,18 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   </button>
                 )}
               </div>
+              <ClipTooLong
+                clip={clips[i]}
+                busy={busy === `shorten${i}`}
+                disabled={disabled}
+                onShorten={() => shortenFor(i)}
+                canUndo={shortened[i] != null}
+                onUndo={() => undoShorten(i)}
+              />
               <div className="scene-grid">
                 <div className="scene-main">
                   <FieldLabel htmlFor={`d${i}`} text="What happens in this scene" help={HELP.description} />
-                  <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} maxLength={2500} disabled={disabled} />
+                  <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} disabled={disabled} />
                   <div className="grid-2 tight">
                     <div>
                       <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />
@@ -774,7 +808,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     {isChained(board, i, s) ? (
                       <p className="muted small">Not needed: this scene starts from the last frame of scene {i}.</p>
                     ) : s.image_source === 'generate' ? (
-                      <AutoTextarea id={`ip${i}`} minRows={3} value={s.image_prompt} onChange={onScene(i, 'image_prompt')} maxLength={2500} disabled={disabled} />
+                      <AutoTextarea id={`ip${i}`} minRows={3} value={s.image_prompt} onChange={onScene(i, 'image_prompt')} disabled={disabled} />
                     ) : (
                       <p className="muted small">Not needed: this scene starts from your own picture.</p>
                     )}
@@ -782,7 +816,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   <div className="ai-field">
                     <FieldLabel htmlFor={`mp${i}`} text="2. Movement (for the video AI)" help={HELP.motion_prompt} />
                     <p className="muted small hint">What changes, second by second: camera, people, light, the last frame.</p>
-                    <AutoTextarea id={`mp${i}`} minRows={3} value={s.motion_prompt} onChange={onScene(i, 'motion_prompt')} maxLength={2200} disabled={disabled} />
+                    <AutoTextarea id={`mp${i}`} minRows={3} value={s.motion_prompt} onChange={onScene(i, 'motion_prompt')} disabled={disabled} />
                     {endsOnNext(board, i) && (
                       <p className="muted small hint">Ends on scene {i + 2}&rsquo;s picture, so the cut matches.</p>
                     )}
@@ -802,9 +836,10 @@ function StoryboardStep({ job, onChange, readOnly }) {
                         <AutoTextarea id={`fe${i}`} minRows={2} value={s.ends || ''} onChange={onScene(i, 'ends')} maxLength={800} disabled={disabled} placeholder="Nothing added" />
                       </div>
                     </div>
-                    {board.keep_same && <p className="muted small">Same in every scene: {board.keep_same}</p>}
+                    {board.keep_same && !board.notes && <p className="muted small">Same in every scene: {board.keep_same}</p>}
                   </div>
                 )}
+                <ClipExact clip={clips[i]} n={board.continuity === 'continuous' ? 4 : 3} />
               </details>
             </article>
           );
@@ -927,7 +962,13 @@ function StoryboardStep({ job, onChange, readOnly }) {
             </p>
           )}
           {error && <p className="error" role="alert">{error}</p>}
-          <button className="btn btn-primary" onClick={approve} disabled={disabled}>
+          {tooLong > 0 && (
+            <p className="error" role="alert">
+              {tooLong === 1 ? 'One scene is' : `${tooLong} scenes are`} too long for the video AI: shorten {tooLong === 1 ? 'it' : 'them'} (or press &ldquo;Shorten it for me&rdquo;) to continue.
+            </p>
+          )}
+          {textOver && <p className="error" role="alert">The style and world notes are too long: shorten them to continue.</p>}
+          <button className="btn btn-primary" onClick={approve} disabled={disabled || tooLong > 0 || textOver}>
             {busy === 'approve' ? 'Starting…' : 'Continue →'}
           </button>
         </div>
@@ -954,6 +995,29 @@ function ImagesStep({ job, onChange, readOnly = false }) {
   const locked = readOnly || job.phase === 'video';
   const editScene = (i, field, value) =>
     setBoard({ ...board, scenes: board.scenes.map((s, j) => (j === i ? { ...s, [field]: value } : s)) });
+  const clips = useClipTexts(job, board); // what each clip gets, as you type (D30)
+  const [shortened, setShortened] = useState({});
+  const [shortBusy, setShortBusy] = useState(null);
+  const tooLong = clips.filter((c) => c.too_long_by > 0).length;
+  async function shortenFor(i) {
+    setShortBusy(i);
+    setError('');
+    try {
+      const { text } = await api.shortenScene(job.id, i, board);
+      setShortened({ ...shortened, [i]: board.scenes[i].motion_prompt });
+      editScene(i, 'motion_prompt', text);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setShortBusy(null);
+    }
+  }
+  function undoShorten(i) {
+    editScene(i, 'motion_prompt', shortened[i]);
+    const rest = { ...shortened };
+    delete rest[i];
+    setShortened(rest);
+  }
 
   async function changeSound(patch) {
     setSound({ ...sound, ...patch });
@@ -996,6 +1060,16 @@ function ImagesStep({ job, onChange, readOnly = false }) {
               <h2>
                 {sceneTitle(s, i)} <Help text={HELP[s.role]} />
               </h2>
+              {!locked && (
+                <ClipTooLong
+                  clip={clips[i]}
+                  busy={shortBusy === i}
+                  disabled={busy || shortBusy != null}
+                  onShorten={() => shortenFor(i)}
+                  canUndo={shortened[i] != null}
+                  onUndo={() => undoShorten(i)}
+                />
+              )}
               {chained && !image ? (
                 <p className="muted small chained-note">Starts where scene {i} ends (one continuous shot): its first frame is made with the video.</p>
               ) : image ? (
@@ -1023,7 +1097,12 @@ function ImagesStep({ job, onChange, readOnly = false }) {
                 endsOnNext={endsOnNext(board, i)}
               />
               <FieldLabel htmlFor={`imp${i}`} text="Movement in the clip (sent to the AI)" help={HELP.motion_prompt} />
-              <AutoTextarea id={`imp${i}`} minRows={4} value={s.motion_prompt} onChange={(e) => editScene(i, 'motion_prompt', e.target.value)} maxLength={2200} disabled={locked} />
+              <AutoTextarea id={`imp${i}`} minRows={4} value={s.motion_prompt} onChange={(e) => editScene(i, 'motion_prompt', e.target.value)} disabled={locked} />
+              {clips[i] && (
+                <p className={clips[i].too_long_by ? 'char-count over small' : 'char-count muted small'}>
+                  The whole clip text: {clips[i].chars.toLocaleString('en-GB')} / {clips[i].limit.toLocaleString('en-GB')} characters
+                </p>
+              )}
             </article>
           );
         })}
@@ -1036,7 +1115,12 @@ function ImagesStep({ job, onChange, readOnly = false }) {
           <p className="muted small">
             Making the video adds the voiceover, one clip per scene, captions, music and the end card, in every format <Help text={HELP.make_video} />. You can close the tab while it runs.
           </p>
-          <button className="btn btn-primary" onClick={makeVideo} disabled={busy}>
+          {tooLong > 0 && (
+            <p className="error" role="alert">
+              {tooLong === 1 ? 'One scene is' : `${tooLong} scenes are`} too long for the video AI: shorten {tooLong === 1 ? 'it' : 'them'} (or press &ldquo;Shorten it for me&rdquo;) to continue.
+            </p>
+          )}
+          <button className="btn btn-primary" onClick={makeVideo} disabled={busy || tooLong > 0}>
             <Film size={16} aria-hidden="true" /> {busy ? 'Starting…' : `Make the video${estimate ? ` (${formatMoney(estimate.video, currency)})` : ''}`}
           </button>
           <p className="muted small">Happy with the images only? Open each one and save it; nothing more is charged.</p>

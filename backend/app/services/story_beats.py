@@ -56,10 +56,18 @@ def story_beats(story: str) -> list[Beat] | None:
     _, timed = _split(story)
     if len(timed) < 2:
         return None
-    beats = []
+    beats: list[Beat] = []
+    span: tuple[float, float] | None = None  # the time range of the last beat
     for p in timed:
-        start, end = _RANGE.search(p).groups()
-        beats.append(Beat(text=p, seconds=max(2, min(10, round(_secs(end) - _secs(start))))))
+        start, end = (_secs(x) for x in _RANGE.search(p).groups())
+        if span and span[0] <= start and end <= span[1]:
+            # A moment inside the last beat ("0:00 - 0:04 ... Around 0:02-0:04, ..."): the same scene.
+            beats[-1] = Beat(text=f"{beats[-1].text} {p}", seconds=beats[-1].seconds)
+            continue
+        beats.append(Beat(text=p, seconds=max(2, min(10, round(end - start)))))
+        span = (start, end)
+    if len(beats) < 2:
+        return None
     while len(beats) > MAX_SCENES:  # merge the two shortest neighbours
         i = min(range(len(beats) - 1), key=lambda k: beats[k].seconds + beats[k + 1].seconds)
         a, b = beats[i], beats[i + 1]

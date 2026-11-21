@@ -133,7 +133,7 @@ def test_ten_second_clips_and_the_cap(client, ctx, session_id, photo_bytes):
     worker.run_once(ctx)
     clips = [r for r in ctx.media.submits if r.kind == "video"]
     assert [r.arguments["duration"] for r in clips] == ["10", "10", "5"]
-    assert "spread these beats evenly over the 10 seconds" in clips[0].arguments["prompt"]
+    assert "Spread these beats evenly over the 10 seconds" in clips[0].arguments["prompt"]
     assert all(len(r.arguments["prompt"]) <= MAX_PROMPT for r in clips)
 
 
