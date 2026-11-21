@@ -74,7 +74,7 @@ def test_a_scene_too_long_on_its_own_is_refused_until_shortened(client, ctx, ses
     job = create_job(client, session_id, photo_bytes).json()
     board = job["storyboard"]
     long_text = " ".join(f"Beat {k}: the camera keeps gliding forward slowly while the rain falls." for k in range(34))
-    board["scenes"][1]["motion_prompt"] = long_text[:2200]
+    board["scenes"][1]["motion_prompt"] = long_text[:2400]
     board["scenes"][1]["duration_s"] = 4  # played faster ...
     board["scenes"][2]["image_source"] = "product"  # ... to end on the next picture: the most rules
 

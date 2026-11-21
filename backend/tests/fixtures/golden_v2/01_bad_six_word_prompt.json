@@ -1,0 +1,30 @@
+{
+  "id": "golden_v2_01_bad_six_word_prompt",
+  "title": "Badly written 6-word prompt",
+  "runs_in": ["ci", "live"],
+  "note": "CI checks the structure with the mock writer. The live run (real writer) checks that the questions and buttons make sense.",
+  "input": {
+    "kind": "video",
+    "product_name": "City Harmony hoodie",
+    "brief": "Black heavy cotton hoodie with an embroidered City Harmony print. Stays warm and dry in bad weather.",
+    "photo": "hoodie_black_no_person.jpg",
+    "story": "guy wearing my hoodie in the rain",
+    "length": "auto",
+    "mode": "connected",
+    "style": "realistic"
+  },
+  "expect": {
+    "scene_count": {"min": 1, "max": 5},
+    "every_key_slot_filled_or_marked_ai_guess": true,
+    "questions": {"min": 1, "max": 2},
+    "question_buttons_per_question": {"min": 2, "max": 4},
+    "question_has_let_ai_decide": true,
+    "user_text_kept_verbatim_somewhere": "guy wearing my hoodie in the rain",
+    "max_clip_prompt_chars": 2310,
+    "max_projected_cost": "config.job_cost_cap_eur",
+    "live_review": [
+      "Questions are about who, the product moment, the place or the ending, not about things the prompt already says (rain, hoodie).",
+      "Suggested buttons fit a hoodie ad in the rain."
+    ]
+  }
+}

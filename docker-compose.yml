@@ -25,7 +25,7 @@ x-backend: &backend
     PUBLIC_API_URL: http://localhost:8000
     JOB_RUNNER: local
     ACCESS_CODES: ${ACCESS_CODES:-}
-    DAILY_SPEND_LIMIT_EUR: ${DAILY_SPEND_LIMIT_EUR:-4}  # set higher for a local paid test, e.g. =5
+    DAILY_SPEND_LIMIT_EUR: ${DAILY_SPEND_LIMIT_EUR:-10}  # D31
     CORS_ORIGINS: http://localhost:5173
   volumes:
     - media:/data
@@ -58,6 +58,12 @@ services:
   worker:
     <<: *backend
     command: ["python", "-m", "app.worker", "--loop"]
+    environment:
+      <<: *backend-env
+      ARCHIVE_DIR: /archive  # the findings archive (D31): every local test ad, kept outside the repo
+    volumes:
+      - media:/data
+      - ${UGC_ARCHIVE_DIR:-../ugc-archive}:/archive
     depends_on:
       api:
         condition: service_started

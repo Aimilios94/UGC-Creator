@@ -17,6 +17,6 @@ AI image and video models can now make convincing footage, but a naive pipeline 
 - Run as a deployed service (not a laptop with a tunnel), keep each user's ads private, and delete them on request.
 
 ## Constraints
-- Budget: about 26 EUR of API spend for the whole project; all development and CI run on mock providers.
+- Budget: about 50 EUR of API spend for the whole project (raised from 26 EUR on 21 Nov 2026, D31: quality first); all development and CI run on mock providers.
 - Time: six weekly milestones of 15–20 hours, MVP at the end of M4.
 - EU hosting for data at rest (Neon Frankfurt, Google Cloud europe-west4).

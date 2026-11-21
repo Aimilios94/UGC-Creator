@@ -118,7 +118,7 @@ def test_with_a_picture_in_every_scene_each_clip_ends_on_the_next_picture(client
     assert clips[0].tail_image.data == _image_bytes(ctx, job["id"], 1)
     assert clips[1].tail_image.data == _image_bytes(ctx, job["id"], 2)
     assert clips[2].tail_image is None  # the last scene goes to the end card
-    assert "Ends exactly on the end image given" in clips[0].arguments["prompt"]
+    assert "Ends exactly on the given end image" in clips[0].arguments["prompt"]
     runs = {r["scene_idx"]: r for r in repo.list_stage_runs(ctx.db, job["id"]) if r["stage"] == "video"}
     assert runs[0]["output"]["ends_on_next"] and runs[1]["output"]["ends_on_next"]
     assert [t["blend_out"] for t in _timeline(ctx, job["id"])] == [0.1, 0.1, 0.0]  # a very short blend
@@ -169,7 +169,7 @@ def test_the_end_frame_reaches_fal_and_changes_the_cache_key():
         end_image_sha256="b",
     )  # fmt: skip
     assert plain.cache_key != ending.cache_key
-    assert "1.2 times faster" in ending.request.arguments["prompt"]
+    assert "1.25x faster" in ending.request.arguments["prompt"]
     assert "Only the first" not in ending.request.arguments["prompt"]  # the whole clip is used, a little faster
     fake = FakeFal()
     FalMedia("k", client=fake).submit(ending.request)

@@ -1,0 +1,27 @@
+{
+  "id": "golden_v2_02_story_no_photo",
+  "title": "Story with no product photo",
+  "runs_in": ["ci"],
+  "input": {
+    "kind": "video",
+    "product_name": "Lumo travel mug",
+    "brief": "Matte green steel travel mug with a leak-proof lid. Keeps coffee hot for 12 hours.",
+    "photo": null,
+    "story": "A woman in a yellow raincoat waits at a bus stop at dawn. She sips from her matte green travel mug and smiles as the bus arrives.\n\nClose-up of the mug in her hand, steam rising from the open lid.\n\nShe steps onto the bus, mug in hand.",
+    "length": "auto",
+    "mode": "connected",
+    "style": "cinematic"
+  },
+  "expect": {
+    "route": "video_no_photo",
+    "scene_count": {"min": 3, "max": 3},
+    "picture_source_per_scene": "text_to_image_or_continue",
+    "product_slot_source_in": ["user", "answer"],
+    "product_description_mentions": ["matte green", "steel"],
+    "fixed_rules_product_line": "One continuous take, no cuts; product as described above.",
+    "fixed_rules_must_not_contain": "as in the photo",
+    "no_photo_note_shown": "Add a photo so your product looks exactly right.",
+    "max_clip_prompt_chars": 2310,
+    "max_projected_cost": "config.job_cost_cap_eur"
+  }
+}

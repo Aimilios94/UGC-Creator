@@ -25,42 +25,65 @@ from .styles import VIDEO_NEGATIVE
 
 MAX_PROMPT = 2500  # Kling's prompt limit (fal OpenAPI schema `maxLength`, checked 20 and 21 Nov 2026)
 FLOW_MAX = 230  # each of "starts", "ends" and "keep_same" in a clip, at most (D30)
+RULES_MAX = 300  # the fixed rules' budget in the clip plan (strategy plan A2): measured worst case, CI-checked
+
+# The fixed rules, v2 (strategy plan A2 and A6, D31): short, and picked by code, never by the writer.
+PRODUCT_LINE_PHOTO = "One continuous take, no cuts; product exactly as in the photo."
+PRODUCT_LINE_NO_PHOTO = "One continuous take, no cuts; product as described above."
+END_IMAGE = "Ends exactly on the given end image; move steadily toward it."
+SPEED = "Played {x}x faster: keep moves slow."
+FIRST_N = "Only the first {n} seconds are used: fit every beat in them."
+TEN_SECONDS = "Spread the beats evenly over 10 seconds."
+CONTINUES = "Continues from the previous scene's last frame, same move; no restart."
+END_MID = "End mid-movement."
+
+
+def speed_label(clip_s: int, scene_s: int) -> str:
+    """How much faster a clip is played to fit its scene, up to 2 decimals: 1.25, 1.67, 2.5."""
+    return f"{clip_s / scene_s:.2f}".rstrip("0").rstrip(".")
 
 
 def clip_rules(
-    *, style: str, duration_s: int, used_s: int, idx: int, count: int, continuous: bool, ends_on_next: bool
+    *,
+    style: str,
+    duration_s: int,
+    used_s: int,
+    idx: int,
+    count: int,
+    continuous: bool,
+    ends_on_next: bool,
+    has_photo: bool = True,
 ) -> str:
-    """The fixed rules every clip gets, after its own movement. Compact, so the user's text keeps
-    the room (Kling reads 2,500 characters)."""
+    """The fixed rules every clip gets, at the end of its text. At most RULES_MAX characters.
+    `duration_s` is the clip Kling makes (5 or 10 s), `used_s` the scene's length on screen."""
     used = min(used_s, duration_s)
-    tail = " One continuous take, no cuts; the product stays unchanged. "
-    tail += VIDEO_STYLE.get(style, VIDEO_STYLE["realistic"])
+    product = PRODUCT_LINE_PHOTO if has_photo else PRODUCT_LINE_NO_PHOTO
+    parts = [product, VIDEO_STYLE.get(style, VIDEO_STYLE["realistic"])]
     if ends_on_next:
-        tail += " Ends exactly on the end image given (the next scene's first frame): move steadily toward it."
+        parts.append(END_IMAGE)
         if used < duration_s:
-            tail += f" Played {duration_s / used:.2g} times faster: keep every movement slow and smooth."
+            parts.append(SPEED.format(x=speed_label(duration_s, used)))
     elif used < duration_s:
-        tail += f" Only the first {used} seconds are used: play every beat within them."
+        parts.append(FIRST_N.format(n=used))
     elif duration_s == 10:
-        tail += " Spread these beats evenly over the 10 seconds."
-    if count > 1:
-        # The same rule for every clip, so the scenes join smoothly (D29).
+        parts.append(TEN_SECONDS)
+    if continuous and count > 1:
+        # Only in one connected video: separate shots each start from their own picture.
         if idx > 0:
-            tail += " Continues the previous scene: camera already moving, same direction and speed, no restart."
+            parts.append(CONTINUES)
         if idx < count - 1:
-            tail += " End mid-movement."
-        if continuous and idx > 0:
-            tail += " First frame = the previous scene's last frame."
-    return tail
+            parts.append(END_MID)
+    return " " + " ".join(parts)  # the leading space joins it to the text before
 
 
 def worst_rules_len(*, style: str, idx: int, count: int) -> int:
     """The longest the fixed rules can be for this scene, whatever its length and pictures."""
     return max(
         len(clip_rules(style=style, duration_s=render_seconds(u), used_s=u, idx=idx, count=count,
-                       continuous=True, ends_on_next=e))
+                       continuous=True, ends_on_next=e, has_photo=p))
         for u in range(2, 11)
         for e in (False, True)
+        for p in (True, False)
     )  # fmt: skip
 
 
@@ -77,7 +100,9 @@ def notes_budget(scene: Scene, *, style: str, idx: int, count: int) -> int:
     return MAX_PROMPT - rules - len(scene_text(scene)) - flows * (FLOW_MAX + 10)
 
 
-def too_long_by(scene: Scene, *, style: str, idx: int, count: int, ends_on_next: bool, continuous: bool) -> int:
+def too_long_by(
+    scene: Scene, *, style: str, idx: int, count: int, ends_on_next: bool, continuous: bool, has_photo: bool = True
+) -> int:
     """How many characters the scene's own text is over Kling's limit with its fixed rules (0 = fits)."""
     rules = clip_rules(
         style=style,
@@ -87,6 +112,7 @@ def too_long_by(scene: Scene, *, style: str, idx: int, count: int, ends_on_next:
         count=count,
         continuous=continuous,
         ends_on_next=ends_on_next,
+        has_photo=has_photo,
     )
     return max(0, len(scene_text(scene)) + len(rules) - MAX_PROMPT)
 
@@ -123,6 +149,7 @@ def clip_prompt(
     ends_on_next: bool = False,
     keep_same: str = "",
     render_s: int | None = None,
+    has_photo: bool = True,
 ) -> ClipText:
     """The exact text Kling gets for this scene (at most 2,500 characters). `render_s` is the clip
     the model makes (5 or 10 s; by default the one the scene's length needs)."""
@@ -135,6 +162,7 @@ def clip_prompt(
         count=count,
         continuous=continuous,
         ends_on_next=ends_on_next,
+        has_photo=has_photo,
     )
     own = scene_text(scene)
     over = max(0, len(own) + len(rules) - MAX_PROMPT)
@@ -182,6 +210,7 @@ def plan_scene_video(
     end_image: InputImage | None = None,
     end_image_sha256: str | None = None,
     keep_same: str = "",
+    has_photo: bool = True,
 ) -> PlannedRender:
     """One clip. In a continuous shot (D30) the clip also gets how it starts and ends (from the
     continuity check) and what stays the same; when the next scene has its own picture, the clip
@@ -200,6 +229,7 @@ def plan_scene_video(
         continuous=continuous,
         ends_on_next=end_image is not None,
         keep_same=keep_same,
+        has_photo=has_photo,
     ).text
     arguments = {"prompt": prompt, "duration": str(duration_s), "negative_prompt": VIDEO_NEGATIVE}
     settings: dict = {"duration": duration_s}

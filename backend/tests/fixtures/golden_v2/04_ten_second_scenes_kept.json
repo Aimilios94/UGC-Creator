@@ -1,0 +1,29 @@
+{
+  "id": "golden_v2_04_ten_second_scenes_kept",
+  "title": "Three 10 s scenes asked: kept as asked, cost shown (quality first)",
+  "runs_in": ["ci"],
+  "input": {
+    "kind": "video",
+    "product_name": "Hoca Cai mug",
+    "brief": "Matte green ceramic mug with an Istanbul skyline print and the words HOCA CAI. Made for hot tea.",
+    "photo": "mug_green.jpg",
+    "story": "Scene 1 (10 seconds): a man picks up the mug from the kitchen table at sunrise.\nScene 2 (10 seconds): he walks through the city, mug in hand.\nScene 3 (10 seconds): at his desk, he takes a sip and steam rises from the mug.",
+    "length": 32,
+    "mode": "connected",
+    "style": "realistic"
+  },
+  "expect": {
+    "blocked": false,
+    "scene_count": {"min": 3, "max": 3},
+    "scene_lengths_s": [10, 10, 10],
+    "clip_durations": ["10", "10", "10"],
+    "user_scene_text_kept_verbatim": true,
+    "projected_cost_shown_on_storyboard": true,
+    "projected_cost_eur_approx": 2.0,
+    "projected_cost_tolerance_eur": 0.15,
+    "tradeoff_offered": false,
+    "length_picker_max_seconds": 52,
+    "max_projected_cost": "config.job_cost_cap_eur"
+  },
+  "note": "32 s = three 10 s scenes plus the 2 s end card. Cost at 0.91 EUR/USD: 3 clips of 10 s (2.10 USD) + 1 picture + voice + AI calls, about 1.96 EUR. Actions avoid Kling weak spots (no pouring, no small-part handling), so the text must stay word for word. The photo shows a hand holding the mug: a person is visible, no face."
+}

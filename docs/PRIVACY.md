@@ -19,6 +19,8 @@ The in-app notice is `frontend/src/pages/Privacy.jsx`. This page is the engineer
 
 Not collected: accounts, names, analytics, tracking cookies. The fields still marked "Soon" on the Create page (model preset, Hook Lab, email) stay in the browser and are not sent to the API (D24); goal, theme, ad type, campaign, brand kit (D25), voice, music, captions (D26), your own story, style notes and video length (D27–D29) are sent since M2. The email address for the Post Kit arrives in M3 (stored only to send, then deleted); Sentry (M2, EU region, with a scrubber) and LangSmith (M4) are added to this table when they ship.
 
+**Findings archive (D31), local test runs only:** the owner's local Docker worker keeps a copy of each test ad (inputs, prompts, outputs, frames at the cuts, costs) in a folder on the owner's computer, outside the repo, to learn what each model can do. It is switched on only by `ARCHIVE_DIR`, which only the local Compose worker sets; the live site (Cloud Run) never sets it, so visitors' photos and ads are never kept there.
+
 ## Rules in code
 - Upload guard: JPEG/PNG/WebP only, size cap, full decode, re-encode from pixels (no metadata survives) — `backend/app/services/uploads.py`.
 - Jobs are reachable only from the creating session; other sessions get 404 — `backend/app/routers/jobs.py`. Campaigns and the brand kit are scoped the same way — `routers/campaigns.py`, `routers/brand_kit.py`.

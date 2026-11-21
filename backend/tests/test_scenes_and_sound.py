@@ -224,7 +224,7 @@ def test_style_notes_are_kept_apart_and_reach_every_instruction(client, ctx, ses
     clips = [r for r in ctx.media.submits if r.kind == "video"]
     assert "Shibuya intersection" in image.arguments["prompt"]
     assert all("Shibuya intersection" in c.arguments["prompt"] for c in clips)
-    assert "Continues the previous scene" in clips[1].arguments["prompt"]
+    assert "Continues from the previous scene" in clips[1].arguments["prompt"]
     assert "End mid-movement" in clips[0].arguments["prompt"] and "End mid-movement" not in clips[2].arguments["prompt"]
 
 

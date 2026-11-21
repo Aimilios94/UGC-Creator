@@ -19,6 +19,7 @@ from . import repository as repo
 from .config import Settings, get_settings
 from .errors import BudgetExceeded
 from .repository import Database
+from .services.archive import archive_job
 from .services.pipeline import Context, run_job
 from .services.providers.media import build_media
 from .services.providers.storage import build_storage
@@ -57,6 +58,8 @@ def run_once(ctx: Context) -> bool:
     except Exception as e:  # noqa: BLE001 - the handler decides retry or fail
         status = repo.handle_job_failure(ctx.db, job_id, f"{type(e).__name__}: {e}", s.max_job_attempts)
         log.exception("job %s raised; now %s", job_id, status)
+    if s.archive_dir:  # local test runs only (D31): what went in, what each AI got, what came out
+        archive_job(ctx, job_id)
     return True
 
 

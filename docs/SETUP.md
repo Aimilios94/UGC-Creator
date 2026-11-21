@@ -23,10 +23,11 @@ LLM_PROVIDER=openai MEDIA_PROVIDER=fal docker compose up
 - **A paid test with the real AI (only with the owner's go and limit):** keys come from `backend/.env`; the access code is off locally.
 
   ```bash
-  LLM_PROVIDER=openai MEDIA_PROVIDER=fal VOICE_PROVIDER=openai DAILY_SPEND_LIMIT_EUR=5 docker compose up -d
+  LLM_PROVIDER=openai MEDIA_PROVIDER=fal VOICE_PROVIDER=openai docker compose up -d
   ```
 
-  The same variables must be passed again on every `docker compose up`, or the stack falls back to mock. Real spend so far on the local stack: `docker compose exec -T postgres psql -U postgres -d ugc -c "select round(sum(coalesce(cost_usd, est_cost_usd))*0.87, 3) as eur from llm_calls where status in ('reserved','billed') and provider <> 'mock'"`.
+  The same variables must be passed again on every `docker compose up`, or the stack falls back to mock. The caps are 5 EUR per ad and 10 EUR per day (D31; add `DAILY_SPEND_LIMIT_EUR=...` for a lower limit on a test day). Real spend so far on the local stack: `docker compose exec -T postgres psql -U postgres -d ugc -c "select round(sum(coalesce(cost_usd, est_cost_usd))*0.91, 3) as eur from llm_calls where status in ('reserved','billed') and provider <> 'mock'"`.
+- **Findings archive (D31):** the local worker writes every test ad to `../ugc-archive` next to the repo (`C:\dev\ugc-archive`; set `UGC_ARCHIVE_DIR` for another folder): inputs, storyboard, the exact text each picture and clip got, all outputs, the frames before and after every cut, models, stages, cost and a `notes.md` checklist to fill in. It is outside the repo and never on Cloud Run. To add an older ad, run in the worker: `python -c "from app.worker import build_context; from app.config import get_settings; from app.services.archive import archive_job; print(archive_job(build_context(get_settings()), 'JOB_ID'))"`.
 
 ## Run the backend without Docker
 

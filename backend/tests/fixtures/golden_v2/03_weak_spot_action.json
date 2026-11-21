@@ -1,0 +1,30 @@
+{
+  "id": "golden_v2_03_weak_spot_action",
+  "title": "User action that hits a Kling weak spot",
+  "runs_in": ["live"],
+  "note": "Needs the real writer: the mock writer cannot make a swap.",
+  "input": {
+    "kind": "video",
+    "product_name": "City Harmony hoodie",
+    "brief": "Black heavy cotton hoodie with an embroidered City Harmony print. Stays warm and dry in bad weather.",
+    "photo": "hoodie_black_no_person.jpg",
+    "story": "Scene 1: he walks out of a concert, hood up.\nScene 2: he throws the hoodie to his friend in the crowd.\nScene 3: his friend pulls it on and grins at the camera.",
+    "length": "auto",
+    "mode": "connected",
+    "style": "realistic"
+  },
+  "expect": {
+    "scene_count": {"min": 3, "max": 3},
+    "scene_2": {
+      "ai_changed": true,
+      "ai_changed_reason_mentions_any": ["throw", "catch", "crowd"],
+      "clip_must_not_contain_any": ["throws", "catches"],
+      "undo_available": true
+    },
+    "scenes_1_and_3_action_verbatim": true,
+    "live_review": [
+      "Scene 2 still reads as the hoodie passing from him to his friend (the intent is kept), for example he holds it out and the friend takes it, or the friend is already holding it.",
+      "The crowd is still or in the background, not doing complex actions."
+    ]
+  }
+}

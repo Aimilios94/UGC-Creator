@@ -1,0 +1,27 @@
+{
+  "id": "golden_v2_06_length_mismatch",
+  "title": "Picked length longer than the scenes make (v2.3)",
+  "runs_in": ["ci"],
+  "phase": 3,
+  "input": {
+    "kind": "video",
+    "product_name": "City Harmony hoodie",
+    "brief": "Black heavy cotton hoodie with an embroidered City Harmony print. Stays warm and dry in bad weather.",
+    "photo": "hoodie_black_no_person.jpg",
+    "story": "Scene 1 (10 seconds): he walks through a rainy street at night, hood up.\nScene 2 (10 seconds): he stops under a neon sign, pulls the hood down and smiles at the camera.",
+    "length": 40,
+    "mode": "connected",
+    "style": "realistic"
+  },
+  "expect": {
+    "scene_count": {"min": 2, "max": 2},
+    "scene_lengths_s": [10, 10],
+    "real_total_seconds": 22,
+    "length_mismatch_line_shown": "Your scenes make a 22 s ad (you picked 40 s).",
+    "buttons": ["Add scenes to reach 40 s", "Keep 22 s"],
+    "no_scene_stretched": true,
+    "no_hold_frame_added_to_fill_length": true,
+    "user_scene_text_kept_verbatim": true,
+    "max_projected_cost": "config.job_cost_cap_eur"
+  }
+}

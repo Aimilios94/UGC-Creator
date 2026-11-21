@@ -282,6 +282,8 @@ def run_media_stage(
     planned = plan()
     req = planned.request
     est = cost_usd(req.model, planned.usage)
+    # The exact text the model got, kept with the stage for the findings archive (D31).
+    meta = {**meta, "sent": {k: req.arguments[k] for k in SENT_FIELDS if k in req.arguments}}
 
     if sr and sr["status"] == "submitted" and sr["prediction_id"]:
         prediction_id = sr["prediction_id"]  # resume: poll the render already paid for
@@ -615,6 +617,8 @@ def ends_on_next_picture(board: Storyboard, next_idx: int, next_scene: Scene) ->
     ends on that picture (Kling's end frame), so the cut between them matches."""
     return board.continuity == "continuous" and next_idx > 0 and next_scene.image_source != "generate"
 
+
+SENT_FIELDS = ("prompt", "negative_prompt", "duration", "aspect_ratio", "seed")
 
 # How each cut is joined in compose (D30): a chained cut has the same frame on both sides, so a
 # clean cut; a cut onto the clip's end picture gets a very short blend for the model's small

@@ -1,0 +1,26 @@
+{
+  "id": "golden_v2_05_timestamp_angle_one_take",
+  "title": "Angle change inside one continuous take (A5)",
+  "runs_in": ["ci"],
+  "input": {
+    "kind": "video",
+    "product_name": "City Harmony hoodie",
+    "brief": "Black heavy cotton hoodie with an embroidered City Harmony print. Stays warm and dry in bad weather.",
+    "photo": "hoodie_black_no_person.jpg",
+    "story": "Scene 1 (5 seconds): 0-2 s: full-body shot, he walks in light rain. 2-4 s: the camera pushes in to his footsteps. 4-5 s: it pulls back to a medium shot as he stops.\nScene 2 (5 seconds): he pulls the hood down and smiles at the camera.",
+    "length": "auto",
+    "mode": "connected",
+    "style": "realistic"
+  },
+  "expect": {
+    "scene_count": {"min": 2, "max": 2},
+    "scene_1": {
+      "clip_seconds": 5,
+      "clip_must_not_contain_whole_word": "cut",
+      "clip_contains_all": ["pushes in to his footsteps", "pulls back to a medium shot"]
+    },
+    "max_clip_prompt_chars": 2310,
+    "max_projected_cost": "config.job_cost_cap_eur"
+  },
+  "note": "Whole-word check: the fixed rules always say \"no cuts\", which is allowed; \"cut\" or \"cut to\" is not."
+}

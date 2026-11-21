@@ -14,11 +14,11 @@ IMAGE = {
     "2d": "2D illustration in an anime style: clean line art, flat cel shading, bold readable shapes.",
 }
 
-VIDEO = {
-    "realistic": "Realistic handheld phone footage, natural motion and light.",
-    "cinematic": "Cinematic camera work: smooth stabilised moves, film-like colour grade.",
-    "3d": "3D animation with smooth CG motion; keep the 3D look in every frame.",
-    "2d": "2D anime-style animation; keep the line art and flat shading consistent in every frame.",
+VIDEO = {  # short (strategy plan A2, D31): part of the clip's fixed rules, 300 characters at most
+    "realistic": "Realistic phone footage, natural light.",
+    "cinematic": "Cinematic, smooth stabilised moves, film grade.",
+    "3d": "3D animation, same CG look in every frame.",
+    "2d": "2D anime style, same line art and flat shading.",
 }
 
 LABELS = {

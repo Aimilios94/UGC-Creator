@@ -117,12 +117,13 @@ def test_the_browser_cannot_point_a_scene_at_another_file(client, ctx, session_i
 
 # --- clip length, cap and hook ------------------------------------------------------------------
 def test_ten_second_clips_and_the_cap(client, ctx, session_id, photo_bytes):
+    ctx.settings.job_cost_cap_eur = 1.75  # the cap is a safety limit (5 EUR, D31); a low one shows the refusal
     job = create_job(client, session_id, photo_bytes).json()
     board = job["storyboard"]
     for s in board["scenes"]:
         s["duration_s"] = 10
     view = _put(client, session_id, job["id"], board).json()
-    assert view["estimate"]["fits_cap"] is False  # 3 x 10 s is about 1.93 EUR, over the 1.75 EUR cap
+    assert view["estimate"]["fits_cap"] is False  # 3 x 10 s is about 2 EUR, over this 1.75 EUR cap
     r = approve(client, session_id, job["id"])
     assert r.status_code == 409 and "cap" in r.json()["detail"]
 
@@ -133,7 +134,7 @@ def test_ten_second_clips_and_the_cap(client, ctx, session_id, photo_bytes):
     worker.run_once(ctx)
     clips = [r for r in ctx.media.submits if r.kind == "video"]
     assert [r.arguments["duration"] for r in clips] == ["10", "10", "5"]
-    assert "Spread these beats evenly over the 10 seconds" in clips[0].arguments["prompt"]
+    assert "Spread the beats evenly over 10 seconds" in clips[0].arguments["prompt"]
     assert all(len(r.arguments["prompt"]) <= MAX_PROMPT for r in clips)
 
 

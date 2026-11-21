@@ -1,0 +1,27 @@
+{
+  "id": "golden_v2_07_person_in_photo_is_the_reference",
+  "title": "A person in the product photo is the character reference (A4)",
+  "runs_in": ["ci"],
+  "phase": 6,
+  "input": {
+    "kind": "video",
+    "product_name": "City Harmony hoodie",
+    "brief": "Black heavy cotton hoodie with an embroidered City Harmony print. Stays warm and dry in bad weather.",
+    "photo": "hoodie_person_face.jpg",
+    "story": "Scene 1: she walks out of a café onto a cobbled street, smiling.\nScene 2: she stops, turns to the camera and points at the City Harmony print.",
+    "length": "auto",
+    "mode": "connected",
+    "style": "realistic"
+  },
+  "expect": {
+    "scene_count": {"min": 2, "max": 2},
+    "photo_person_visible": true,
+    "photo_face_visible": true,
+    "character_reference": "product_photo",
+    "extra_reference_pictures": 0,
+    "user_scene_text_kept_verbatim": true,
+    "max_clip_prompt_chars": 2310,
+    "max_projected_cost": "config.job_cost_cap_eur"
+  },
+  "note": "The photo shows the same hoodie worn by a woman with her face visible, so no separate reference picture is made."
+}

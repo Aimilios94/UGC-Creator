@@ -86,11 +86,16 @@ class Settings(BaseSettings):
     fal_output_expiry_s: int = 3600  # fal keeps outputs forever by default; we copy them first
 
     # --- Money: everything the user sets or sees is in EUR ---
-    job_cost_cap_eur: float = 1.75  # M2: a 3-scene ad plus one retry and 15% margin (D2)
-    daily_spend_limit_eur: float = 4.0  # M2: two worst-case ads per day (D2)
-    usd_to_eur_rate: float = 0.87
+    # Quality first (D31): the per-ad cap is only a safety limit against runaway jobs. The fullest ad
+    # (5 clips of 10 s, 6 pictures, voice, AI calls) is about 3.50 EUR; 5 EUR leaves room for 1-2 re-made clips.
+    job_cost_cap_eur: float = 5.0
+    daily_spend_limit_eur: float = 10.0  # two full ads a day (D31)
+    usd_to_eur_rate: float = 0.91  # ECB reference rate of 20 Nov 2026: 1 EUR = 1.0990 USD (D31)
     display_currency: str = "EUR"  # EUR | USD
     demo_pot_eur: float = 0.0  # M4
+
+    # --- Findings archive (D31): local test runs only; Cloud Run never sets it (PRIVACY.md) ---
+    archive_dir: str = ""
 
     # --- Access and uploads ---
     access_codes: str = ""

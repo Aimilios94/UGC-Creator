@@ -167,6 +167,6 @@ def test_bad_uploads_and_briefs_are_rejected(client, session_id, photo_bytes):
 def test_health_and_config_work(client):
     assert client.get("/health").json()["status"] == "ok"
     cfg = client.get("/config").json()
-    assert cfg["currency"] == "EUR" and cfg["job_cost_cap"]["eur"] == 1.75  # D2, M2 raise
+    assert cfg["currency"] == "EUR" and cfg["job_cost_cap"]["eur"] == 5.0  # D31: a safety limit, quality first
     assert 0 < cfg["job_estimate"]["eur"] < cfg["job_cost_cap"]["eur"]
     assert client.get("/health/db").json() == {"status": "ok"}

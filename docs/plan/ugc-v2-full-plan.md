@@ -4,6 +4,8 @@ Nov 18, 2026 · @Aimilios
 
 This is the complete plan: the original rebuild plan with every change agreed in the reviews of 17 and 18 Nov 2026 written in. It is the single source of truth. Build work starts only when the user says so.
 
+**Amendments (owner's decisions, recorded in `DECISIONS.md`):** D27–D30 replace the fixed 3 scenes and the one-step approval. **D31 (21 Nov 2026)** adds `docs/plan/prompt-to-ad-strategy-plan.md`, which turns any prompt into one fixed structure and is built in 6 phases before the rest of M2. Where it differs from this plan, it wins: the product photo becomes optional (without one, pictures come from the written product description, and the picture check in §8 step 4 compares against that description instead of the photo); quality comes first, so the per-ad cap (§12, §16) is a 5 EUR safety limit and the daily limit 10 EUR, at 0.91 EUR per USD; the project budget is 50 EUR; and every local test ad is kept in a local findings archive, so a later final-result judge and model comparisons build on real results.
+
 ## 1. Context
 
 The project is a Jan 2026 prototype: a React/Vite landing page plus an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) exposed through ngrok. The audit shows the idea is sound, but v1 does not work end to end, depends on a laptop running n8n and ngrok, and has no tests, database or quality checks. v2 rebuilds it as an engineered system: a Python LLM pipeline from code to deployment and scheduling, image and video processing in Python, SQL storage, measured evaluation of AI outputs, Docker, CI and cloud hosting.
