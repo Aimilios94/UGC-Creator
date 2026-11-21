@@ -920,6 +920,13 @@ function progressGroups(job, n) {
   }));
 }
 
+// "0:00 - 0:02 (Establish): text" -> { title: "Establish", text }
+function sceneParts(description) {
+  const m = description.match(/^(?:.*?)\d{1,2}:\d{2}\s*[-\u2013]\s*\d{1,2}:\d{2}\s*(?:\(([^)]*)\))?:?\s*(.*)$/s);
+  const text = (m ? m[2] : description).trim();
+  return { title: m && m[1] ? m[1] : '', text: text.length > 150 ? `${text.slice(0, 147)}…` : text };
+}
+
 function AdSummary({ job, variant, testMode }) {
   const currency = useCurrency();
   const [music, setMusic] = useState([]);
@@ -928,55 +935,66 @@ function AdSummary({ job, variant, testMode }) {
   }, []);
   const b = job.brief;
   const scenes = job.storyboard?.scenes || [];
-  const track =
-    b.music === 'none'
-      ? null
-      : music.find((m) => m.id === (b.music === 'theme' ? b.theme || 'food' : b.music));
+  const track = b.music === 'none' ? null : music.find((m) => m.id === (b.music === 'theme' ? b.theme || 'food' : b.music));
   const total = job.costs.reduce((acc, c) => add(acc, c.cost), ZERO);
+  const tiles = [
+    ['Length', variant?.duration_s ? `${variant.duration_s.toFixed(0)} s` : '—'],
+    ['Scenes', String(scenes.length)],
+    ['Style', STYLE_LABEL[b.visual_style] || b.visual_style],
+    ['Voice', VOICE_LABEL[b.voice] || b.voice],
+    ['Music', b.music === 'none' ? 'No music' : track ? `${track.title}` : '…', track ? `${track.artist} · CC0` : ''],
+    ['Captions', CAPTION_LABEL[b.captions] || b.captions],
+  ];
   return (
     <section className="card summary-card">
       <h2>About this ad</h2>
-      <dl className="facts">
-        <dt>Story</dt>
-        <dd>
-          <ol className="story-lines">
-            {scenes.map((s, i) => (
-              <li key={i}>
-                <span className="muted small">{s.duration_s} s · </span>
-                {s.description.length > 140 ? `${s.description.slice(0, 137)}…` : s.description}
-              </li>
-            ))}
-          </ol>
-        </dd>
-        <dt>Length</dt>
-        <dd>
-          {variant?.duration_s ? `${variant.duration_s.toFixed(1)} s` : '—'} ({scenes.length} {scenes.length === 1 ? 'scene' : 'scenes'} + end card)
-        </dd>
-        <dt>Style</dt>
-        <dd>{STYLE_LABEL[b.visual_style] || b.visual_style}</dd>
-        <dt>Voice</dt>
-        <dd>{VOICE_LABEL[b.voice] || b.voice}</dd>
-        <dt>Music</dt>
-        <dd>{b.music === 'none' ? 'No music' : track ? `${track.title} by ${track.artist} (CC0)` : '…'}</dd>
-        <dt>Captions</dt>
-        <dd>{CAPTION_LABEL[b.captions] || b.captions}</dd>
-      </dl>
+      <div className="tiles">
+        {tiles.map(([label, value, sub]) => (
+          <div className="tile" key={label}>
+            <span className="tile-label">{label}</span>
+            <span className="tile-value">{value}</span>
+            {sub && <span className="tile-sub">{sub}</span>}
+          </div>
+        ))}
+      </div>
+
+      <h3>Story</h3>
+      <ul className="story-list">
+        {scenes.map((s, i) => {
+          const { title, text } = sceneParts(s.description);
+          return (
+            <li key={i}>
+              <span className="dot" aria-hidden="true" />
+              <div className="story-text">
+                {title && <strong>{title}</strong>}
+                <span>{text}</span>
+              </div>
+              <span className="pill-time">{s.duration_s} s</span>
+            </li>
+          );
+        })}
+      </ul>
+
       <h3>Made with</h3>
-      <table className="made-with">
-        <tbody>
-          {job.costs.map((c) => (
-            <tr key={c.kind + c.model}>
-              <td>{KIND_LABEL[c.kind] || c.kind}</td>
-              <td className="muted">{modelLabel(c.model)}</td>
-              <td className="num">{formatMoney(c.cost, currency)}</td>
+      {job.costs.length ? (
+        <table className="made-with">
+          <tbody>
+            {job.costs.map((c) => (
+              <tr key={c.kind + c.model}>
+                <td>{KIND_LABEL[c.kind] || c.kind}</td>
+                <td className="muted">{modelLabel(c.model)}</td>
+                <td className="num">{formatMoney(c.cost, currency)}</td>
+              </tr>
+            ))}
+            <tr className="total">
+              <td colSpan={2}>Total</td>
+              <td className="num">{formatMoney(total, currency)}</td>
             </tr>
-          ))}
-          <tr className="total">
-            <td colSpan={2}>Total</td>
-            <td className="num">{formatMoney(total, currency)}</td>
-          </tr>
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      ) : (
+        <p className="muted small">No costs were recorded for this ad.</p>
+      )}
       {testMode && (
         <p className="notice small">
           <AlertTriangle size={14} aria-hidden="true" />
@@ -1015,7 +1033,15 @@ function FinishedAd({ job, variant }) {
           </button>
         ))}
       </div>
-      <video key={current.url} src={current.url} controls playsInline poster={cover?.url} className={`ratio-${current.ratio.replace(':', 'x')}`} />
+      <video
+        key={current.url}
+        src={`${current.url}#t=0.1`}
+        controls
+        playsInline
+        preload="metadata"
+        className="ad-player"
+        style={{ aspectRatio: current.ratio.replace(':', ' / ') }}
+      />
       <p className="small">
         <a href={current.url} download={current.name} target="_blank" rel="noreferrer">
           Open the {RATIO_LABEL[current.ratio] || current.ratio} video
