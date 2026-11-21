@@ -25,6 +25,7 @@ x-backend: &backend
     PUBLIC_API_URL: http://localhost:8000
     JOB_RUNNER: local
     ACCESS_CODES: ${ACCESS_CODES:-}
+    DAILY_SPEND_LIMIT_EUR: ${DAILY_SPEND_LIMIT_EUR:-4}  # set higher for a local paid test, e.g. =5
     CORS_ORIGINS: http://localhost:5173
   volumes:
     - media:/data
