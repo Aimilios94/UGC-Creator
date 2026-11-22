@@ -8,7 +8,7 @@ Shapes, tried in this order; the first that matches wins:
    otherwise from the length plan.
 3. A numbered or bulleted list of 2-5 items, each describing an action: one scene per item.
 4. Paragraphs (2-5, no times): the AI marks each one a scene or notes inside the slot filler call
-   (phase 3); until then the writer follows the story as before.
+   (`slot_filler.py`, phase 3); code checks the marks and builds the scenes from the paragraphs.
 5. No shape: the scene count comes from the chosen length, or 3 (hook, demo, call to action).
 
 For every shape: text that is not a scene (style, place, characters, rules, headings) becomes the
@@ -68,10 +68,20 @@ class Split:
         joins scenes later."""
         if not self.beats:
             return ""
-        line = f"The scenes follow {SOURCE[self.shape]}, in your words"
-        if self.notes:
-            line += "; the rest of your text is kept as notes for every scene"
+        if self.shape == "paragraphs":  # the AI read which paragraphs are scenes (phase 3)
+            line = "The AI read your paragraphs into scenes, in your words"
+            if self.notes:
+                line += f"; {_count(self.notes)} kept as notes for every scene"
+        else:
+            line = f"The scenes follow {SOURCE[self.shape]}, in your words"
+            if self.notes:
+                line += "; the rest of your text is kept as notes for every scene"
         return " ".join([line + ".", *self.messages])
+
+
+def _count(notes: str) -> str:
+    n = len(_paragraphs(notes))
+    return "one paragraph" if n == 1 else f"{n} paragraphs"
 
 
 def _clamp(s: float) -> int:

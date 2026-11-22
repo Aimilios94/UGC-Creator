@@ -23,9 +23,12 @@ def test_brief_to_storyboard_to_playable_video(client, ctx, session_id, photo_by
     assert job["analysis"]["people_in_photo"] is False
     assert {s["stage"]: s["status"] for s in job["stages"]} == {
         "analyze": "done",
+        "slots": "done",  # the slot filler (D31 phase 3)
         "storyboard": "done",
         "continuity": "done",
     }
+    structure = job["storyboard"]["structure"]
+    assert [c["uid"] for c in structure["scenes"]] == [s["uid"] for s in job["storyboard"]["scenes"]]
     assert ctx.media.submits == []  # nothing paid renders before approval
     assert job["storyboard"]["continuity"] == "continuous"  # the default since D30
     job = separate_shots(client, session_id, job)  # this flow counts one picture per scene

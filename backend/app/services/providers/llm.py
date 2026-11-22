@@ -24,7 +24,11 @@ STORY_RE = re.compile(r"<story>(.*?)</story>", re.S)
 SCENES_RE = re.compile(r"<scenes>(.*?)</scenes>", re.S)
 NOTES_RE = re.compile(r"<notes>(.*?)</notes>", re.S)
 TEXT_RE = re.compile(r"<text>(.*?)</text>", re.S)
+BEATS_RE = re.compile(r"<beats>(.*?)</beats>", re.S)
+PARAGRAPHS_RE = re.compile(r"<paragraphs>(.*?)</paragraphs>", re.S)
 TARGET_RE = re.compile(r"at most (\d+) characters")
+COUNT_RE = re.compile(r"write exactly (\d+) scene", re.I)
+ADD_RE = re.compile(r"<add>(.*?)</add>", re.S)
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+|(?<=[.!?][\"”])\s+")  # a sentence may end inside quotes
 
 
@@ -59,7 +63,14 @@ def _brief_from(messages) -> dict:
                 brief["story"] = json.loads(match.group(1))
             except json.JSONDecodeError:
                 pass
-        for key, rx in (("_scenes", SCENES_RE), ("_notes", NOTES_RE), ("_text", TEXT_RE)):
+        for key, rx in (
+            ("_scenes", SCENES_RE),
+            ("_notes", NOTES_RE),
+            ("_text", TEXT_RE),
+            ("_beats", BEATS_RE),
+            ("_paragraphs", PARAGRAPHS_RE),
+            ("_add", ADD_RE),
+        ):
             if match := rx.search(t):
                 try:
                     brief[key] = json.loads(match.group(1))
@@ -67,6 +78,8 @@ def _brief_from(messages) -> dict:
                     pass
         if match := TARGET_RE.search(t):
             brief["_target"] = int(match.group(1))
+        if match := COUNT_RE.search(t):
+            brief["_count"] = int(match.group(1))
     return brief
 
 
@@ -130,7 +143,7 @@ def mock_storyboard(brief: dict) -> dict:
     name = brief.get("product_name", "the product")
     offer = brief.get("offer") or ""
     keep = f"Keep {name} exactly as in the reference photo: same shape, colours, logo and packaging text."
-    parts = _story_parts(brief.get("story") or "")
+    parts = brief.get("_beats") or _story_parts(brief.get("story") or "")
     lines = [
         f"Stop scrolling: this is {name}.",
         "Here is how it works, in one step.",
@@ -194,11 +207,11 @@ def mock_storyboard(brief: dict) -> dict:
             "on_screen_text": offer[:80],
         },
     ]
-    if not parts and brief.get("video_length_s"):
-        # A chosen length sets the number of scenes (scene_plan.py): repeat the middle scene as needed.
+    if not parts and (brief.get("_count") or brief.get("video_length_s")):
+        # The scene count set in code (scene_plan.py, the slot filler): repeat the middle scene as needed.
         from ..scene_plan import scenes_for_length
 
-        n = scenes_for_length(int(brief["video_length_s"]), 2.0)
+        n = brief.get("_count") or scenes_for_length(int(brief["video_length_s"]), 2.0)
         middle = scenes[1]
         scenes = [scenes[2]] if n == 1 else [scenes[0], *[dict(middle) for _ in range(n - 2)], scenes[2]]
         lines = [lines[2]] if n == 1 else [lines[0], *([lines[1]] * (n - 2)), lines[2]]
@@ -283,9 +296,96 @@ def mock_shorten(brief: dict) -> dict:
     return {"text": _first_sentences(text, target) or text[:target]}
 
 
+_NOTE_PARA = re.compile(r"^[\w ]{2,24}:")  # "Style: ...", "Light and colour: ..." (mock only)
+_PERSON = re.compile(r"\b(guy|man|woman|girl|boy|he|she|person|friend|creator)\b", re.I)
+
+
+def _first_sentence(text: str) -> str:
+    return (SENTENCE_END.split(text.strip())[0] if text.strip() else "").strip()[:300]
+
+
+def mock_slots(brief: dict) -> dict:
+    """The slot filler (mock only): paragraphs with a label ("Style: ...") are notes, the others one
+    scene each; the cast and world are plain guesses; each scene's first sentence is the user's action."""
+    name = brief.get("product_name", "the product")
+    story = brief.get("story") or ""
+    uses, texts = [], []
+    if paras := brief.get("_paragraphs"):
+        for p in paras:
+            if _NOTE_PARA.match(p["text"]) or len(texts) >= 5:
+                uses.append({"paragraph": p["paragraph"], "use": "notes"})
+            else:
+                texts.append(p["text"])
+                uses.append({"paragraph": p["paragraph"], "use": "scene", "scene": len(texts)})
+    elif scenes := brief.get("_scenes"):
+        texts = [s.get("text", "") for s in scenes]
+    else:
+        texts = [""] * int(brief.get("_count") or 3)
+    person = bool(_PERSON.search(story))
+    people = (
+        [{"id": "P1", "label": "the person", "look": {"value": "late 20s, short dark hair, relaxed smile"},
+          "clothes": {"value": f"wears {name}"}}]
+        if person else []
+    )  # fmt: skip
+    who = ["P1", "product"] if person else ["product"]
+    cards = []
+    for i, text in enumerate(texts):
+        first = _first_sentence(text)
+        cards.append(
+            {
+                "who": who,
+                "action": {"value": first, "from_user": True} if first else {"value": f"shows {name} to the camera"},
+                "camera": {"value": "handheld phone, slow push in"},
+                "product_moment": {"value": "worn" if person else "held up to the camera"},
+                "end": {"value": "the camera settles on the product"} if i == len(texts) - 1 else {"value": ""},
+            }
+        )
+    short = len(story.split()) < 12
+    questions = (
+        [
+            {"slot": "who", "text": "Who is in your ad?", "options": ["A young man", "A young woman", "Only hands"]},
+            {"slot": "place", "text": "Where does it happen?", "options": ["A city street", "At home", "Outdoors"]},
+        ]
+        if short
+        else []
+    )
+    return {
+        "paragraphs": uses,
+        "sheet": {
+            "people": people,
+            "place": {"value": "a bright, tidy room at home"},
+            "time_light": {"value": "daytime, soft window light"},
+            "look": {"value": "realistic phone video"},
+            "camera_style": {"value": "handheld phone, UGC feel"},
+            "never": {"value": "no text, no other brands"},
+        },
+        "scenes": cards,
+        "questions": questions,
+    }
+
+
+def mock_add_scenes(brief: dict) -> dict:
+    """New scenes for "Add scenes to reach N s" (mock only): demo scenes before the last one."""
+    ask = brief.get("_add") or {}
+    count, after = int(ask.get("count") or 1), int(ask.get("after") or 1)
+    name = brief.get("product_name", "the product")
+    scene = {
+        "role": "demo",
+        "description": f"A closer look at {name} in use.",
+        "image_prompt": f"Still first frame: a close, well-lit shot of {name} in use.",
+        "motion_prompt": "0-2 s: slow push in on the product. 2-5 s: the camera eases to a stop on its details.",
+        "voiceover": "",
+        "on_screen_text": "",
+        "duration_s": 5,
+    }
+    return {"scenes": [{"after": after, "scene": scene} for _ in range(count)]}
+
+
 MOCK_TASKS: dict[str, Callable[[dict], dict]] = {
     "analyze": mock_analysis,
+    "slots": mock_slots,
     "storyboard": mock_storyboard,
+    "add_scenes": mock_add_scenes,
     "continuity": mock_continuity,
     "shorten": mock_shorten,
 }

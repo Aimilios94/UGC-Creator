@@ -28,6 +28,8 @@ from ..models import (
     CostLine,
     Estimate,
     JobView,
+    LengthIn,
+    LengthLine,
     Money,
     ProductAnalysis,
     ShortenOut,
@@ -40,6 +42,7 @@ from ..services import job_trigger
 from ..services.llm_trace import money
 from ..services.pipeline import (
     Context,
+    add_scenes_to_board,
     clip_texts,
     estimate_board_usd,
     own_to_extend,
@@ -48,6 +51,7 @@ from ..services.pipeline import (
     shorten_scene,
     storyboard_from_story,
 )
+from ..services.scene_plan import length_line
 from ..services.storyboard_checks import flag_testimonials
 from ..services.uploads import sanitise_image
 
@@ -103,6 +107,7 @@ def job_view(ctx: Context, job: dict) -> JobView:
             for r in repo.job_costs(ctx.db, job_id)
         ],
         estimate=_estimate(ctx, board, spent, job) if board is not None else None,
+        length_line=_length_line(s, board, brief) if board is not None and job["status"] == "draft" else None,
         clips=[ClipView(**c.__dict__) for c in clip_texts(s, board, brief)] if board is not None else [],
         brief=brief,
         campaign_id=str(job["campaign_id"]) if job.get("campaign_id") else None,
@@ -130,6 +135,11 @@ def job_view(ctx: Context, job: dict) -> JobView:
         cost_cap=Money(usd=round(s.job_cost_cap_usd, 4), eur=s.job_cost_cap_eur),
         created_at=job["created_at"].isoformat(),
     )
+
+
+def _length_line(s, board: Storyboard, brief: Brief) -> LengthLine | None:
+    line = length_line([sc.duration_s for sc in board.scenes], brief.video_length_s, s.end_card_s)
+    return LengthLine(**line) if line else None
 
 
 def public_board(board: Storyboard) -> Storyboard:
@@ -192,7 +202,8 @@ def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool) -> Story
                 status_code=422, detail="Upload an image for that scene first, or choose another source."
             )
         scenes.append(sc)
-    return new.model_copy(update={"scenes": scenes})
+    # The structure (the slot filler's marks) is the server's: never taken from the browser.
+    return new.model_copy(update={"scenes": scenes, "structure": old.structure})
 
 
 def _check_ready(ctx: Context, job: dict, board: Storyboard, *, phase: str) -> None:
@@ -380,6 +391,41 @@ def from_story(
         raise HTTPException(
             status_code=502, detail="Writing the storyboard from your story failed. Try again."
         ) from None
+    return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+@router.put("/{job_id}/length")
+def keep_length(
+    job_id: str, body: LengthIn, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)
+) -> JobView:
+    """ "Keep 22 s" (plan v2.3): the picked length follows the scenes. Nothing else changes."""
+    job = _own_job(ctx, job_id, sess)
+    if job["status"] != "draft":
+        raise HTTPException(status_code=409, detail="The length can be changed only before you approve.")
+    brief = Brief.model_validate({**job["brief"], "video_length_s": body.video_length_s})
+    repo.set_brief(ctx.db, job_id, brief.model_dump(mode="json"))
+    return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+@router.post("/{job_id}/scenes/add", dependencies=[Depends(require_access_code)])
+def add_scenes(job_id: str, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)) -> JobView:
+    """ "Add scenes to reach 40 s" (plan v2.3): the writer adds scenes that fit the story (a cent or
+    less); the page marks them as the AI's guess and offers Undo."""
+    job = _own_job(ctx, job_id, sess)
+    if job["status"] != "draft" or not job.get("storyboard"):
+        raise HTTPException(status_code=409, detail="Scenes can be added only before you approve.")
+    board = Storyboard.model_validate(job["storyboard"])
+    if not _length_line(ctx.settings, board, Brief.model_validate(job["brief"])):
+        raise HTTPException(status_code=409, detail="The scenes already make the length you picked.")
+    try:
+        add_scenes_to_board(ctx, job)
+    except BudgetExceeded as e:
+        raise HTTPException(status_code=409, detail=e.message) from None
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from None
+    except Exception:  # noqa: BLE001 - details go to the log
+        log.exception("adding scenes failed for job %s", job_id)
+        raise HTTPException(status_code=502, detail="Adding scenes failed. Try again.") from None
     return job_view(ctx, repo.get_job(ctx.db, job_id))
 
 

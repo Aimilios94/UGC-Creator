@@ -109,6 +109,8 @@ class Scene(SceneDraft):
     # The style and world notes cut down to what this scene needs, so its clip fits Kling's 2,500
     # characters; used only when the full notes do not fit (D30).
     notes_short: str = Field(default="", max_length=2500)
+    # Added by "Add scenes to reach N s" (plan v2.3): the AI's guess, marked on the page, with Undo.
+    ai_added: bool = False
 
 
 class Hook(BaseModel):
@@ -170,11 +172,24 @@ class Storyboard(BaseModel):
     # How the story was read into scenes, in one plain line ("3 scenes from your scene headings ..."),
     # with any scenes joined or split (D31); empty when the writer read the story whole.
     split_note: str = Field(default="", max_length=SPLIT_NOTE_MAX)
+    # The ad read into the fixed structure by the slot filler (D31 phase 3): the cast and world sheet
+    # and a card per scene (matched by the scene's uid), every value marked as the user's or the
+    # AI's guess. Set by the server only; kept as plain data here (`ad_structure.AdStructure`).
+    structure: dict | None = None
 
     @field_validator("scenes")
     @classmethod
     def _roles_by_position(cls, scenes: list[Scene]) -> list[Scene]:
         return _roles_in_order(scenes)
+
+    @field_validator("structure")
+    @classmethod
+    def _valid_structure(cls, v: dict | None) -> dict | None:
+        if v is None:
+            return None
+        from .services.ad_structure import AdStructure  # the structure module imports this one
+
+        return AdStructure.model_validate(v).model_dump(mode="json")
 
 
 class BrandColors(BaseModel):
@@ -298,6 +313,21 @@ class ShortenOut(BaseModel):
     text: str
 
 
+class LengthLine(BaseModel):
+    """Plan v2.3: the scenes make another length than the one picked; said plainly, never stretched."""
+
+    real_s: int
+    picked_s: int
+    text: str  # "Your scenes make a 22 s ad (you picked 40 s)."
+    add: str = ""  # "Add scenes to reach 40 s", or empty when no scene can be added
+    add_lengths: list[int] = []
+    keep: str  # "Keep 22 s"
+
+
+class LengthIn(BaseModel):
+    video_length_s: int = Field(ge=4, le=52)
+
+
 class JobView(BaseModel):
     id: str
     status: str
@@ -309,6 +339,7 @@ class JobView(BaseModel):
     flags: list[StoryboardFlag] = []
     variants: list[VariantView] = []
     estimate: Estimate | None = None
+    length_line: LengthLine | None = None  # plan v2.3, on the storyboard only
     clips: list[ClipView] = []  # what each scene's clip gets (D30)
     analysis: ProductAnalysis | None = None
     storyboard: Storyboard | None = None

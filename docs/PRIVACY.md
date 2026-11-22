@@ -1,11 +1,11 @@
 # Privacy: data flows
 
-The in-app notice is `frontend/src/pages/Privacy.jsx`. This page is the engineering view of the same flows. Last checked: 21 Nov 2026.
+The in-app notice is `frontend/src/pages/Privacy.jsx`. This page is the engineering view of the same flows. Last checked: 22 Nov 2026.
 
 | Data | Where it goes | Region | Kept |
 | --- | --- | --- | --- |
 | Product photo (EXIF/GPS stripped on upload) | Our storage; OpenAI (analysis); fal (image edit) | GCS europe-west4; OpenAI US; fal US | Ours: the bucket deletes files under `jobs/` after 30 days (lifecycle rule, live since M1). fal: request storage off (`X-Fal-Store-IO: 0`) |
-| Brief text (with goal, theme, ad type, your own story and its style notes, video length) | Database; OpenAI (storyboard) | Neon Frankfurt; OpenAI US | Database rows: until deleted; automatic 30-day deletion and "delete my data" arrive in M2 |
+| Brief text (with goal, theme, ad type, your own story and its style notes, video length) | Database; OpenAI (slot filler, storyboard, added scenes) | Neon Frankfurt; OpenAI US | Database rows: until deleted; automatic 30-day deletion and "delete my data" arrive in M2 |
 | Campaign brief (name, goal, audience, offer, landing URL) | Database, per browser session | Neon Frankfurt | As the brief text (M2 cleanup) |
 | Brand kit (tone, colours, font) | Database, one per browser session; the tone goes to OpenAI in the storyboard prompt | Neon Frankfurt; OpenAI US | Until "delete my data" or 30 days without use (M2 cleanup) |
 | Brand logo (metadata stripped like photos) | Our storage under `brand/<session hash>/` | GCS europe-west4 | Not covered by the `jobs/` bucket rule: deleted by the M2 cleanup (30 days without use) and "delete my data" |

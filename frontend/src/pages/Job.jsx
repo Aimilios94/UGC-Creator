@@ -286,6 +286,91 @@ function SceneLength({ id, value, onChange, disabled, prices, currency, endsOnNe
   );
 }
 
+// The slot filler's marks (D31 phase 3): where each value came from, shown lightly.
+function Mark({ source }) {
+  if (source === 'ai_guess') return <span className="mark guess">AI&rsquo;s guess</span>;
+  if (source === 'photo') return <span className="mark yours">from your photo</span>;
+  if (source === 'answer') return <span className="mark yours">your answer</span>;
+  return <span className="mark yours">yours</span>;
+}
+
+const SHEET_ROWS = [
+  ['product', 'Product'],
+  ['product_unseen', 'Product, not in the photo'],
+  ['place', 'Place'],
+  ['time_light', 'Time and light'],
+  ['look', 'Look'],
+  ['camera_style', 'Camera style'],
+  ['never', 'Never show'],
+];
+const PERSON_ROWS = [
+  ['look', 'look'],
+  ['clothes', 'clothes'],
+  ['unseen', 'not on camera'],
+];
+
+function SlotList({ rows }) {
+  return (
+    <dl className="slot-list">
+      {rows.map(([key, label, value, source]) => (
+        <div key={key} className="slot-row">
+          <dt>{label}</dt>
+          <dd>
+            {value} <Mark source={source} />
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+const countGuesses = (rows) => rows.filter((r) => r[3] === 'ai_guess').length;
+const guessText = (k) => (k === 0 ? 'all from your words' : `${k} AI’s ${k === 1 ? 'guess' : 'guesses'}`);
+
+function CastWorld({ structure }) {
+  if (!structure) return null;
+  const sheet = structure.sheet;
+  const rows = [];
+  const product = sheet.product;
+  if (product.value) rows.push(['product', 'Product', product.value, product.source]);
+  for (const p of sheet.people) {
+    const name = p.label ? `${p.label[0].toUpperCase()}${p.label.slice(1)} (${p.id})` : p.id;
+    for (const [k, part] of PERSON_ROWS) if (p[k].value) rows.push([`${p.id}-${k}`, `${name}: ${part}`, p[k].value, p[k].source]);
+  }
+  for (const [k, label] of SHEET_ROWS.slice(1)) if (sheet[k].value) rows.push([k, label, sheet[k].value, sheet[k].source]);
+  return (
+    <details className="card fold">
+      <summary>
+        <span className="fold-title">
+          Cast and world <Help text={HELP.cast_world} />
+        </span>
+        <span className="muted small fold-sum">Same in every scene · {guessText(countGuesses(rows))}</span>
+      </summary>
+      <p className="muted small">The same in every scene. To change an entry, say it in your story and build the scenes again, or edit the scenes below.</p>
+      <SlotList rows={rows} />
+    </details>
+  );
+}
+
+function SceneGuesses({ structure, scene, last }) {
+  const card = structure?.scenes.find((c) => c.uid && c.uid === scene.uid);
+  if (!card) return null;
+  const names = card.who.ids.map((id) => (id === 'product' ? 'the product' : structure.sheet.people.find((p) => p.id === id)?.label || id));
+  const rows = [['who', 'Who is in it', names.join(', '), card.who.source]];
+  if (card.action.value && card.action.value !== card.text.value) rows.push(['action', 'What happens', card.action.value, card.action.source]);
+  if (card.product_moment.value) rows.push(['moment', 'How the product is shown', card.product_moment.value, card.product_moment.source]);
+  if (card.place_change.value) rows.push(['place', 'Place or light here', card.place_change.value, card.place_change.source]);
+  if (last && card.end.value) rows.push(['end', 'How the ad ends', card.end.value, card.end.source]);
+  return (
+    <details className="guesses">
+      <summary>
+        What the AI used <span className="muted small">({guessText(countGuesses(rows))})</span> <Help text={HELP.guesses} />
+      </summary>
+      <SlotList rows={rows} />
+    </details>
+  );
+}
+
 function FieldLabel({ htmlFor, text, help }) {
   return (
     <label htmlFor={htmlFor}>
@@ -315,6 +400,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const [lengthText, setLengthText] = useState(null); // the length box while typing
   const [lengthNote, setLengthNote] = useState('');
   const [undoBoard, setUndoBoard] = useState(null); // the scenes before "Apply" joined some
+  const [beforeAdd, setBeforeAdd] = useState(null); // the scenes before "Add scenes" (plan v2.3)
   const [keepMine, setKeepMine] = useState(false);
   const [sound, setSound] = useState({ voice: job.brief.voice, music: job.brief.music, captions: job.brief.captions });
   const n = board?.scenes.length ?? 3;
@@ -361,6 +447,9 @@ function StoryboardStep({ job, onChange, readOnly }) {
     if (fit < 1) return ` The shortest possible video is ${MIN_SCENE_S + endCard} s (1 scene of ${MIN_SCENE_S} s).`;
     return ` For ${wanted} s, keep ${fit} ${fit === 1 ? 'scene' : 'scenes'}: remove the others with "Remove" in Scenes below.`;
   };
+  // Plan v2.3: the scenes make another length than the one picked. Nothing is stretched to fill it.
+  const picked = job.brief.video_length_s || null;
+  const canAdd = !readOnly && picked && picked - videoLength >= MIN_SCENE_S && n < MAX_SCENES;
   const applyVideoLength = (text) => {
     const wanted = Math.round(Number(text) || videoLength);
     const total = Math.max(minVideo, Math.min(maxVideo, wanted));
@@ -376,6 +465,8 @@ function StoryboardStep({ job, onChange, readOnly }) {
     if (total === videoLength) return;
     const parts = splitLength(total - endCard, n);
     change({ ...board, scenes: board.scenes.map((s, i) => (i < n ? { ...s, duration_s: parts[i] } : s)) });
+    // A length typed here is the new pick, so the length line compares against it (plan v2.3).
+    if (picked && picked !== total) api.keepLength(job.id, total).then(onChange).catch(() => {});
   };
 
   const hookField = sound.voice === 'none' ? 'on_screen_text' : 'voiceover';
@@ -452,6 +543,21 @@ function StoryboardStep({ job, onChange, readOnly }) {
     });
 
   const check = () => run('check', save);
+  const keepLength = () =>
+    run('keep', async () => {
+      if (dirty) await save();
+      onChange(await api.keepLength(job.id, videoLength));
+    });
+  const addScenesToLength = () =>
+    run('add', async () => {
+      const before = board;
+      if (dirty) await save();
+      const view = await api.addScenes(job.id);
+      setBoard(view.storyboard);
+      setDirty(false);
+      setBeforeAdd(before);
+      onChange(view);
+    });
   const changeSound = (patch) =>
     run('sound', async () => {
       setSound({ ...sound, ...patch });
@@ -634,6 +740,8 @@ function StoryboardStep({ job, onChange, readOnly }) {
         {board.notes && <CharCount value={board.notes} max={STORY_MAX} label="The notes" />}
       </details>
 
+      <CastWorld structure={board.structure} />
+
       {flags.length > 0 && (
         <div className="notice flag-notice" role="status">
           <AlertTriangle size={16} aria-hidden="true" />
@@ -701,6 +809,50 @@ function StoryboardStep({ job, onChange, readOnly }) {
         </div>
       </section>
 
+      {!readOnly && picked && picked !== videoLength && (
+        <div className="notice recommend" role="status">
+          <Sparkles size={16} aria-hidden="true" />
+          <div>
+            <strong>
+              Your scenes make a {videoLength} s ad (you picked {picked} s).
+            </strong>{' '}
+            Scenes are never slowed down or held still to fill time. <Help text={HELP.length_line} />
+            <div className="row-actions">
+              {canAdd && (
+                <button type="button" className="btn btn-secondary btn-small" onClick={addScenesToLength} disabled={disabled}>
+                  {busy === 'add' ? (
+                    <>
+                      <Loader2 className="spin" size={14} aria-hidden="true" /> Writing the new scenes…
+                    </>
+                  ) : (
+                    `Add scenes to reach ${picked} s`
+                  )}
+                </button>
+              )}
+              <button type="button" className="btn btn-ghost btn-small" onClick={keepLength} disabled={disabled}>
+                Keep {videoLength} s
+              </button>
+            </div>
+            {canAdd && <p className="muted small">The AI writes scenes that fit your story, marked &ldquo;Added by the AI&rdquo;. You can undo it.</p>}
+          </div>
+        </div>
+      )}
+      {!readOnly && beforeAdd && (
+        <p className="muted small">
+          Scenes added by the AI, marked below.{' '}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              change(beforeAdd);
+              setBeforeAdd(null);
+            }}
+          >
+            Undo
+          </button>
+        </p>
+      )}
+
       {!readOnly && n > recommended && !keepMine && (
         <div className="notice recommend" role="status">
           <Sparkles size={16} aria-hidden="true" />
@@ -758,6 +910,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
               <div className="scene-head">
                 <h2>
                   {sceneTitle(s, i)} <Help text={HELP[s.role]} />
+                  {s.ai_added && <span className="mark guess">Added by the AI</span>}
                 </h2>
                 {!readOnly && n > 1 && (
                   <button type="button" className="btn btn-ghost btn-small" onClick={() => removeScene(i)} disabled={disabled} aria-label={`Remove scene ${i + 1}`}>
@@ -777,6 +930,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 <div className="scene-main">
                   <FieldLabel htmlFor={`d${i}`} text="What happens in this scene" help={HELP.description} />
                   <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} disabled={disabled} />
+                  <SceneGuesses structure={board.structure} scene={s} last={i === n - 1} />
                   <div className="grid-2 tight">
                     <div>
                       <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />

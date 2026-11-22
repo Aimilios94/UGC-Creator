@@ -2,29 +2,35 @@
 result is either checked now or reported with the phase that will check it. DB-free.
 
 Phase 1 checks the fixed rules (A2, A6) and the projected cost under the safety cap; phase 2 the
-scene count and lengths from the scene splitter. The rest arrive with the slot filler and the
-length line (3), the clip builder (4), the questions (5) and the image path (6)."""
+scene count and lengths from the scene splitter; phase 3 the slot filler's marks, the product slot
+and the real-length line. The rest arrive with the clip builder (4), the questions (5) and the image
+path (6)."""
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 from pathlib import Path
 
 import pytest
 
-from app.models import Brief, Hook, ProductAnalysis, Scene, Storyboard
+from app.models import Brief, Hook, JobView, ProductAnalysis, Scene, Storyboard
+from app.services import compose as compose_module
+from app.services.ad_structure import AdStructure, key_gaps
 from app.services.llm_trace import usd_to_eur
 from app.services.pipeline import estimate_board_usd
 from app.services.providers.llm import build_llm, mock_analysis
+from app.services.scene_plan import length_line, real_length
 from app.services.scene_splitter import split_story
+from app.services.slot_filler import fill_slots
 from app.services.storyboard import write_storyboard
 from app.services.video_gen import RULES_MAX, clip_rules
 from conftest import make_settings
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden_v2"
 FIXTURES = sorted(GOLDEN.glob("*.json"))
-CHECKED_NOW = 2
+CHECKED_NOW = 3
 
 # The phase of the plan that can check each expected result.
 PHASE = {
@@ -168,6 +174,62 @@ def test_phase_2_checks(path):
     split = split_story(brief.story)
     for scene, beat in zip(board.scenes, split.beats, strict=False):
         assert scene.description == beat.text  # the user's words for the scene, whole
+
+
+PHASE_3_KEYS = {k for k, n in PHASE.items() if n == 3}
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
+def test_phase_3_checks(path):
+    """The slot filler (mock writer): every key slot filled or marked as the AI's guess, the user's
+    words kept, the product slot's source; the real-length line and its buttons; the cost shown."""
+    fx = _load(path)
+    expect = fx["expect"]
+    if "ci" not in fx["runs_in"] or not PHASE_3_KEYS & set(expect):
+        pytest.skip("no phase 3 checks in CI for this fixture")
+    inp = fx["input"]
+    brief = brief_from_fixture(inp)
+    analysis = ProductAnalysis.model_validate(mock_analysis(brief.model_dump())) if inp["photo"] else None
+    s = make_settings()
+    (ad, split), _ = fill_slots(build_llm(s, "slots"), brief, analysis, split_story(brief.story))
+    board, _ = write_storyboard(
+        build_llm(s, "storyboard"), brief, analysis or mock_photo_analysis(brief), split=split, structure=ad
+    )
+    structure = AdStructure.model_validate(board.structure)
+    durations = [sc.duration_s for sc in board.scenes]
+    line = length_line(durations, brief.video_length_s, s.end_card_s)
+    if expect.get("every_key_slot_filled_or_marked_ai_guess"):
+        assert key_gaps(structure) == []
+    if text := expect.get("user_text_kept_verbatim_somewhere"):
+        kept = [board.notes, *(sc.description for sc in board.scenes), *(c.text.value for c in structure.scenes)]
+        assert any(text in k for k in kept)
+    if "product_slot_source_in" in expect:
+        assert structure.sheet.product.source in expect["product_slot_source_in"]
+    for word in expect.get("product_description_mentions", []):
+        assert word in structure.sheet.product.value.lower()
+    if "blocked" in expect or expect.get("projected_cost_shown_on_storyboard"):
+        images, video = estimate_board_usd(s, board)
+        eur = usd_to_eur(images + video, s.usd_to_eur_rate)
+        assert eur > 0 and "estimate" in JobView.model_fields  # the storyboard shows the projected cost
+        assert (eur > s.job_cost_cap_eur) == expect.get("blocked", False)
+    if "tradeoff_offered" in expect:
+        assert (line is not None) == expect["tradeoff_offered"]  # nothing to trade: the ad is as asked
+    if "real_total_seconds" in expect:
+        assert real_length(durations, s.end_card_s) == expect["real_total_seconds"]
+    if "length_mismatch_line_shown" in expect:
+        assert line is not None and line["text"] == expect["length_mismatch_line_shown"]
+    if "buttons" in expect:
+        assert [line["add"], line["keep"]] == expect["buttons"]
+    if expect.get("no_scene_stretched"):
+        assert durations == [b.seconds for b in split.beats]  # the user's seconds, as written
+    if expect.get("no_hold_frame_added_to_fill_length"):
+        # Compose plays the scenes as they are, then the end card: it never reads the picked length.
+        assert "video_length_s" not in inspect.getsource(compose_module)
+
+
+def mock_photo_analysis(brief):
+    """The writer still needs an analysis today; with no photo it reads only the brief (phase 6)."""
+    return ProductAnalysis.model_validate(mock_analysis(brief.model_dump()))
 
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)

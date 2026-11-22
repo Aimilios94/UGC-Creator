@@ -54,7 +54,7 @@ def test_my_own_story_rewrites_the_storyboard_keeping_my_lines(client, ctx, sess
         n = c.execute(
             "select count(*) as n from llm_calls where job_id = %s and kind = 'llm' and status = 'billed'", (job["id"],)
         ).fetchone()["n"]
-    assert n == 5  # analyze, storyboard, continuity, then storyboard and continuity from the story
+    assert n == 7  # analyze, slots, storyboard, continuity, then slots, storyboard and continuity from the story
     approve(client, session_id, job["id"])
     late = client.post(f"/jobs/{job['id']}/story", json={"story": STORY}, headers=_h(session_id))
     assert late.status_code == 409

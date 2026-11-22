@@ -9,8 +9,10 @@ holds a value and where it came from:
 Only `ai_guess` slots may be changed by the AI later; the others are locked, and code puts them
 back if a model changes them (`restore_locked`).
 
-Phase 1 of the plan: the models and helpers only. Nothing in the pipeline uses them yet, except
-`from_storyboard`, which reads today's storyboard into the structure.
+Since phase 3 the slot filler (`slot_filler.py`) fills it before the writer, and the storyboard
+carries it (`Storyboard.structure`, each card matched to its scene by uid) so the page can mark
+every guess. The clip builder of phase 4 will build the clips from it. `from_storyboard` reads an
+older storyboard into the structure.
 """
 
 from __future__ import annotations
@@ -90,6 +92,7 @@ class Swap(BaseModel):
 
 
 class SceneCard(BaseModel):
+    uid: str = Field(default="", max_length=16)  # the storyboard scene it belongs to (Scene.uid)
     text: Slot = Field(default_factory=guess)  # the scene's own words as split from the prompt, kept whole
     who: CastRefs = Field(default_factory=CastRefs)
     action: Slot = Field(default_factory=guess)  # one main action, in plain verbs

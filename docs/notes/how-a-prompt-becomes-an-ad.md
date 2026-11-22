@@ -3,7 +3,7 @@
 This note is for planning a new way to read any prompt: long or short, with scenes or without, well or badly written.
 It describes what the app does **today**, step by step, then where it is weak.
 Code: `backend/app/services/` (each step names its file).
-Decisions behind it: `DECISIONS.md` D27–D30.
+Decisions behind it: `DECISIONS.md` D27–D31. Updated as the strategy plan's phases ship (phase 3: 22 Nov 2026).
 
 ## 1. Tools and hard limits
 
@@ -41,7 +41,7 @@ Other fixed rules:
 - This description is used to keep the real product the same in every picture.
 
 ### Step 3. Read the story in code, before any AI (`scene_splitter.py`; `story_beats.py` before 21 Nov 2026)
-- **Since phase 2 of the strategy plan (D31)** the story's shape is read in this order: time ranges (below), "Scene N" / "Shot N" headings (seconds from the heading or a timeline inside the scene), a list of 2–5 actions, paragraphs (left to the writer until phase 3), no shape. Headings and lists follow the same rules as time ranges below: one scene each, the user's words, the rest as notes, more than 5 joined (and said), "cut to" splits a scene when there is room. The rest of this step describes the time-range rules, unchanged.
+- **Since phase 2 of the strategy plan (D31)** the story's shape is read in this order: time ranges (below), "Scene N" / "Shot N" headings (seconds from the heading or a timeline inside the scene), a list of 2–5 actions, paragraphs (since phase 3, the slot filler marks each paragraph scene or notes and code checks it; see step 3b), no shape. Headings and lists follow the same rules as time ranges below: one scene each, the user's words, the rest as notes, more than 5 joined (and said), "cut to" splits a scene when there is room. The rest of this step describes the time-range rules, unchanged.
 - **Timed scenes are detected from time ranges** like `0:00 – 0:04` (also `0.00-0.04`, any dash). At least **two** ranges are needed.
 - **Each range starts a scene ("beat"):**
   - its seconds come from the stamps (2–10);
@@ -49,16 +49,24 @@ Other fixed rules:
 - **A range inside the one before it** (for example "Around 0:02–0:04" inside "0:00 – 0:04") is part of that scene, not a new one.
 - **More than 5 ranges:** the two shortest neighbours are merged until there are 5.
 - **Notes:** in a timed story, everything that is not inside a range (style, characters, place, light, rules, headings) becomes the **"Style and world notes"**.
-- **Before phase 2, a story without time ranges was not split at all**, even with "Scene 1:", "Scene 2:" headings. Now only paragraphs and stories with no shape go to the writer whole (notes empty).
+- **Before phase 2, a story without time ranges was not split at all**, even with "Scene 1:", "Scene 2:" headings. Now only stories with no shape go to the writer whole (notes empty); paragraphs are split by the slot filler (step 3b).
+
+### Step 3b. The slot filler (`slot_filler.py`, since phase 3 of the strategy plan, D31)
+- **One cheap AI call before the writer** (stage `slots`, the shared rules plus the video rules). It reads the brief, the photo analysis and the split story into the fixed structure: the cast and world sheet (people with ids, place, time and light, look, camera style, what never to show) and one card per scene (who, the action, camera, how the product is shown, a place change, how it ends, the user's own spoken words).
+- **Every value is marked.** The AI may call a value the user's only when it copies it word for word; code checks that and marks anything else "AI's guess". The product's look comes from code (the photo reader, or the user's own words with no photo). Key slots left empty get a plain guess in code, so none is empty without a mark.
+- **Paragraphs (2–5, no other shape):** the AI marks each paragraph scene or notes by number; code checks every paragraph is used once, in order, then builds the scenes from the paragraphs themselves (the user's words, whole). If the marks are wrong it asks once more; then the writer reads the story whole, as before.
+- **Scene count:** from the story's shape; else the chosen length; else 3 (hook, demo, call to action).
+- **The writer gets the sheet** and follows it in every scene; the story wins where they differ. The storyboard carries the structure and shows it: "Cast and world" at the top and "What the AI used" in each scene, marked "yours" or "AI's guess". If the slot filler fails, the storyboard is written as before, without marks.
 
 ### Step 4. Decide the number of scenes and their lengths, in code (`scene_plan.py`)
 
 | Situation | Scenes | Lengths |
 |---|---|---|
-| Story with 2+ time ranges | one per range (at most 5) | from the stamps |
-| No timed story, length chosen | (length − 2 s end card) ÷ 2.5 s, kept within 1–5 | shared out so each spoken line has time (about 2.5 words per second) |
-| No timed story, Auto, with a story | the writer decides (1–5) | the writer's, raised so each spoken line fits |
-| No story at all, Auto | 3: hook, demo, call to action | the writer's (usually 5 s), raised so the lines fit |
+| Story with a shape (time ranges, headings, a list, paragraphs) | one per scene it describes (at most 5) | from the story where it gives seconds; the other scenes share what the picked length leaves |
+| No shape, length chosen | (length − 2 s end card) ÷ 2.5 s, kept within 1–5 | shared out so each spoken line has time (about 2.5 words per second) |
+| No shape or no story, Auto | 3: hook, demo, call to action (since phase 3) | the writer's (usually 5 s), raised so the lines fit |
+
+**The real length (plan v2.3, phase 3):** a scene is never stretched or held to reach the picked length. When the scenes make another length, the storyboard says "Your scenes make a 22 s ad (you picked 40 s)." with "Add scenes to reach 40 s" (the AI writes new scenes that fit the story, marked "Added by the AI", with Undo) and "Keep 22 s".
 
 ### Step 5. The writer (`storyboard.py`, 1 LLM call, maybe 2)
 - **It gets:**
@@ -66,7 +74,8 @@ Other fixed rules:
   - the brief;
   - the photo description;
   - the story (as data, never as instructions);
-  - for a timed story, "write exactly N scenes, one per beat" with each beat's text;
+  - for a story with a shape, "write exactly N scenes, one per beat" with each beat's text;
+  - the slot filler's cast and world sheet and scene cards (`<sheet>`, since phase 3), to follow in every scene;
   - the brand's tone of voice, if any.
 - **It writes, for every scene:**
   - **description:** what the viewer sees, in plain words;
@@ -174,9 +183,9 @@ Example, the owner's 20 s prompt (7,279 characters, 5 timed scenes, 3,371 charac
 | Prompt | What happens now | Weak point |
 |---|---|---|
 | No story | 3 scenes (hook, demo, call to action), or the count from the chosen length; the writer invents everything from the brief | Generic; nothing asks the user what they picture |
-| Short, vague story ("guy wearing my hoodie in the rain") | Whole text to the writer; it picks 1–5 scenes and fills every gap itself; no notes | Gaps are filled silently; the user does not see what was assumed |
-| Long story without times | Same as above; nothing is split or kept as notes | Character and style details survive only if the writer copies them into every prompt |
-| "Scene 1: …, Scene 2: …" without times | Since phase 2 (D31): one scene per heading in code, seconds from the heading if given, the text around them as notes; numbered or bulleted lists of actions the same way | Fixed in phase 2; paragraphs still go to the writer until phase 3 |
+| Short, vague story ("guy wearing my hoodie in the rain") | Since phase 3: 3 scenes on Auto; the slot filler fills the gaps and the storyboard marks each one "AI's guess" | The user sees what was assumed but is not asked yet (quick questions: phase 5) |
+| Long story without times | Since phase 3: paragraphs are split into scenes and notes by the slot filler, checked in code, in the user's words | One block with no paragraphs still goes to the writer whole |
+| "Scene 1: …, Scene 2: …" without times | Since phase 2 (D31): one scene per heading in code, seconds from the heading if given, the text around them as notes; numbered or bulleted lists of actions the same way | Fixed in phase 2 |
 | Timed shot list (`0:00 – 0:04 …`) | Exact scenes and lengths; beat text kept as the description; notes extracted | The clip still gets the writer's rewrite of the beat (step 5) |
 | More than 5 timed scenes | Shortest neighbours merged | Merged scenes carry two beats into one clip |
 | Story with spoken lines | Lines go to the voiceover word for word (writer's job, not checked in code) | Not verified; a line too long for its scene is spoken faster or the scene is held |
@@ -185,12 +194,12 @@ Example, the owner's 20 s prompt (7,279 characters, 5 timed scenes, 3,371 charac
 ## 5. What is missing for "any prompt in, a good ad out"
 
 1. **No questions.** The app never asks the user to fill a gap: who is in it, where, which product moment, how it ends. The writer guesses.
-2. **No fixed structure for a scene.** Each scene is free text. There is no checklist (subject, action, camera, start, end, product moment, light) that every scene must fill, so we cannot tell what is missing.
-3. **Scene detection depends on time stamps.** Headings, numbered lists or paragraphs are not used.
+2. **No fixed structure for a scene.** Each scene is free text. There is no checklist (subject, action, camera, start, end, product moment, light) that every scene must fill, so we cannot tell what is missing. *(Since phase 3: the slot filler fills the structure and marks every guess; the clips are built from it in phase 4.)*
+3. **Scene detection depends on time stamps.** Headings, numbered lists or paragraphs are not used. *(Fixed in phases 2 and 3.)*
 4. **The user's words are not what Kling reads.** The writer rewrites the movement, and nothing checks that details were kept.
 5. **Characters and products are not stored as reusable pieces.** A face or outfit described once is re-written (or lost) in each scene. The per-scene short notes help, but they are written by AI each time.
 6. **The 2,500 budget is checked, not planned.** We fit text after writing it, instead of writing each clip to a known budget from the start.
-7. **No "what I assumed" view.** Gaps filled by the AI are not marked, so the user cannot confirm or fix them quickly.
+7. **No "what I assumed" view.** Gaps filled by the AI are not marked, so the user cannot confirm or fix them quickly. *(Since phase 3: "Cast and world" and "What the AI used" mark every guess; editing them in place comes with phase 4.)*
 
 ## 6. Constraints any new strategy must keep
 

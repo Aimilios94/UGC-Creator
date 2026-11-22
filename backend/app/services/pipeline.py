@@ -29,7 +29,8 @@ from ..config import Settings
 from ..errors import BudgetExceeded
 from ..models import BrandKit, BrandSnapshot, Brief, ProductAnalysis, Scene, Storyboard, render_seconds
 from ..repository import Database
-from . import analyze, continuity, shorten, storyboard
+from . import add_scenes, analyze, continuity, shorten, slot_filler, storyboard
+from .ad_structure import AdStructure
 from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into, frame_at, probe_duration
 from .image_gen import PlannedRender, plan_extend_image, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
@@ -40,6 +41,7 @@ from .providers.llm import LlmHandle, build_llm
 from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
 from .providers.voice import VoiceProvider, build_voice
+from .scene_splitter import Split, split_story
 from .storyboard_checks import fix_instructions, flag_testimonials
 from .video_gen import ClipText, clip_prompt, plan_scene_video, too_long_by
 from .voice import plan_voice, usage_for
@@ -163,13 +165,16 @@ def write_board(
     with those lines as feedback. Lines still flagged after that are left for the user to
     edit on the Storyboard step (Approve is refused while any remain).
     """
+    structure, split = fill_slots(ctx, job_id, brief, analysis, attempt=attempt)
     llm = ctx.llm_factory("storyboard")
     board = _run_llm_stage(
         ctx,
         job_id,
         "storyboard",
         llm,
-        lambda: storyboard.write_storyboard(llm, brief, analysis, brand=brand, end_card_s=ctx.settings.end_card_s),
+        lambda: storyboard.write_storyboard(
+            llm, brief, analysis, brand=brand, end_card_s=ctx.settings.end_card_s, split=split, structure=structure
+        ),
         attempt=attempt,
     )
     flags = flag_testimonials(board, brief)
@@ -183,7 +188,14 @@ def write_board(
                 "storyboard",
                 llm,
                 lambda: storyboard.write_storyboard(
-                    llm, brief, analysis, brand=brand, feedback=feedback, end_card_s=ctx.settings.end_card_s
+                    llm,
+                    brief,
+                    analysis,
+                    brand=brand,
+                    feedback=feedback,
+                    end_card_s=ctx.settings.end_card_s,
+                    split=split,
+                    structure=structure,
                 ),
                 attempt=attempt + 1,
             )
@@ -192,6 +204,54 @@ def write_board(
             sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
             if sr:
                 repo.stage_done(ctx.db, sr["id"], {"model": llm.model_name, "rewrite_failed": True})
+    board = check_scene_flow(ctx, job_id, board, brief, attempt=attempt)
+    repo.set_storyboard(ctx.db, job_id, board.model_dump(mode="json"))
+    return board
+
+
+def fill_slots(
+    ctx: Context, job_id: str, brief: Brief, analysis: ProductAnalysis | None, attempt: int = 1
+) -> tuple[AdStructure | None, Split | None]:
+    """The slot filler (D31 phase 3): one cheap LLM call that reads the ad into the fixed structure
+    and, for a story of plain paragraphs, which paragraphs are scenes. If it fails, the writer works
+    as before (the story split in code, or read whole) and the storyboard has no marks."""
+    split = split_story(brief.story) if brief.story else None
+    llm = ctx.llm_factory("slots")
+    try:
+        return _run_llm_stage(
+            ctx,
+            job_id,
+            "slots",
+            llm,
+            lambda: slot_filler.fill_slots(
+                llm, brief, analysis, split or Split("none", [], ""), end_card_s=ctx.settings.end_card_s
+            ),
+            attempt=attempt,
+        )
+    except BudgetExceeded:
+        raise
+    except Exception:  # noqa: BLE001 - the ad still works without the structure
+        log.exception("slot filler failed for job %s; writing the storyboard without it", job_id)
+        return None, split
+
+
+def add_scenes_to_board(ctx: Context, job: dict) -> Storyboard:
+    """'Add scenes to reach N s' (plan v2.3): the writer adds scenes, then the joins are checked again."""
+    job_id = str(job["id"])
+    brief = Brief.model_validate(job["brief"])
+    board = Storyboard.model_validate(job["storyboard"])
+    analysis = ProductAnalysis.model_validate(job["analysis"]) if job.get("analysis") else None
+    llm = ctx.llm_factory("add_scenes")
+    sr = repo.get_stage_run(ctx.db, job_id, "add_scenes")
+    attempt = (sr["attempt"] + 1) if sr else 1
+    board = _run_llm_stage(
+        ctx,
+        job_id,
+        "add_scenes",
+        llm,
+        lambda: add_scenes.add_scenes(llm, board, brief, analysis, end_card_s=ctx.settings.end_card_s),
+        attempt=attempt,
+    )
     board = check_scene_flow(ctx, job_id, board, brief, attempt=attempt)
     repo.set_storyboard(ctx.db, job_id, board.model_dump(mode="json"))
     return board

@@ -136,6 +136,11 @@ export const api = {
   shortenScene: (id, idx, storyboard) =>
     request(`/jobs/${encodeURIComponent(id)}/scenes/${idx}/shorten`, { method: 'POST', json: storyboard }),
   setSound: (id, sound) => request(`/jobs/${encodeURIComponent(id)}/sound`, { method: 'PUT', json: sound }),
+  // "Keep 22 s" (plan v2.3): the picked length follows the scenes; nothing else changes.
+  keepLength: (id, seconds) =>
+    request(`/jobs/${encodeURIComponent(id)}/length`, { method: 'PUT', json: { video_length_s: seconds } }),
+  // "Add scenes to reach 40 s": one cheap AI call; the new scenes are marked as the AI's guess.
+  addScenes: (id) => request(`/jobs/${encodeURIComponent(id)}/scenes/add`, { method: 'POST' }),
   voices: () => request('/voices'),
   music: () => request('/music'),
 };

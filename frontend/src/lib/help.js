@@ -41,6 +41,12 @@ export const HELP = {
   captions: 'The voiceover as burned-in text, for people watching with the sound off.',
   sound: 'The voice, music and captions of the whole ad. Press the list icon to listen before you choose. You can change them until the video is made.',
   add_scene: 'Add a scene (up to 5). Each scene is one picture and one clip.',
+  cast_world:
+    'Who and what is in your ad, the same in every scene: the product, the people, the place, the light, the look and what never to show. Taken from your words where you gave them ("yours") and guessed by the AI where you did not ("AI\'s guess"). The scenes below were written with it.',
+  guesses:
+    'What the AI used for this scene. "Yours" comes from your words; "AI\'s guess" fills a gap you left. To change one, edit the scene\'s text or its movement, or say it in your story and build the scenes again.',
+  length_line:
+    'Your scenes are never slowed down or held still to fill time, because that looks worse. Add scenes that fit your story, or keep the length your scenes make.',
   approve_images: 'Step 1 makes one picture per scene. You see them before any video is paid for.',
   make_video: 'Step 2: voiceover, one clip per scene, captions, music and the end card, in every format.',
 };

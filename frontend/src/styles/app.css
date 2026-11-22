@@ -503,3 +503,18 @@ details.fold-plain > summary { cursor: pointer; font-weight: 600; }
 .ai-exact { margin-top: 14px; padding-top: 12px; border-top: 1px dashed rgba(99, 102, 241, 0.35); }
 .ai-exact .label-like { margin: 0 0 4px; }
 .ai-exact-text { white-space: pre-wrap; font-size: 0.8rem; line-height: 1.45; color: var(--text-secondary); padding: 10px 12px; border-radius: 8px; background: rgba(15, 23, 42, 0.45); overflow-wrap: anywhere; }
+
+/* The slot filler's marks (D31 phase 3): "yours" or "AI's guess", shown lightly */
+.mark { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: var(--radius-full); font-size: 0.72rem; font-weight: 500; line-height: 1.6; white-space: nowrap; vertical-align: middle; }
+.mark.guess { border: 1px dashed rgba(251, 191, 36, 0.6); color: #fcd34d; background: rgba(251, 191, 36, 0.08); }
+.mark.yours { border: 1px solid var(--card-border); color: var(--text-secondary); }
+.slot-list { display: grid; gap: 6px; margin: 8px 0 0; font-size: 0.9rem; }
+.slot-row { display: grid; grid-template-columns: minmax(120px, 190px) 1fr; gap: 12px; }
+.slot-row dt { color: var(--text-secondary); }
+.slot-row dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .slot-row { grid-template-columns: 1fr; gap: 2px; } }
+details.guesses { margin-top: 8px; }
+details.guesses > summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; list-style: none; }
+details.guesses > summary::-webkit-details-marker { display: none; }
+details.guesses > summary::before { content: '▸ '; color: var(--text-secondary); }
+details.guesses[open] > summary::before { content: '▾ '; }

@@ -1,8 +1,8 @@
 """The rules files each AI step loads (strategy plan, D31). DB-free.
 
 The rules live in `app/prompts/rules/` as Markdown, versioned in git. Each AI step loads the
-shared rules plus the rules of its own path (video or image), and nothing else. Phase 1: the
-files and this loader exist; the AI steps switch to them in later phases.
+shared rules plus the rules of its own path (video or image), and nothing else. The slot filler
+uses them since phase 3; the writer and the other steps switch to them in later phases.
 """
 
 from __future__ import annotations

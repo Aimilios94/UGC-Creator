@@ -51,7 +51,7 @@ create table if not exists scenes (
 create table if not exists stage_runs (
   id             uuid primary key default gen_random_uuid(),
   job_id         uuid not null references jobs (id) on delete cascade,
-  stage          text not null check (stage in ('analyze', 'storyboard', 'continuity', 'shorten', 'image', 'video', 'voice', 'compose')),
+  stage          text not null check (stage in ('analyze', 'slots', 'storyboard', 'add_scenes', 'continuity', 'shorten', 'image', 'video', 'voice', 'compose')),
   scene_idx      smallint not null default -1,  -- -1 for job-level stages
   status         text not null check (status in ('running', 'submitted', 'done', 'failed')),
   provider       text,
@@ -175,12 +175,13 @@ create table if not exists variants (
 );
 
 -- M2 item 2 (compose): the voice and compose stages, the composed files and cached voice
--- lines; the continuity check after the writer and "Shorten it for me" (D30). `create table if not exists` does not
+-- lines; the continuity check after the writer and "Shorten it for me" (D30); the slot filler before the
+-- writer and "Add scenes to reach N s" (D31 phase 3). `create table if not exists` does not
 -- change an existing table, so the checks are replaced here as well (idempotent; one list
 -- only, so applying the file again never meets a row the check would refuse).
 alter table stage_runs drop constraint if exists stage_runs_stage_check;
 alter table stage_runs add constraint stage_runs_stage_check
-  check (stage in ('analyze', 'storyboard', 'continuity', 'shorten', 'image', 'video', 'voice', 'compose'));
+  check (stage in ('analyze', 'slots', 'storyboard', 'add_scenes', 'continuity', 'shorten', 'image', 'video', 'voice', 'compose'));
 alter table assets drop constraint if exists assets_kind_check;
 alter table assets add constraint assets_kind_check
   check (kind in ('upload', 'image', 'video', 'audio', 'ad', 'cover', 'still', 'carousel'));
