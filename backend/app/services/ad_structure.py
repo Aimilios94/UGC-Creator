@@ -3,6 +3,7 @@
 One cast and world sheet (written once, reused in every clip) plus 1-5 scene cards. Every slot
 holds a value and where it came from:
 - `user`: the user typed it;
+- `story`: the user's story says it, in other words (code checks a meaningful word of it is there);
 - `photo`: the photo reader saw it;
 - `answer`: the user picked or typed it in a quick question;
 - `ai_guess`: the AI filled a gap.
@@ -24,8 +25,8 @@ from pydantic import BaseModel, Field
 
 from ..models import MAX_SCENES, MIN_SCENES, STORY_MAX, Brief, ProductAnalysis, Storyboard
 
-SlotSource = Literal["user", "photo", "answer", "ai_guess"]
-LOCKED_SOURCES: frozenset[str] = frozenset({"user", "photo", "answer"})
+SlotSource = Literal["user", "story", "photo", "answer", "ai_guess"]
+LOCKED_SOURCES: frozenset[str] = frozenset({"user", "story", "photo", "answer"})
 SplitShape = Literal["time_ranges", "headings", "list", "paragraphs", "none"]
 SLOT_MAX = STORY_MAX  # a slot never cuts what the user typed (D30): long text is checked per clip
 

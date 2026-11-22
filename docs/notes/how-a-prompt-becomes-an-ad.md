@@ -58,6 +58,8 @@ Other fixed rules:
 - **Scene count:** from the story's shape; else the chosen length; else 3 (hook, demo, call to action).
 - **The writer gets the sheet** and follows it in every scene; the story wins where they differ. The storyboard carries the structure and shows it: "Cast and world" at the top and "What the AI used" in each scene, marked "yours" or "AI's guess". If the slot filler fails, the storyboard is written as before, without marks.
 
+**Story first (owner, 22 Nov 2026):** everything the story names goes into the sheet, marked "yours" (word for word) or "from your story" (reworded, checked in code); guesses must fit the story; a name or person from the story missing from the sheet makes the slot filler try once more.
+
 ### Step 3c. Quick questions (since phase 5 of the strategy plan, D31)
 - Code keeps the slot filler's questions only for key slots still guessed (who, how the product is shown, where, how it ends; with no photo, the product's look first), one per slot, at most 3.
 - If any are left, the job waits (`jobs.pending`) and the page asks them on one screen: "Let the AI decide" (default), suggestion buttons, "In my own words", "Skip all".
@@ -100,6 +102,8 @@ Other fixed rules:
   - **length** = from the stamps;
   - **notes** = the story's notes (step 3).
 - **Before phase 4** the clip used the writer's **motion_prompt**, a rewrite of the user's words that nothing checked (the free mock copied the beat text, which hid it). **Since phase 4 (D31)**, with the slot filler's sheet, the clip starts with the user's own scene text word for word, and the writer's motion_prompt is only a timeline (2-4 time marks, under 90 words; none when the user's text has its own times). The writer may swap a user action only for a Kling weak spot (A1): the page says "AI changed", with Undo.
+
+**Lines start empty (owner, 22 Nov 2026):** voiceover and on-screen text stay empty unless the story gives the words; the writer's lines become 2-3 suggestions per scene to pick from.
 
 ### Step 6. Testimonial check, in code (`storyboard_checks.py`)
 - It looks for invented claims: "I've used this for 3 months", reviews, ratings, awards, results over time, unless the brief or story states them.

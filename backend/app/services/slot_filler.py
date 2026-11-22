@@ -55,6 +55,10 @@ class SlotOut(BaseModel):
         default=False,
         description="True only if value is copied word for word from the user's <story> or <brief>",
     )
+    from_story: bool = Field(
+        default=False,
+        description="True if value says what the user's <story> says in other words (a place, person, time or look)",
+    )
 
 
 class PersonOut(BaseModel):
@@ -109,9 +113,13 @@ TASK = """\
 
 Read the user's brief, the photo analysis and the user's story into the structure.
 
-- sheet: the cast and world. Copy what the user wrote where they wrote it (from_user true, word for
-  word, a short exact phrase from the <story> or <brief>). Where the user gave nothing, write a
-  short, concrete guess that fits the product, the brief and the story (from_user false). Every
+- Story first. Read the <story> (and its notes) before anything else: every place, person, time of day,
+  light, weather, mood and look it names goes into the sheet and the scene cards, never replaced by a
+  default. Copy it word for word where you can (from_user true); when you reword or combine it, set
+  from_story true. A place the story names (for example "Shibuya") is the place, even if it is said once.
+- sheet: the cast and world. Where the user gave nothing, write a short, concrete guess that fits the
+  story's own setting, mood and people, the product and the brief (from_user and from_story false): never
+  a generic default that ignores the story (no "bright room at home" for a story set on a street). Every
   person in the ad gets an entry with an id (P1, P2...). The product's own look is given in code:
   do not describe it. product_unseen: only visible details the photo or the user's text cannot show
   (the back, the inside, the other side), never facts the user did not give (sizes, capacity,
@@ -238,11 +246,32 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").replace("’", "'")).strip().casefold()
 
 
-def _slot(out: SlotOut, source_text: str) -> Slot:
-    """The AI's value, marked the user's only when it is found word for word in the user's text."""
+STOP = frozenset(
+    "the a an and or but with without into onto from over under near this that these those then than "
+    "very just only also some any each every their there they them his her him she he its our your you "
+    "for of on in at to by as is are was were be been being has have had not no yes all more most "
+    "while when where which what who whom shot scene camera frame slow slowly soft light warm cool "
+    "looks look style video phone realistic".split()
+)
+
+
+def content_words(text: str) -> set[str]:
+    """The words that carry meaning (4+ letters, not common words), for "from your story"."""
+    return {w for w in re.findall(r"[a-z][a-z'-]{3,}", _norm(text)) if w not in STOP}
+
+
+def _slot(out: SlotOut, source_text: str, story_words: frozenset[str] | set[str] = frozenset()) -> Slot:
+    """The AI's value and where it came from: the user's when it is found word for word in their text;
+    "from your story" when it says what the story says in other words (code checks a meaningful word
+    of it is in the story); else the AI's guess."""
     value = out.value.strip()
-    mine = out.from_user and bool(value) and _norm(value) in source_text
-    return Slot(value=value, source="user" if mine else GUESS)
+    if not value:
+        return Slot(value="", source=GUESS)
+    if out.from_user and _norm(value) in source_text:
+        return Slot(value=value, source="user")
+    if (out.from_story or out.from_user) and content_words(value) & story_words:
+        return Slot(value=value, source="story")
+    return Slot(value=value, source=GUESS)
 
 
 # Last-resort guesses so no key slot is ever left empty (the page marks them "AI's guess").
@@ -266,6 +295,8 @@ def build_structure(
     """The structure from the AI's draft, checked in code. The number of cards is the split's
     scenes, else `want`, else as many as the AI wrote; missing cards are guessed in code."""
     text = _norm(" ".join([brief.story, brief.description, brief.product_name, brief.audience, brief.offer]))
+    # The story's own meaningful words, without the product's (so "wears the hoodie" is not "from your story").
+    words = content_words(brief.story) - content_words(f"{brief.product_name} {brief.description}")
     s = draft.sheet
     if analysis is not None:
         product = Slot(value=analysis.visual_description[:VALUE_MAX], source="photo")
@@ -275,21 +306,21 @@ def build_structure(
         Person(
             id=p.id,
             label=p.label,
-            look=_slot(p.look, text),
-            clothes=_slot(p.clothes, text),
-            unseen=_slot(p.unseen, text),
+            look=_slot(p.look, text, words),
+            clothes=_slot(p.clothes, text, words),
+            unseen=_slot(p.unseen, text, words),
         )
         for p in {p.id: p for p in s.people}.values()  # one entry per id
     ]
     sheet = CastSheet(
         product=product,
-        product_unseen=_slot(s.product_unseen, text),
+        product_unseen=_slot(s.product_unseen, text, words),
         people=people,
-        place=_slot(s.place, text),
-        time_light=_slot(s.time_light, text),
-        look=_slot(s.look, text),
-        camera_style=_slot(s.camera_style, text),
-        never=_slot(s.never, text),
+        place=_slot(s.place, text, words),
+        time_light=_slot(s.time_light, text, words),
+        look=_slot(s.look, text, words),
+        camera_style=_slot(s.camera_style, text, words),
+        never=_slot(s.never, text, words),
     )
     ids = {p.id for p in people} | {"product"}
     cards = list(draft.scenes)
@@ -301,16 +332,16 @@ def build_structure(
     for i, c in enumerate(cards):
         beat = split.beats[i] if split.beats else None
         who = [w for w in dict.fromkeys(c.who) if w in ids]
-        spoken = _slot(c.spoken_line, text)
+        spoken = _slot(c.spoken_line, text, words)
         scenes.append(
             SceneCard(
                 text=user(beat.text) if beat else Slot(),
                 who=CastRefs(ids=who),
-                action=_slot(c.action, text),
-                camera=_slot(c.camera, text),
-                product_moment=_slot(c.product_moment, text),
-                place_change=_slot(c.place_change, text),
-                end=_slot(c.end, text),
+                action=_slot(c.action, text, words),
+                camera=_slot(c.camera, text, words),
+                product_moment=_slot(c.product_moment, text, words),
+                place_change=_slot(c.place_change, text, words),
+                end=_slot(c.end, text, words),
                 spoken_line=spoken if spoken.source == "user" else Slot(),  # only the user's own words
                 length_s=beat.seconds if beat and beat.seconds else 5,
                 length_source="user" if beat and beat.seconds else GUESS,
@@ -344,6 +375,46 @@ def fill_gaps(ad: AdStructure) -> None:
             sc.product_moment = Slot(value=FALLBACK["product_moment"])
     if ad.kind == "video" and ad.scenes[-1].end.empty:
         ad.scenes[-1].end = Slot(value=FALLBACK["end"])
+
+
+# --- story first: what the story names must be in the cast and world -------------------------------
+PERSON_WORDS = re.compile(
+    r"\b(guy|man|men|woman|women|girl|boy|he|she|person|people|friend|friends|couple|model|creator|mom|dad|"
+    r"kid|kids|child|lady|gentleman|athlete|runner|player|customer|influencer)\b",
+    re.I,
+)
+NOT_NAMES = frozenset("i pov ugc cta scene shot style camera light notes voiceover text the a then cut".split())
+
+
+def named_in_story(story: str, product: str) -> list[str]:
+    """Names the story gives (capitalised words that do not start a sentence or a line, like
+    "Shibuya" or "Maria"), not the product's own words, for the code check."""
+    skip = content_words(product) | NOT_NAMES
+    names: list[str] = []
+    for line in (story or "").splitlines():
+        for sentence in re.split(r"(?<=[.!?:;])\s+", line):
+            for word in re.findall(r"[A-Za-zÀ-ÿ][\w'’-]*", sentence)[1:]:
+                if word[0].isupper() and not word.isupper() and len(word) >= 3 and word.lower() not in skip:
+                    if word not in names:
+                        names.append(word)
+    return names
+
+
+def story_gaps(ad: AdStructure, brief: Brief) -> list[str]:
+    """What the story names but the cast and world leaves out: names (places, people) and, when the
+    story has a person, the people list. The scene's action does not count: the sheet goes into every
+    clip, so a place the story names must be the sheet's place (or a scene's place change)."""
+    sh = ad.sheet
+    parts = [sh.place, sh.time_light, sh.look, sh.camera_style, sh.product_unseen]
+    parts += [x for p in sh.people for x in (p.look, p.clothes, p.unseen)]
+    parts += [c.place_change for c in ad.scenes]  # the scene's own words do not count: the sheet goes to every clip
+    known = _norm(" ".join([*(p.value for p in parts), *(p.label for p in sh.people)]))
+    gaps = [
+        n for n in named_in_story(brief.story, f"{brief.product_name} {brief.description}") if n.lower() not in known
+    ]
+    if PERSON_WORDS.search(brief.story or "") and not sh.people:
+        gaps.append("the person in the story")
+    return gaps
 
 
 # --- the call --------------------------------------------------------------------------------------
@@ -389,6 +460,18 @@ def fill_slots(
         if why is None:
             used = paragraphs_split(brief.story, draft.paragraphs)
     structure = build_structure(draft, brief, analysis, used, want=want, kind=kind)
+    if gaps := story_gaps(structure, brief):
+        # Story first, checked in code: asked once more when the sheet leaves out what the story names.
+        retry = _run(
+            llm,
+            prompt + f"\nYour cast and world left out what the story names: {', '.join(gaps)}. Put each in the "
+            "sheet or the scene cards where it belongs (the place, a person, the time or light), from the story.",
+            kind,
+        )
+        usage = _add(usage, tokens_from_run_usage(retry.usage))
+        again = build_structure(retry.output, brief, analysis, used, want=want, kind=kind)
+        if len(story_gaps(again, brief)) < len(gaps):
+            structure = again
     call = LlmCall(
         kind="llm",
         provider=llm.provider,

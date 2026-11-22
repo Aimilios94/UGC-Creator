@@ -96,7 +96,10 @@ def test_an_ad_from_the_brief_alone_goes_straight_to_the_storyboard(client, sess
 
 
 def test_a_guess_that_contradicts_an_answer_is_corrected_by_the_writer(client, session_id, photo_bytes):
-    job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": VAGUE}).json()
+    # A story that says nothing about the time or light, so the light is the AI's guess.
+    job = create_job(
+        client, session_id, photo_bytes, brief={**BRIEF, "story": "guy wearing my hoodie, looking cool"}
+    ).json()
     r = client.post(f"/jobs/{job['id']}/answers", json={"answers": {"place": "a rainy street at night"}},
                     headers=_h(session_id))  # fmt: skip
     sheet = r.json()["storyboard"]["structure"]["sheet"]

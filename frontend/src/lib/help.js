@@ -9,8 +9,9 @@ export const HELP = {
   unboxing_tease: 'Builds curiosity by revealing the product step by step.',
   description: 'What happens in this scene, in plain words (with your own story: your text for this scene). The AI gets two instructions written from it: a starting picture and the movement; open "Show what the AI gets" to see or change them.',
   voiceover:
-    'The line the AI voice says in this scene (about 12 words, about 4 seconds). It is also shown as captions.',
-  on_screen_text: 'A short headline burned onto the top of the video during this scene.',
+    'The line the AI voice says in this scene (about 12 words, about 4 seconds), also shown as captions. Empty means nothing is said: type your own line or pick one of the AI\'s suggestions. Lines your story gives as spoken words are filled in for you.',
+  on_screen_text:
+    'A short headline burned onto the top of the video during this scene. Empty means no text: type your own or pick one of the AI\'s suggestions.',
   image_prompt:
     'Exact instructions for the image model: subject, setting, framing, camera and lens, light, colours and style.',
   motion_prompt:

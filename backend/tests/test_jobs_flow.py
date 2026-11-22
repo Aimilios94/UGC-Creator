@@ -9,13 +9,13 @@ import httpx
 
 from app import worker
 from conftest import BRIEF, new_session
-from helpers import approve, create_job, make_video, separate_shots
+from helpers import approve, create_job, make_video, pick_lines, separate_shots
 
 
 def test_brief_to_storyboard_to_playable_video(client, ctx, session_id, photo_bytes):
     r = create_job(client, session_id, photo_bytes)
     assert r.status_code == 201, r.text
-    job = r.json()
+    job = pick_lines(client, session_id, r.json())  # voiceover lines start empty: pick the suggested ones
     assert job["status"] == "draft"
     assert job["last_error"] is None
     assert [s["role"] for s in job["storyboard"]["scenes"]] == ["hook", "demo", "cta"]

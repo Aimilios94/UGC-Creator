@@ -111,7 +111,7 @@ def _scripted_storyboards(ctx, boards: list[dict], prompts: list[str]):
 
 def _bad_board() -> dict:
     data = copy.deepcopy(mock_storyboard(BRIEF))
-    data["scenes"][1]["voiceover"] = "I've used these for 3 months and never slipped."
+    data["scenes"][1]["description"] = "I've used these for 3 months and never slipped."
     return data
 
 
@@ -129,8 +129,8 @@ def test_a_flagged_storyboard_is_rewritten_once_with_the_lines_as_feedback(clien
     _scripted_storyboards(ctx, [_bad_board(), mock_storyboard(BRIEF)], prompts)
     job = create_job(client, session_id, photo_bytes).json()
     assert job["status"] == "draft" and job["flags"] == []
-    assert "I've used these" not in job["storyboard"]["scenes"][1]["voiceover"]
-    assert len(prompts) == 2 and "scenes.1.voiceover" in prompts[1] and "testimonial rule" in prompts[1]
+    assert "I've used these" not in job["storyboard"]["scenes"][1]["description"]
+    assert len(prompts) == 2 and "scenes.1.description" in prompts[1] and "testimonial rule" in prompts[1]
     assert _storyboard_calls(ctx, job["id"]) == 2  # both calls are paid and counted
     assert approve(client, session_id, job["id"]).status_code == 202
 
@@ -142,7 +142,7 @@ def test_lines_still_flagged_block_approval_until_edited(client, ctx, session_id
     _scripted_storyboards(ctx, [_bad_board()], prompts)
     job = create_job(client, session_id, photo_bytes).json()
     assert len(prompts) == 2  # rewritten once, then left to the user
-    assert [f["field"] for f in job["flags"]] == ["scenes.1.voiceover"]
+    assert [f["field"] for f in job["flags"]] == ["scenes.1.description"]
 
     r = approve(client, session_id, job["id"])
     assert r.status_code == 409 and "flagged" in r.json()["detail"]
@@ -150,7 +150,7 @@ def test_lines_still_flagged_block_approval_until_edited(client, ctx, session_id
         assert c.execute("select status from jobs where id = %s", (job["id"],)).fetchone()["status"] == "draft"
 
     board = job["storyboard"]
-    board["scenes"][1]["voiceover"] = "Grip that keeps your foot locked in the boot."
+    board["scenes"][1]["description"] = "Grip that keeps your foot locked in the boot."
     h = {"X-Session-Id": session_id}
     edited = client.put(f"/jobs/{job['id']}/storyboard", json=board, headers=h).json()
     assert edited["flags"] == []
@@ -181,5 +181,19 @@ def test_a_failed_rewrite_keeps_the_first_storyboard_for_editing(client, ctx, se
     ctx.llm_factory = lambda task: handle if task == "storyboard" else build_llm(ctx.settings, task)
     job = create_job(client, session_id, photo_bytes).json()
     assert job["last_error"] is None and job["storyboard"] is not None
-    assert [f["field"] for f in job["flags"]] == ["scenes.1.voiceover"]
+    assert [f["field"] for f in job["flags"]] == ["scenes.1.description"]
     assert {s["stage"]: s["status"] for s in job["stages"]}["storyboard"] == "done"
+
+
+def test_a_suggested_line_with_a_claim_is_rewritten_then_dropped(client, ctx, session_id, photo_bytes):
+    """Voiceover lines start empty (owner, 22 Nov 2026); the writer's lines are ideas, and an idea
+    that still makes an invented claim after the rewrite is dropped, so it can never be picked."""
+    bad = copy.deepcopy(mock_storyboard(BRIEF))
+    bad["scenes"][1]["voiceover"] = "I've used these for 3 months and never slipped."
+    prompts: list[str] = []
+    _scripted_storyboards(ctx, [bad], prompts)
+    job = create_job(client, session_id, photo_bytes).json()
+    assert len(prompts) == 2 and "scenes.1.voiceover_ideas.0" in prompts[1]
+    scene = job["storyboard"]["scenes"][1]
+    assert scene["voiceover"] == "" and all("I've used" not in t for t in scene["voiceover_ideas"])
+    assert job["flags"] == [] and approve(client, session_id, job["id"]).status_code == 202

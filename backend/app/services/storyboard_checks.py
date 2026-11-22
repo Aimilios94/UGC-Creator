@@ -154,6 +154,8 @@ def _fields(board: Storyboard) -> list[tuple[str, str]]:
             (f"scenes.{i}.description", scene.description),
             (f"scenes.{i}.voiceover", scene.voiceover),
             (f"scenes.{i}.on_screen_text", scene.on_screen_text),
+            *((f"scenes.{i}.voiceover_ideas.{k}", t) for k, t in enumerate(scene.voiceover_ideas)),
+            *((f"scenes.{i}.text_ideas.{k}", t) for k, t in enumerate(scene.text_ideas)),
         ]
     out += [(f"hooks.{i}.text", hook.text) for i, hook in enumerate(board.hooks)]
     return out
@@ -182,3 +184,19 @@ def fix_instructions(flags: list[StoryboardFlag]) -> str:
         "rewrite them without first-person claims of use, experience or results, reviews, ratings, awards or "
         f"time-based results that the brief does not state:\n{lines}"
     )
+
+
+def drop_flagged_ideas(board: Storyboard, brief: Brief) -> Storyboard:
+    """Suggested lines that still break the testimonial rule after the rewrite are dropped: they are
+    only ideas, so they never block approval, and the user can never pick one."""
+    bad = {f.field for f in flag_testimonials(board, brief) if "_ideas." in f.field}
+    if not bad:
+        return board
+    scenes = []
+    for i, sc in enumerate(board.scenes):
+        keep = {
+            name: [t for k, t in enumerate(getattr(sc, name)) if f"scenes.{i}.{name}.{k}" not in bad]
+            for name in ("voiceover_ideas", "text_ideas")
+        }
+        scenes.append(sc.model_copy(update=keep))
+    return board.model_copy(update={"scenes": scenes})

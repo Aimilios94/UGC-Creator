@@ -42,7 +42,7 @@ from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
 from .providers.voice import VoiceProvider, build_voice
 from .scene_splitter import Beat, Split, split_story
-from .storyboard_checks import fix_instructions, flag_testimonials
+from .storyboard_checks import drop_flagged_ideas, fix_instructions, flag_testimonials
 from .video_gen import ClipText, clip_prompt, plan_scene_video
 from .voice import plan_voice, usage_for
 
@@ -220,6 +220,7 @@ def write_board(
             sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
             if sr:
                 repo.stage_done(ctx.db, sr["id"], {"model": llm.model_name, "rewrite_failed": True})
+    board = drop_flagged_ideas(board, brief)
     board = check_scene_flow(ctx, job_id, board, brief, attempt=attempt)
     repo.set_storyboard(ctx.db, job_id, board.model_dump(mode="json"))
     repo.set_pending(ctx.db, job_id, None)

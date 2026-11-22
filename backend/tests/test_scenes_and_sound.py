@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from app import worker
 from app.services.music import music_for
 from conftest import BRIEF, new_session
-from helpers import approve, create_job, make_video, to_video
+from helpers import approve, create_job, make_video, pick_lines, to_video
 
 FOUR_BEATS = (
     "0:00 - 0:02 (Establish): handheld shot follows a man crossing a wet zebra crossing at night in the hoodie.\n"
@@ -62,7 +62,7 @@ def test_scenes_can_be_added_and_removed_before_approval_only(client, ctx, sessi
 
 def test_no_voiceover_skips_the_voice_and_its_cost(client, ctx, session_id, photo_bytes):
     job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "voice": "none"}).json()
-    with_voice = create_job(client, session_id, photo_bytes).json()
+    with_voice = pick_lines(client, session_id, create_job(client, session_id, photo_bytes).json())
     assert job["estimate"]["video"]["usd"] < with_voice["estimate"]["video"]["usd"]
     to_video(client, ctx, session_id, job["id"])
     worker.run_once(ctx)

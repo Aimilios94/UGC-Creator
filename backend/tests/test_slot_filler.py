@@ -112,7 +112,8 @@ def test_paragraph_marks_wrong_twice_leave_the_story_to_the_writer():
     bad = {"paragraphs": [{"paragraph": 1, "use": "scene", "scene": 1}], "scenes": [{}]}
     llm = _scripted(bad, bad)
     (ad, split), _ = _fill(brief, _analysis(brief), llm)
-    assert len(llm.calls) == 2 and split.shape == "paragraphs" and split.beats == []  # read whole, as before
+    # Two tries at the marks, then one more because the story names a person the draft left out.
+    assert len(llm.calls) == 3 and split.shape == "paragraphs" and split.beats == []  # read whole, as before
     assert not key_gaps(ad)
 
 

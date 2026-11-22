@@ -293,6 +293,7 @@ function SceneLength({ id, value, onChange, disabled, prices, currency, endsOnNe
 function Mark({ source }) {
   if (source === 'ai_guess') return <span className="mark guess">AI&rsquo;s guess</span>;
   if (source === 'photo') return <span className="mark yours">from your photo</span>;
+  if (source === 'story') return <span className="mark yours">from your story</span>;
   if (source === 'answer') return <span className="mark yours">your answer</span>;
   return <span className="mark yours">yours</span>;
 }
@@ -438,6 +439,29 @@ function SceneGuesses({ structure, scene, last, onEdit, disabled }) {
       </summary>
       <SlotList rows={rows} onEdit={onEdit} disabled={disabled} />
     </details>
+  );
+}
+
+// Voiceover and on-screen text start empty (owner, 22 Nov 2026): nothing is spoken or shown unless
+// you add it. The AI's suggestions sit in a small list to pick from.
+function Ideas({ ideas, label, onPick, disabled }) {
+  if (!ideas?.length || disabled) return null;
+  return (
+    <select
+      className="ideas small"
+      value=""
+      aria-label={label}
+      onChange={(e) => {
+        if (e.target.value) onPick(e.target.value);
+      }}
+    >
+      <option value="">{label}…</option>
+      {ideas.map((t) => (
+        <option key={t} value={t}>
+          {t}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -1108,10 +1132,12 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     <div>
                       <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />
                       <input id={`v${i}`} className={cls(`scenes.${i}.voiceover`)} value={s.voiceover} onChange={onScene(i, 'voiceover')} maxLength={400} disabled={disabled} placeholder={sound.voice === 'none' ? 'No voiceover in this ad' : 'Nothing is said in this scene'} />
+                      <Ideas ideas={s.voiceover_ideas} label="Pick a suggested line" onPick={(t) => editScene(i, 'voiceover', t)} disabled={disabled || sound.voice === 'none'} />
                     </div>
                     <div>
                       <FieldLabel htmlFor={`t${i}`} text="On-screen text" help={HELP.on_screen_text} />
                       <input id={`t${i}`} className={cls(`scenes.${i}.on_screen_text`)} value={s.on_screen_text} onChange={onScene(i, 'on_screen_text')} maxLength={80} disabled={disabled} placeholder="No text on screen" />
+                      <Ideas ideas={s.text_ideas} label="Pick a suggested text" onPick={(t) => editScene(i, 'on_screen_text', t)} disabled={disabled} />
                     </div>
                   </div>
                 </div>
@@ -1444,9 +1470,11 @@ function ImagesStep({ job, onChange, readOnly = false }) {
               </p>
               {endsOnNext(board, i) && <p className="flow-note small">Its clip ends on scene {i + 2}&rsquo;s picture, so the cut matches.</p>}
               <FieldLabel htmlFor={`iv${i}`} text="Voiceover" help={HELP.voiceover} />
-              <input id={`iv${i}`} value={s.voiceover} onChange={(e) => editScene(i, 'voiceover', e.target.value)} maxLength={400} disabled={locked} />
+              <input id={`iv${i}`} value={s.voiceover} onChange={(e) => editScene(i, 'voiceover', e.target.value)} maxLength={400} disabled={locked} placeholder="Nothing is said in this scene" />
+              <Ideas ideas={s.voiceover_ideas} label="Pick a suggested line" onPick={(t) => editScene(i, 'voiceover', t)} disabled={locked} />
               <FieldLabel htmlFor={`it${i}`} text="On-screen text" help={HELP.on_screen_text} />
-              <input id={`it${i}`} value={s.on_screen_text} onChange={(e) => editScene(i, 'on_screen_text', e.target.value)} maxLength={80} disabled={locked} />
+              <input id={`it${i}`} value={s.on_screen_text} onChange={(e) => editScene(i, 'on_screen_text', e.target.value)} maxLength={80} disabled={locked} placeholder="No text on screen" />
+              <Ideas ideas={s.text_ideas} label="Pick a suggested text" onPick={(t) => editScene(i, 'on_screen_text', t)} disabled={locked} />
               <SceneLength
                 id={`ilen${i}`}
                 value={s.duration_s}

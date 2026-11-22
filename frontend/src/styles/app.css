@@ -532,3 +532,4 @@ details.guesses[open] > summary::before { content: '▾ '; }
 .question legend .muted { display: block; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.72rem; margin-bottom: 2px; }
 .question .choice-group { clear: both; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .question .choice.own-words.selected { grid-column: 1 / -1; }
+select.ideas { margin-top: 6px; width: 100%; max-width: 100%; color: var(--text-secondary); }

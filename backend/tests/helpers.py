@@ -58,3 +58,14 @@ def to_video(client, ctx, session_id: str, job_id: str) -> None:
     r = make_video(client, session_id, job_id)
     assert r.status_code == 202, r.text
     assert r.json()["status"] == "queued" and r.json()["phase"] == "video"
+
+
+def pick_lines(client, session_id: str, job: dict) -> dict:
+    """Voiceover lines start empty (owner, 22 Nov 2026): pick each scene's first suggested line, as a
+    user would, and save the storyboard. Returns the job view."""
+    board = job["storyboard"]
+    for sc in board["scenes"]:
+        sc["voiceover"] = (sc.get("voiceover_ideas") or [""])[0]
+    r = client.put(f"/jobs/{job['id']}/storyboard", json=board, headers={"X-Session-Id": session_id})
+    assert r.status_code == 200, r.text
+    return r.json()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
@@ -86,6 +86,14 @@ class SceneDraft(BaseModel):
         default="", max_length=400, description="Spoken line for this scene (short enough for its length), or empty"
     )
     on_screen_text: str = Field(default="", max_length=80)
+    # Suggestions the user can pick from; the fields above start empty unless the user's story gives
+    # the words (owner, 22 Nov 2026: nothing is spoken or shown in the video unless the user chose it).
+    voiceover_ideas: list[Annotated[str, Field(max_length=400)]] = Field(
+        default_factory=list, max_length=3, description="2-3 short spoken lines that fit the scene, to pick from"
+    )
+    text_ideas: list[Annotated[str, Field(max_length=80)]] = Field(
+        default_factory=list, max_length=3, description="2-3 short on-screen headlines, to pick from"
+    )
     duration_s: int = Field(
         default=5, ge=2, le=10, description="Seconds this scene is on screen, 2-10; follow the story's timing if given"
     )

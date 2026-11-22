@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 
 from pydantic_ai import Agent
@@ -58,8 +59,12 @@ Other rules:
 - title: the product name only (no words like "ad" or "UGC").
 - description: one or two plain sentences saying what the viewer sees; with a <story>, the story's own
   text for this scene, word for word.
-- voiceover: one short spoken line per scene that fits its duration_s (about 2.5 words per second).
-- on_screen_text: a short headline for the scene (a few words); it is burned in later.
+- voiceover: only words the user's <story> gives to be spoken in this scene (quoted, or marked as said
+  or narrated), word for word; otherwise empty. voiceover_ideas: 2-3 short spoken lines that fit the scene
+  and its duration_s (about 2.5 words per second), for the user to pick from.
+- on_screen_text: only text the user's <story> asks to show on screen in this scene, word for word;
+  otherwise empty. text_ideas: 2-3 short headlines (a few words) for the user to pick from; they are
+  burned in later.
 - No first-person claims of use, experience or results ("I've used this for 3 months", "my skin
   cleared up") unless the brief or the story states them. No invented testimonials, reviews, statistics,
   prices, discounts or awards. Use the offer exactly as written in the brief, or no offer at all.
@@ -83,8 +88,8 @@ Other rules:
     story gives (people, clothes, places, weather, light, colours, camera moves, timings), scene by
     scene in the story's order;
   - timings in the story set each scene's duration_s (for example 0:00-0:02 is a 2-second scene);
-  - if the story has no spoken lines, write short voiceover lines that fit it, or leave voiceover empty
-    when the story asks for no voice;
+  - if the story has no spoken lines, leave voiceover empty and write voiceover_ideas that fit it (none
+    when the story asks for no voice);
   - the three hooks are alternative opening lines for this same story.
   Add only what the visuals need.
 - If a <sheet> is given, it is the ad's cast and world, read earlier from the user's text or guessed
@@ -149,6 +154,24 @@ def target_scenes(
     if brief.video_length_s:
         return scenes_for_length(brief.video_length_s, end_card_s)
     return None
+
+
+def _plain(text: str) -> str:
+    return re.sub(r"[\s\"“”'‘’]+", " ", (text or "").casefold()).strip(" .!?,")
+
+
+def keep_users_lines(scenes: list[dict], story: str) -> None:
+    """Voiceover and on-screen text stay only when the user's story gives the words; the writer's
+    own lines become ideas to pick from (owner, 22 Nov 2026: nothing the user did not choose is
+    spoken or shown in the video)."""
+    told = _plain(story)
+    for sc in scenes:
+        for field, ideas in (("voiceover", "voiceover_ideas"), ("on_screen_text", "text_ideas")):
+            line = (sc.get(field) or "").strip()
+            if line and not (told and _plain(line) in told):
+                pool = [line, *[i for i in sc.get(ideas) or [] if i.strip() and i.strip() != line]]
+                sc[ideas] = pool[:3]
+                sc[field] = ""
 
 
 def flagged(card) -> str:
@@ -310,6 +333,7 @@ def write_storyboard(
         data["split_note"] = split.summary()[:SPLIT_NOTE_MAX]
     data["continuity"] = "continuous"  # every scene flows into the next (D30); "separate" is the user's choice
     scenes = data["scenes"]
+    keep_users_lines(scenes, brief.story)
     lines = [sc.get("voiceover") or "" for sc in scenes]
     if beats and len(scenes) == len(beats):
         # Scenes without seconds of their own share what the chosen length leaves after the timed

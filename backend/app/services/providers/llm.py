@@ -235,6 +235,9 @@ def mock_storyboard(brief: dict) -> dict:
             scene["image_prompt"] = f"Still first frame of this scene, before anything moves: {first} {keep}"
             scene["motion_prompt"] = part
             scene["voiceover"] = _spoken(part)
+            # Ideas to pick from, like the real writer (owner, 22 Nov 2026: the fields start empty).
+            scene["voiceover_ideas"] = [f"Meet {name}.", f"{name}, made for moments like this."]
+            scene["text_ideas"] = [f"Meet {name}"[:80], name[:80]]
             scene["duration_s"] = _seconds(part) or 5
         # Short opening lines a viewer would hear (the real writer bases them on the story).
         hooks = [
@@ -338,6 +341,44 @@ def _first_sentence(text: str) -> str:
     return (SENTENCE_END.split(text.strip())[0] if text.strip() else "").strip()[:300]
 
 
+_PLACE = re.compile(
+    r"\b(?:in|at|on|near|through|outside|inside|across)\s+((?:the\s+|a\s+)?[A-Za-zÀ-ÿ][\w'-]*(?:\s+[A-Za-zÀ-ÿ][\w'-]*){0,2})",
+    re.I,
+)
+_NOT_PLACE = frozenset(
+    "rain snow sun sunlight morning evening night day dark light slow motion hand hands frame shot focus time "
+    "front back background style camera close my his her their its one two".split()
+)
+_TIME = re.compile(r"\b(dawn|sunrise|morning|noon|afternoon|sunset|golden hour|dusk|evening|night|midnight)\b", re.I)
+_WEATHER = re.compile(r"\b(rain|raining|rainy|snow|snowing|fog|foggy|storm|sunny|cloudy)\b", re.I)
+
+
+def _mock_place(story: str) -> dict:
+    """A place the story names, word for word (mock only); else a guess that fits its weather."""
+    for m in _PLACE.finditer(story):
+        words = m.group(1).split()
+        head = words[1] if words[0].lower() in ("the", "a") and len(words) > 1 else words[0]
+        if head.lower() not in _NOT_PLACE:
+            return {"value": m.group(1), "from_user": True}
+    if _WEATHER.search(story):
+        return {"value": "a city street outdoors"}
+    return {"value": "a bright, tidy room at home"}
+
+
+def _mock_time(story: str) -> dict:
+    """The time and weather the story names, as a reworded value (mock only); else a daylight guess."""
+    said = [m.group(0).lower() for rx in (_TIME, _WEATHER) for m in rx.finditer(story)]
+    if said:
+        return {"value": ", ".join(dict.fromkeys(said)) + ", natural light", "from_story": True}
+    return {"value": "daytime, soft window light"}
+
+
+def _mock_label(story: str) -> str:
+    """The person as the story calls them ("the girl"), else "the person" (mock only)."""
+    m = _PERSON.search(story)
+    return f"the {m.group(1).lower()}" if m and m.group(1).lower() not in ("he", "she") else "the person"
+
+
 def mock_slots(brief: dict) -> dict:
     """The slot filler (mock only): paragraphs with a label ("Style: ...") are notes, the others one
     scene each; the cast and world are plain guesses; each scene's first sentence is the user's action."""
@@ -359,7 +400,7 @@ def mock_slots(brief: dict) -> dict:
             texts[0] = story.strip()  # a story with no shape: its words are the first scene's action
     person = bool(_PERSON.search(story))
     people = (
-        [{"id": "P1", "label": "the person", "look": {"value": "late 20s, short dark hair, relaxed smile"},
+        [{"id": "P1", "label": _mock_label(story), "look": {"value": "late 20s, short dark hair, relaxed smile"},
           "clothes": {"value": f"wears {name}"}}]
         if person else []
     )  # fmt: skip
@@ -389,8 +430,8 @@ def mock_slots(brief: dict) -> dict:
         "paragraphs": uses,
         "sheet": {
             "people": people,
-            "place": {"value": "a bright, tidy room at home"},
-            "time_light": {"value": "daytime, soft window light"},
+            "place": _mock_place(story),
+            "time_light": _mock_time(story),
             "look": {"value": "realistic phone video"},
             "camera_style": {"value": "handheld phone, UGC feel"},
             "never": {"value": "no text, no other brands"},

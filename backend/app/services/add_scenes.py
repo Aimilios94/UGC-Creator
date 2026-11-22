@@ -21,7 +21,7 @@ from .llm_trace import LlmCall, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
 from .scene_plan import add_plan
 from .storyboard import INSTRUCTIONS as WRITER_RULES
-from .storyboard import sheet_block
+from .storyboard import keep_users_lines, sheet_block
 from .styles import LABELS as STYLE_LABELS
 
 
@@ -82,6 +82,7 @@ def insert(board: Storyboard, new: list[NewScene], lengths: list[int]) -> Storyb
     placed: dict[int, list[Scene]] = {}
     for item, seconds in zip(new, lengths, strict=False):
         data = item.scene.model_dump() | {"duration_s": seconds}
+        keep_users_lines([data], "")  # an added scene's lines are ideas to pick from
         scene = Scene.model_validate(data).model_copy(update={"ai_added": True, "uid": ""})
         placed.setdefault(min(hi, max(lo, item.after)), []).append(scene)
     scenes: list[Scene] = list(placed.get(0, []))
