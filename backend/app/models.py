@@ -147,6 +147,14 @@ class ActionSwap(BaseModel):
     reason: str = Field(max_length=200, description='A short reason, for example "Kling renders throws badly"')
 
 
+class SheetFix(BaseModel):
+    """The writer's corrected guess for a cast and world value that contradicts the user's words or
+    answers (D31 phase 5); code applies it only to a value that is still the AI's guess."""
+
+    slot: Literal["place", "time_light", "look", "camera_style", "never", "product_unseen"]
+    value: str = Field(max_length=600)
+
+
 class StoryboardDraft(BaseModel):
     """Three scenes (hook, demo, call to action) and three alternative hooks, as the AI writes them."""
 
@@ -158,6 +166,11 @@ class StoryboardDraft(BaseModel):
         default_factory=list,
         max_length=MAX_SCENES,
         description="Only with a <sheet>: user actions the video AI does badly, swapped (else empty)",
+    )
+    sheet_fixes: list[SheetFix] = Field(
+        default_factory=list,
+        max_length=6,
+        description="Only with a <sheet>: guessed values that contradict the user's words or answers, corrected",
     )
 
     @field_validator("scenes")
@@ -349,6 +362,23 @@ class LengthLine(BaseModel):
     keep: str  # "Keep 22 s"
 
 
+class QuestionView(BaseModel):
+    """A quick question before the storyboard (D31 phase 5): suggestion buttons, a free-text box,
+    "Let the AI decide" (the default) and Skip all."""
+
+    slot: str
+    text: str
+    options: list[str]
+    let_ai_decide: str = "Let the AI decide"
+
+
+class AnswersIn(BaseModel):
+    """Answers by slot; an empty or missing answer is "Let the AI decide". `skip` keeps every guess."""
+
+    answers: dict[str, str] = Field(default_factory=dict, max_length=5)
+    skip: bool = False
+
+
 class LengthIn(BaseModel):
     video_length_s: int = Field(ge=4, le=52)
 
@@ -365,6 +395,7 @@ class JobView(BaseModel):
     variants: list[VariantView] = []
     estimate: Estimate | None = None
     length_line: LengthLine | None = None  # plan v2.3, on the storyboard only
+    questions: list[QuestionView] = []  # quick questions waiting before the storyboard (D31 phase 5)
     clips: list[ClipView] = []  # what each scene's clip gets (D30)
     analysis: ProductAnalysis | None = None
     storyboard: Storyboard | None = None

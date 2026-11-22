@@ -160,6 +160,9 @@ export default function Job({ jobId, view }) {
     );
   }
   const imagesDone = job.status === 'done' || job.phase === 'video';
+  if (job.status === 'draft' && job.questions?.length) {
+    return <QuestionsStep job={job} onChange={update} />;
+  }
   if (view === 'storyboard' || job.status === 'draft') {
     return <StoryboardStep key={job.status} job={job} onChange={update} readOnly={job.status !== 'draft'} />;
   }
@@ -444,6 +447,90 @@ function FieldLabel({ htmlFor, text, help }) {
       {text}
       {help && <Help text={help} />}
     </label>
+  );
+}
+
+// --- step 2a: quick questions (D31 phase 5) ----------------------------------------------------
+// A vague idea leaves a few things to the AI: up to 3 questions before the scenes are written, each
+// with suggestions, your own words, or "Let the AI decide" (the default). Skip all keeps every guess.
+const QUESTION_LABEL = { who: 'Who', product_moment: 'The product', place: 'Where', end: 'The ending', product: 'Your product' };
+
+function QuestionsStep({ job, onChange }) {
+  const questions = job.questions;
+  const [picked, setPicked] = useState({}); // slot -> an option, 'own' or undefined (let the AI decide)
+  const [own, setOwn] = useState({});
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const send = async (skip) => {
+    setBusy(skip ? 'skip' : 'send');
+    setError('');
+    const answers = {};
+    for (const q of questions) {
+      const p = picked[q.slot];
+      if (p === 'own') answers[q.slot] = (own[q.slot] || '').trim();
+      else if (p) answers[q.slot] = p;
+    }
+    try {
+      onChange(await api.answerQuestions(job.id, answers, skip));
+    } catch (err) {
+      setError(err.message);
+      setBusy('');
+    }
+  };
+  return (
+    <div className="page">
+      <Stepper step={2} job={job} />
+      <BackButton onClick={() => goToBrief(job)}>Back to the brief</BackButton>
+      <h1>{job.brief.product_name}</h1>
+      <p className="lead">
+        Your idea leaves {questions.length === 1 ? 'one thing' : `${questions.length} things`} open. Answer what you like; the AI decides the rest and marks it &ldquo;AI&rsquo;s guess&rdquo;. Then the AI writes your scenes (a few cents).
+      </p>
+      {questions.map((q) => {
+        const choice = picked[q.slot];
+        const pick = (value) => setPicked({ ...picked, [q.slot]: value });
+        return (
+          <fieldset key={q.slot} className="card question">
+            <legend>
+              <span className="muted small">{QUESTION_LABEL[q.slot] || q.slot}</span> {q.text}
+            </legend>
+            <div className="choice-group">
+              <label className={`choice${!choice ? ' selected' : ''}`}>
+                <input type="radio" name={`q-${q.slot}`} checked={!choice} onChange={() => pick(undefined)} disabled={Boolean(busy)} />
+                <span className="choice-body">
+                  <span className="choice-title">{q.let_ai_decide}</span>
+                </span>
+              </label>
+              {q.options.map((o) => (
+                <label key={o} className={`choice${choice === o ? ' selected' : ''}`}>
+                  <input type="radio" name={`q-${q.slot}`} checked={choice === o} onChange={() => pick(o)} disabled={Boolean(busy)} />
+                  <span className="choice-body">
+                    <span className="choice-title">{o}</span>
+                  </span>
+                </label>
+              ))}
+              <label className={`choice own-words${choice === 'own' ? ' selected' : ''}`}>
+                <input type="radio" name={`q-${q.slot}`} checked={choice === 'own'} onChange={() => pick('own')} disabled={Boolean(busy)} />
+                <span className="choice-body">
+                  <span className="choice-title">In my own words</span>
+                  {choice === 'own' && (
+                    <input type="text" value={own[q.slot] || ''} onChange={(e) => setOwn({ ...own, [q.slot]: e.target.value })} maxLength={600} aria-label={`Your answer: ${q.text}`} autoFocus disabled={Boolean(busy)} />
+                  )}
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        );
+      })}
+      {error && <p className="error" role="alert">{error}</p>}
+      <div className="actions">
+        <button type="button" className="btn btn-primary" onClick={() => send(false)} disabled={Boolean(busy)}>
+          {busy === 'send' ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />} Write my scenes
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={() => send(true)} disabled={Boolean(busy)}>
+          {busy === 'skip' ? <Loader2 className="spin" size={16} aria-hidden="true" /> : null} Skip all
+        </button>
+      </div>
+    </div>
   );
 }
 

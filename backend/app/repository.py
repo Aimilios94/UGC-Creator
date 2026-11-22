@@ -146,6 +146,21 @@ def set_brief(db: Database, job_id: str, brief: dict) -> bool:
         return row is not None
 
 
+def set_pending(db: Database, job_id: str, pending: dict | None) -> bool:
+    """Quick questions waiting for the user (D31 phase 5). Setting them clears the storyboard (it is
+    written after the answers); None clears them once the storyboard is written."""
+    with db.tx() as c:
+        row = _one(
+            c,
+            """update jobs set pending = %s,
+                      storyboard = case when %s::boolean then null else storyboard end,
+                      updated_at = now()
+               where id = %s and status = 'draft' returning id""",
+            (Jsonb(pending) if pending is not None else None, pending is not None, job_id),
+        )
+        return row is not None
+
+
 def set_storyboard(db: Database, job_id: str, storyboard: dict) -> bool:
     """Storyboards are editable only while the job is a draft."""
     with db.tx() as c:

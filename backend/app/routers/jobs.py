@@ -20,6 +20,7 @@ from ..deps import get_ctx, require_access_code, session_hash
 from ..errors import BudgetExceeded, ProviderNotConfigured, UploadRejected
 from ..models import (
     STORY_MAX,
+    AnswersIn,
     ApproveIn,
     AssetView,
     BrandKit,
@@ -33,6 +34,7 @@ from ..models import (
     LengthLine,
     Money,
     ProductAnalysis,
+    QuestionView,
     ShortenOut,
     SoundIn,
     StageView,
@@ -45,6 +47,7 @@ from ..services.llm_trace import money
 from ..services.pipeline import (
     Context,
     add_scenes_to_board,
+    answer_questions,
     clip_texts,
     estimate_board_usd,
     own_to_extend,
@@ -60,6 +63,14 @@ from ..services.uploads import sanitise_image
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def _questions(job: dict) -> list[QuestionView]:
+    """The quick questions waiting before the storyboard (D31 phase 5), if any."""
+    if job["status"] != "draft" or not job.get("pending"):
+        return []
+    qs = (job["pending"].get("structure") or {}).get("questions") or []
+    return [QuestionView(slot=q["slot"], text=q["text"], options=q["options"]) for q in qs]
 
 
 def job_view(ctx: Context, job: dict) -> JobView:
@@ -111,6 +122,7 @@ def job_view(ctx: Context, job: dict) -> JobView:
         ],
         estimate=_estimate(ctx, board, spent, job) if board is not None else None,
         length_line=_length_line(s, board, brief) if board is not None and job["status"] == "draft" else None,
+        questions=_questions(job),
         clips=[ClipView(**asdict(c)) for c in clip_texts(s, board, brief)] if board is not None else [],
         brief=brief,
         campaign_id=str(job["campaign_id"]) if job.get("campaign_id") else None,
@@ -406,6 +418,23 @@ def from_story(
         raise HTTPException(
             status_code=502, detail="Writing the storyboard from your story failed. Try again."
         ) from None
+    return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+@router.post("/{job_id}/answers", dependencies=[Depends(require_access_code)])
+def answer(job_id: str, body: AnswersIn, sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)) -> JobView:
+    """The quick questions answered or skipped (D31 phase 5): the answers are locked into their slots
+    and the storyboard is written (the writer's usual calls, a few cents)."""
+    job = _own_job(ctx, job_id, sess)
+    if job["status"] != "draft" or not job.get("pending"):
+        raise HTTPException(status_code=409, detail="There are no questions waiting for this ad.")
+    try:
+        answer_questions(ctx, job, body.answers, skip=body.skip)
+    except BudgetExceeded as e:
+        raise HTTPException(status_code=409, detail=e.message) from None
+    except Exception:  # noqa: BLE001 - details go to the log
+        log.exception("writing the storyboard after the questions failed for job %s", job_id)
+        raise HTTPException(status_code=502, detail="Writing the storyboard failed. Try again.") from None
     return job_view(ctx, repo.get_job(ctx.db, job_id))
 
 

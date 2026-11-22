@@ -203,9 +203,9 @@ def _who_part(card, sheet, room: int) -> str:
         product_room = max(len(product), 0)  # the user's own product words (no photo, A6): never cut
     else:
         product_room = room - min(len(people_txt), room // 2)
-    product = fit_text(product, product_room) if product else ""
+    product = _clip_cut(product, product_room) if product else ""
     people_room = room - len(product) - (1 if product and people_txt else 0)
-    people_txt = fit_text(people_txt, people_room) if people_room > 20 else ""
+    people_txt = _clip_cut(people_txt, people_room) if people_room > 20 else ""
     return " ".join(p for p in (people_txt, product) if p)
 
 
@@ -220,6 +220,13 @@ def _sentence(text: str, *, mine: bool = False) -> str:
     return text if text[-1] in ".!?\"”')" else text + "."
 
 
+def _clip_cut(text: str, room: int) -> str:
+    """Our own text cut to the room at a sentence end (or a word), always ending as a sentence."""
+    if len(text) <= room:
+        return text
+    return _sentence(fit_text(text, max(0, room - 1)).rstrip(" ,;:-"), mine=True) if room > 1 else ""
+
+
 def _place_part(card, sheet, room: int) -> str:
     """Place, light and look, most important first, within the room."""
     place = card.place_change.value.strip() or sheet.place.value.strip()
@@ -229,7 +236,7 @@ def _place_part(card, sheet, room: int) -> str:
     for b in (_sentence(b) for b in bits if b):
         nxt = f"{out} {b}" if out else b
         if len(nxt) > room:
-            return out or fit_text(nxt, room)
+            return out or _clip_cut(nxt, room)
         out = nxt
     return out
 
@@ -278,7 +285,7 @@ def build_clip(
 
     def flow(n: int) -> str:
         return " ".join(
-            f"{label}: {_sentence(fit_text(t, n - 1), mine=True)}"
+            f"{label}: {_sentence(fit_text(t, n - 1).rstrip(' ,;:-'), mine=True)}"
             for label, t in (("Starts", starts), ("Ends", ends))
             if t
         )
@@ -303,7 +310,7 @@ def build_clip(
         if mine:
             pieces.append(text)
         elif left > 40:
-            cut = fit_text(text, left - 1)
+            cut = _clip_cut(text, left - 1)
             pieces.append(cut)
             left -= len(cut) + 1
     movement = " ".join(pieces)
@@ -314,9 +321,9 @@ def build_clip(
     if total() > TOTAL_MAX:
         flows = flow(FLOW_PART_SHORT)
     if total() > TOTAL_MAX:
-        place = fit_text(place, max(0, len(place) - (total() - TOTAL_MAX)))
+        place = _clip_cut(place, max(0, len(place) - (total() - TOTAL_MAX)))
     if total() > TOTAL_MAX:
-        who = fit_text(who, max(0, len(who) - (total() - TOTAL_MAX)))
+        who = _clip_cut(who, max(0, len(who) - (total() - TOTAL_MAX)))
     body = " ".join(p for p in (movement, who, flows, place) if p)
     room = TOTAL_MAX - len(body) - len(rules)
     used_notes = "none"

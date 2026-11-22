@@ -245,7 +245,7 @@ def mock_storyboard(brief: dict) -> dict:
     else:
         for scene, line in zip(scenes, lines, strict=True):
             scene["voiceover"] = line
-    swaps = []
+    swaps, fixes = [], []
     if sheet := brief.get("_sheet"):
         # Like the real writer with a sheet (phase 4): the movement is only a timeline for the
         # scene's own action (none when the user's text has its times), and a user action that
@@ -261,7 +261,12 @@ def mock_storyboard(brief: dict) -> dict:
                 safe = re.sub(r"\bthrow\b", "hold out", safe)
                 swaps.append({"scene": i + 1, "action": safe.rstrip(".") + "; the crowd stays still behind them.",
                               "reason": "Kling renders throws and catches badly"})  # fmt: skip
-    return {"title": name, "scenes": scenes, "hooks": hooks, "cta_text": "Shop now", "swaps": swaps}
+        # A guessed light that contradicts an answer is corrected (phase 5), like the real writer.
+        answered = " ".join((sheet.get("answers") or {}).values()).lower()
+        if "night" in answered and "time_light" in (sheet.get("guessed") or []) and "night" not in sheet["time_light"]:
+            fixes.append({"slot": "time_light", "value": "night, street lamps and neon light"})
+    return {"title": name, "scenes": scenes, "hooks": hooks, "cta_text": "Shop now", "swaps": swaps,
+            "sheet_fixes": fixes}  # fmt: skip
 
 
 def _mock_timeline(seconds: int) -> str:
@@ -371,7 +376,7 @@ def mock_slots(brief: dict) -> dict:
                 "end": {"value": "the camera settles on the product"} if i == len(texts) - 1 else {"value": ""},
             }
         )
-    short = len(story.split()) < 12
+    short = 0 < len(story.split()) < 12  # a short, vague story; with no story the brief leads
     questions = (
         [
             {"slot": "who", "text": "Who is in your ad?", "options": ["A young man", "A young woman", "Only hands"]},

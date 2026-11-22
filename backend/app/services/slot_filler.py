@@ -12,7 +12,8 @@ analysis and the split story into the fixed structure (`ad_structure.AdStructure
   check fails it asks once more; if that fails too, the writer reads the story whole, as before.
 - Every key slot (who, the action, how the product is shown, the place, how the ad ends) ends up
   filled: by the user, or by a guess that the storyboard marks "AI's guess".
-- Up to 3 quick questions about guessed key slots (shown in phase 5).
+- Up to 3 quick questions about guessed key slots; code keeps only those still guessed (`open_questions`)
+  and the page asks them before the storyboard is written (phase 5); answers are locked (`apply_answers`).
 """
 
 from __future__ import annotations
@@ -125,8 +126,9 @@ Read the user's brief, the photo analysis and the user's story into the structur
   When the user did not say, guess, and set from_user false: the page marks it "AI's guess".
 - from_user is true only when the value appears word for word in the user's text. A value you
   shortened, reworded or made up is a guess.
-- questions: at most 3, only about key slots you had to guess and that matter most (who is in it,
-  how the product is shown, where it happens, how it ends), in that order of priority. One short
+- questions: at most 3 and usually 1 or 2, only about key slots you had to guess and whose answer
+  changes the ad most (who is in it, how the product is shown, where it happens, how it ends), in that
+  order of priority; never about something the user's text already says. One short
   line each, with 2-4 short answer buttons that fit this product and story. None when the user's
   text already answers them.
 - Keep every value short: a phrase or one sentence."""
@@ -396,3 +398,64 @@ def fill_slots(
         cost_usd=cost_usd(llm.model_name, usage),
     )
     return (structure, used), call
+
+
+# --- quick questions (strategy plan phase 5) -----------------------------------------------------
+LET_AI_DECIDE = "Let the AI decide"
+QUESTION_ORDER = ("product", "who", "product_moment", "place", "end")  # the plan's priority
+MAX_QUESTIONS = 3
+
+
+def still_guessed(ad: AdStructure, slot: str) -> bool:
+    """Whether a key slot is still the AI's guess everywhere (the user said nothing about it)."""
+    if slot == "product":
+        return not ad.has_photo and ad.sheet.product.source != "answer" and len(ad.sheet.product.value) < 40
+    if slot == "who":
+        return not any(p.look.locked or p.clothes.locked for p in ad.sheet.people)
+    if slot == "product_moment":
+        return not any(sc.product_moment.locked for sc in ad.scenes)
+    if slot == "place":
+        return not ad.sheet.place.locked and not any(sc.place_change.locked for sc in ad.scenes)
+    if slot == "end":
+        return ad.kind == "video" and not ad.scenes[-1].end.locked
+    return False
+
+
+def open_questions(ad: AdStructure) -> list[Question]:
+    """The slot filler's questions that code keeps: only about key slots still guessed, one per slot,
+    in the plan's order, at most 3. A detailed prompt usually keeps none."""
+    by_slot: dict[str, Question] = {}
+    for q in ad.questions:
+        if q.slot in QUESTION_ORDER and q.slot not in by_slot and still_guessed(ad, q.slot):
+            by_slot[q.slot] = q
+    return [by_slot[s] for s in QUESTION_ORDER if s in by_slot][:MAX_QUESTIONS]
+
+
+def apply_answers(ad: AdStructure, answers: dict[str, str]) -> AdStructure:
+    """The user's answers into their slots, with source "answer" (locked: the AI never changes them).
+    An empty answer is "Let the AI decide": the guess stays, marked as such."""
+    ad = ad.model_copy(deep=True)
+    for q in ad.questions:
+        text = (answers.get(q.slot) or "").strip()[:VALUE_MAX]
+        if not text or text == LET_AI_DECIDE:
+            continue
+        q.answer = text
+        answer = Slot(value=text, source="answer")
+        if q.slot == "who":
+            if ad.sheet.people:
+                ad.sheet.people[0].look = answer
+            else:
+                ad.sheet.people.append(Person(id="P1", label=text[:60], look=answer))
+                for sc in ad.scenes:
+                    sc.who = CastRefs(ids=["P1", *[i for i in sc.who.ids if i != "P1"]], source=sc.who.source)
+        elif q.slot == "product_moment":
+            for sc in ad.scenes:
+                if not sc.product_moment.locked:
+                    sc.product_moment = answer.model_copy()
+        elif q.slot == "place":
+            ad.sheet.place = answer
+        elif q.slot == "end":
+            ad.scenes[-1].end = answer
+        elif q.slot == "product":
+            ad.sheet.product_unseen = answer
+    return ad

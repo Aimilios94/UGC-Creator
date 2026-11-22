@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import copy
 
+from pydantic_ai import ModelResponse, ToolCallPart
+from pydantic_ai.models.function import FunctionModel
+
 from app.models import Brief, ProductAnalysis, Scene
 from app.services.ad_structure import (
     AdStructure,
@@ -18,7 +21,7 @@ from app.services.ad_structure import (
     merge_structure,
     user,
 )
-from app.services.providers.llm import build_llm, mock_analysis
+from app.services.providers.llm import LlmHandle, _brief_from, build_llm, mock_analysis, mock_storyboard
 from app.services.scene_splitter import split_story
 from app.services.slot_filler import fill_slots
 from app.services.storyboard import write_storyboard
@@ -30,6 +33,7 @@ from app.services.video_gen import (
     clip_prompt,
     negative_prompt,
 )
+from app.services.weak_spots import weak_spot
 from conftest import BRIEF, make_settings
 from helpers import create_job
 
@@ -223,3 +227,31 @@ def test_an_edited_scene_text_is_the_users_and_drops_the_swap(client, session_id
     card = saved["storyboard"]["structure"]["scenes"][1]
     assert card["swap"] is None and card["text"] == {"value": "he hands the hoodie to his friend.", "source": "user"}
     assert "he hands the hoodie to his friend." in saved["clips"][1]["text"]
+
+
+# --- A1 weak spots found in code (live golden 03, 22 Nov 2026: the real writer kept the throw) -----
+def test_weak_spots_are_found_in_the_users_words():
+    assert weak_spot("he throws the hoodie to his friend in the crowd") == "throws and catches"
+    assert weak_spot("she pours coffee into the mug") == "pouring and liquids in motion"
+    assert weak_spot("he walks out of a concert, hood up") == ""
+
+
+def test_a_writer_that_keeps_a_weak_spot_is_asked_once_more():
+    brief = _brief(THROW)
+    analysis = ProductAnalysis.model_validate(mock_analysis(brief.model_dump()))
+    s = make_settings()
+    (ad, split), _ = fill_slots(build_llm(s, "slots"), brief, analysis, split_story(THROW))
+    calls = []
+
+    def respond(messages, info):
+        draft = mock_storyboard(_brief_from(messages))
+        if not calls:
+            draft["swaps"] = []  # the first answer misses the swap, as the real writer did
+        calls.append(messages)
+        return ModelResponse(parts=[ToolCallPart(tool_name=info.output_tools[0].name, args=draft)])
+
+    llm = LlmHandle(model=FunctionModel(respond, model_name="w"), provider="mock", model_name="mock", settings={})
+    board, _ = write_storyboard(llm, brief, analysis, split=split, structure=ad)
+    assert len(calls) == 2 and "scene 2 (throws and catches)" in str(calls[1])
+    assert '"weak_spot": "throws and catches"' in str(calls[0])
+    assert AdStructure.model_validate(board.structure).scenes[1].swap is not None

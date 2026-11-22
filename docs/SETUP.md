@@ -147,7 +147,7 @@ Every site that calls the API must be listed in `CORS_ORIGINS` in `deploy/gcp/ap
 
 ### M2 deploy (not run yet; each step with the owner's go)
 
-1. Apply the schema to Neon (`scripts/apply_schema.py`): new tables `campaigns`, `brand_kits`, `variants`; new stage, asset and cache kinds (including the `continuity` and `shorten` stages, D30, and the `slots` and `add_scenes` stages, D31); `jobs.phase` (D27). Scene ids, notes, continuity, the start/end notes and the slot filler's structure live in the storyboard JSON (no schema change).
+1. Apply the schema to Neon (`scripts/apply_schema.py`): new tables `campaigns`, `brand_kits`, `variants`; new stage, asset and cache kinds (including the `continuity` and `shorten` stages, D30, and the `slots` and `add_scenes` stages, D31); `jobs.phase` (D27); `jobs.pending` (the quick questions waiting for answers, D31). Scene ids, notes, continuity, the start/end notes and the slot filler's structure live in the storyboard JSON (no schema change).
 2. The worker now makes the voiceover, so it needs the OpenAI key: grant `ugc-worker` `roles/secretmanager.secretAccessor` on `openai-api-key` and add `OPENAI_API_KEY=openai-api-key:latest` to the job's `--set-secrets` ([D26](../DECISIONS.md)).
 3. Set `RENDER_SCENES: "5"` in both `deploy/gcp/*.env.yaml` (the most scenes rendered, D28; pinned to 1 until then, [D25](../DECISIONS.md)), build the image (it now installs ffmpeg) and update the job and the service. The new API changes what the live site talks to (pictures, then video), so the M2 frontend goes live with it.
 4. One paid smoke run of a full 3-scene ad (about 1.05 EUR), with the owner's go and limit.

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from app.models import Brief, Hook, JobView, ProductAnalysis, Scene, Storyboard, render_seconds
+from app.models import Brief, Hook, JobView, ProductAnalysis, QuestionView, Scene, Storyboard, render_seconds
 from app.services import compose as compose_module
 from app.services.ad_structure import AdStructure, key_gaps
 from app.services.continuity import check_continuity
@@ -24,14 +24,14 @@ from app.services.pipeline import clip_texts, estimate_board_usd
 from app.services.providers.llm import build_llm, mock_analysis
 from app.services.scene_plan import length_line, real_length
 from app.services.scene_splitter import split_story
-from app.services.slot_filler import fill_slots
+from app.services.slot_filler import LET_AI_DECIDE, fill_slots, open_questions
 from app.services.storyboard import write_storyboard
 from app.services.video_gen import RULES_MAX, clip_rules
 from conftest import make_settings
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden_v2"
 FIXTURES = sorted(GOLDEN.glob("*.json"))
-CHECKED_NOW = 4
+CHECKED_NOW = 5
 
 # The phase of the plan that can check each expected result.
 PHASE = {
@@ -276,6 +276,29 @@ def test_phase_4_checks(path):
             assert part in text
         for part in want.get("clip_must_not_contain_any", []):
             assert part not in text
+
+
+PHASE_5_KEYS = {k for k, n in PHASE.items() if n == 5}
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
+def test_phase_5_checks(path):
+    """Quick questions (mock slot filler): how many code keeps, their buttons, "Let the AI decide"."""
+    fx = _load(path)
+    expect = fx["expect"]
+    if "ci" not in fx["runs_in"] or not PHASE_5_KEYS & set(expect):
+        pytest.skip("no phase 5 checks in CI for this fixture")
+    inp = fx["input"]
+    brief = brief_from_fixture(inp)
+    analysis = ProductAnalysis.model_validate(mock_analysis(brief.model_dump())) if inp["photo"] else None
+    (ad, _), _ = fill_slots(build_llm(make_settings(), "slots"), brief, analysis, split_story(brief.story))
+    questions = open_questions(ad)
+    if want := expect.get("questions"):
+        assert want["min"] <= len(questions) <= want["max"]
+    if want := expect.get("question_buttons_per_question"):
+        assert all(want["min"] <= len(q.options) <= want["max"] for q in questions)
+    if expect.get("question_has_let_ai_decide"):
+        assert QuestionView(slot="who", text="t", options=["a", "b"]).let_ai_decide == LET_AI_DECIDE
 
 
 def mock_photo_analysis(brief):

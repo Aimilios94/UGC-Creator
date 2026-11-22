@@ -21,7 +21,7 @@ import logging
 import tempfile
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .. import repository as repo
@@ -41,7 +41,7 @@ from .providers.llm import LlmHandle, build_llm
 from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
 from .providers.voice import VoiceProvider, build_voice
-from .scene_splitter import Split, split_story
+from .scene_splitter import Beat, Split, split_story
 from .storyboard_checks import fix_instructions, flag_testimonials
 from .video_gen import ClipText, clip_prompt, plan_scene_video
 from .voice import plan_voice, usage_for
@@ -157,15 +157,31 @@ def _run_llm_stage(
 
 
 def write_board(
-    ctx: Context, job_id: str, brief: Brief, analysis: ProductAnalysis, brand: BrandKit | None, attempt: int = 1
-) -> Storyboard:
+    ctx: Context,
+    job_id: str,
+    brief: Brief,
+    analysis: ProductAnalysis,
+    brand: BrandKit | None,
+    attempt: int = 1,
+    *,
+    ask: bool = True,
+    filled: tuple[AdStructure | None, Split | None] | None = None,
+) -> Storyboard | None:
     """Write (or rewrite, for example from the user's own story) the storyboard and save it.
+
+    Quick questions (D31 phase 5): when the slot filler leaves key slots to the AI's guess and has
+    questions about them, they are saved with the structure and nothing more is written (returns
+    None); `answer_questions` writes the storyboard once the user answers or skips them.
 
     Testimonial rule: if the code check flags lines, the storyboard is written once more
     with those lines as feedback. Lines still flagged after that are left for the user to
     edit on the Storyboard step (Approve is refused while any remain).
     """
-    structure, split = fill_slots(ctx, job_id, brief, analysis, attempt=attempt)
+    structure, split = filled or fill_slots(ctx, job_id, brief, analysis, attempt=attempt)
+    if ask and structure is not None and (questions := slot_filler.open_questions(structure)):
+        structure.questions = questions
+        repo.set_pending(ctx.db, job_id, {"structure": structure.model_dump(mode="json"), "split": dump_split(split)})
+        return None
     llm = ctx.llm_factory("storyboard")
     board = _run_llm_stage(
         ctx,
@@ -206,6 +222,38 @@ def write_board(
                 repo.stage_done(ctx.db, sr["id"], {"model": llm.model_name, "rewrite_failed": True})
     board = check_scene_flow(ctx, job_id, board, brief, attempt=attempt)
     repo.set_storyboard(ctx.db, job_id, board.model_dump(mode="json"))
+    repo.set_pending(ctx.db, job_id, None)
+    return board
+
+
+def dump_split(split: Split | None) -> dict | None:
+    return asdict(split) if split is not None else None
+
+
+def load_split(data: dict | None) -> Split | None:
+    if not data:
+        return None
+    beats = [Beat(**b) for b in data.get("beats", [])]
+    return Split(data["shape"], beats, data.get("notes", ""), list(data.get("messages", [])))
+
+
+def answer_questions(ctx: Context, job: dict, answers: dict[str, str], *, skip: bool = False) -> Storyboard:
+    """The quick questions answered (or skipped): the answers go into their slots, locked, and the
+    storyboard is written from the stored structure. No extra AI call: the writer runs as it would have."""
+    job_id = str(job["id"])
+    pending = job["pending"]
+    structure = AdStructure.model_validate(pending["structure"])
+    if not skip:
+        structure = slot_filler.apply_answers(structure, answers)
+    brief = Brief.model_validate(job["brief"])
+    analysis = ProductAnalysis.model_validate(job["analysis"])
+    brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
+    sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
+    board = write_board(
+        ctx, job_id, brief, analysis, brand, attempt=(sr["attempt"] + 1) if sr else 1,
+        ask=False, filled=(structure, load_split(pending.get("split"))),
+    )  # fmt: skip
+    assert board is not None
     return board
 
 
@@ -275,7 +323,9 @@ def check_scene_flow(ctx: Context, job_id: str, board: Storyboard, brief: Brief,
         return board
 
 
-def prepare_storyboard(ctx: Context, job: dict, photo: bytes, content_type: str) -> tuple[ProductAnalysis, Storyboard]:
+def prepare_storyboard(
+    ctx: Context, job: dict, photo: bytes, content_type: str
+) -> tuple[ProductAnalysis, Storyboard | None]:
     """Analyze the photo and write the storyboard. Cheap LLM calls only; nothing renders."""
     job_id = str(job["id"])
     brief = Brief.model_validate(job["brief"])
@@ -288,7 +338,7 @@ def prepare_storyboard(ctx: Context, job: dict, photo: bytes, content_type: str)
     return analysis, write_board(ctx, job_id, brief, analysis, brand)
 
 
-def storyboard_from_story(ctx: Context, job: dict, story: str) -> Storyboard:
+def storyboard_from_story(ctx: Context, job: dict, story: str) -> Storyboard | None:
     """The user's own story leads: the storyboard is written again from it (one cheap LLM call)."""
     job_id = str(job["id"])
     brief = Brief.model_validate({**job["brief"], "story": story})

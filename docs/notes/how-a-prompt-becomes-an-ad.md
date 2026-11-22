@@ -3,7 +3,7 @@
 This note is for planning a new way to read any prompt: long or short, with scenes or without, well or badly written.
 It describes what the app does **today**, step by step, then where it is weak.
 Code: `backend/app/services/` (each step names its file).
-Decisions behind it: `DECISIONS.md` D27–D31. Updated as the strategy plan's phases ship (phase 4: 22 Nov 2026).
+Decisions behind it: `DECISIONS.md` D27–D31. Updated as the strategy plan's phases ship (phase 5: 22 Nov 2026).
 
 ## 1. Tools and hard limits
 
@@ -57,6 +57,11 @@ Other fixed rules:
 - **Paragraphs (2–5, no other shape):** the AI marks each paragraph scene or notes by number; code checks every paragraph is used once, in order, then builds the scenes from the paragraphs themselves (the user's words, whole). If the marks are wrong it asks once more; then the writer reads the story whole, as before.
 - **Scene count:** from the story's shape; else the chosen length; else 3 (hook, demo, call to action).
 - **The writer gets the sheet** and follows it in every scene; the story wins where they differ. The storyboard carries the structure and shows it: "Cast and world" at the top and "What the AI used" in each scene, marked "yours" or "AI's guess". If the slot filler fails, the storyboard is written as before, without marks.
+
+### Step 3c. Quick questions (since phase 5 of the strategy plan, D31)
+- Code keeps the slot filler's questions only for key slots still guessed (who, how the product is shown, where, how it ends; with no photo, the product's look first), one per slot, at most 3.
+- If any are left, the job waits (`jobs.pending`) and the page asks them on one screen: "Let the AI decide" (default), suggestion buttons, "In my own words", "Skip all".
+- Answers go into their slots with source `answer` (locked); then step 5 runs once. The writer may correct a guessed sheet value that contradicts an answer.
 
 ### Step 4. Decide the number of scenes and their lengths, in code (`scene_plan.py`)
 
@@ -191,7 +196,7 @@ Example, the owner's 20 s prompt (7,279 characters, 5 timed scenes, 3,371 charac
 | Prompt | What happens now | Weak point |
 |---|---|---|
 | No story | 3 scenes (hook, demo, call to action), or the count from the chosen length; the writer invents everything from the brief | Generic; nothing asks the user what they picture |
-| Short, vague story ("guy wearing my hoodie in the rain") | Since phase 3: 3 scenes on Auto; the slot filler fills the gaps and the storyboard marks each one "AI's guess" | The user sees what was assumed but is not asked yet (quick questions: phase 5) |
+| Short, vague story ("guy wearing my hoodie in the rain") | Since phase 3: 3 scenes on Auto; the slot filler fills the gaps and the storyboard marks each one "AI's guess" | Since phase 5: up to 3 quick questions first (only about what the AI would guess), with "Let the AI decide" and "Skip all" |
 | Long story without times | Since phase 3: paragraphs are split into scenes and notes by the slot filler, checked in code, in the user's words | One block with no paragraphs still goes to the writer whole |
 | "Scene 1: …, Scene 2: …" without times | Since phase 2 (D31): one scene per heading in code, seconds from the heading if given, the text around them as notes; numbered or bulleted lists of actions the same way | Fixed in phase 2 |
 | Timed shot list (`0:00 – 0:04 …`) | Exact scenes and lengths; beat text kept as the description; notes extracted; since phase 4 the beat goes to the clip word for word | Fixed in phase 4 |
@@ -201,7 +206,7 @@ Example, the owner's 20 s prompt (7,279 characters, 5 timed scenes, 3,371 charac
 
 ## 5. What is missing for "any prompt in, a good ad out"
 
-1. **No questions.** The app never asks the user to fill a gap: who is in it, where, which product moment, how it ends. The writer guesses.
+1. **No questions.** The app never asks the user to fill a gap: who is in it, where, which product moment, how it ends. The writer guesses. *(Fixed in phase 5: up to 3 quick questions before the writer, answers locked.)*
 2. **No fixed structure for a scene.** Each scene is free text. There is no checklist (subject, action, camera, start, end, product moment, light) that every scene must fill, so we cannot tell what is missing. *(Since phase 3: the slot filler fills the structure and marks every guess; since phase 4 the clips are built from it.)*
 3. **Scene detection depends on time stamps.** Headings, numbered lists or paragraphs are not used. *(Fixed in phases 2 and 3.)*
 4. **The user's words are not what Kling reads.** The writer rewrites the movement, and nothing checks that details were kept. *(Fixed in phase 4: the user's words go to the clip word for word; a swap for a Kling weak spot is shown with Undo.)*

@@ -141,6 +141,10 @@ export const api = {
     request(`/jobs/${encodeURIComponent(id)}/length`, { method: 'PUT', json: { video_length_s: seconds } }),
   // "Add scenes to reach 40 s": one cheap AI call; the new scenes are marked as the AI's guess.
   addScenes: (id) => request(`/jobs/${encodeURIComponent(id)}/scenes/add`, { method: 'POST' }),
+  // Quick questions (D31 phase 5): answers by slot ('' = let the AI decide), or skip all; then the
+  // storyboard is written (the writer's usual calls, a few cents).
+  answerQuestions: (id, answers, skip = false) =>
+    request(`/jobs/${encodeURIComponent(id)}/answers`, { method: 'POST', json: { answers, skip } }),
   voices: () => request('/voices'),
   music: () => request('/music'),
 };

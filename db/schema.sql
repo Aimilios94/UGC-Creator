@@ -195,3 +195,8 @@ alter table variants add column if not exists output jsonb;  -- compose summary:
 alter table jobs add column if not exists phase text not null default 'video';
 alter table jobs drop constraint if exists jobs_phase_check;
 alter table jobs add constraint jobs_phase_check check (phase in ('images', 'video'));
+
+-- Quick questions (D31 strategy phase 5): when a vague idea leaves key slots to the AI's guess, the
+-- slot filler's structure waits here with up to 3 questions until the user answers or skips them;
+-- then the storyboard is written and this is cleared. {"structure": AdStructure, "split": Split}
+alter table jobs add column if not exists pending jsonb;
