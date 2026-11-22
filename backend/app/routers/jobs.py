@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from dataclasses import asdict
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field, ValidationError
@@ -39,6 +40,7 @@ from ..models import (
     VariantView,
 )
 from ..services import job_trigger
+from ..services.ad_structure import AdStructure, merge_structure
 from ..services.llm_trace import money
 from ..services.pipeline import (
     Context,
@@ -52,6 +54,7 @@ from ..services.pipeline import (
     storyboard_from_story,
 )
 from ..services.scene_plan import length_line
+from ..services.slot_filler import fill_gaps
 from ..services.storyboard_checks import flag_testimonials
 from ..services.uploads import sanitise_image
 
@@ -108,7 +111,7 @@ def job_view(ctx: Context, job: dict) -> JobView:
         ],
         estimate=_estimate(ctx, board, spent, job) if board is not None else None,
         length_line=_length_line(s, board, brief) if board is not None and job["status"] == "draft" else None,
-        clips=[ClipView(**c.__dict__) for c in clip_texts(s, board, brief)] if board is not None else [],
+        clips=[ClipView(**asdict(c)) for c in clip_texts(s, board, brief)] if board is not None else [],
         brief=brief,
         campaign_id=str(job["campaign_id"]) if job.get("campaign_id") else None,
         brand=BrandKit.model_validate(job["brand"]) if job.get("brand") else None,
@@ -202,8 +205,20 @@ def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool) -> Story
                 status_code=422, detail="Upload an image for that scene first, or choose another source."
             )
         scenes.append(sc)
-    # The structure (the slot filler's marks) is the server's: never taken from the browser.
-    return new.model_copy(update={"scenes": scenes, "structure": old.structure})
+    return with_structure(new.model_copy(update={"scenes": scenes}), old)
+
+
+def with_structure(new: Storyboard, old: Storyboard | None) -> Storyboard:
+    """The browser's storyboard with the stored structure and the user's edits to it (phase 4): an
+    edited value becomes the user's; sources, swaps and who is in each shot stay the server's (a
+    swap may only be undone). A key slot emptied on the page gets a plain guess back."""
+    if old is None or not old.structure:
+        return new.model_copy(update={"structure": None})
+    stored = AdStructure.model_validate(old.structure)
+    edits = AdStructure.model_validate(new.structure) if new.structure else None
+    ad = merge_structure(stored, edits, old.scenes, new.scenes)
+    fill_gaps(ad)
+    return new.model_copy(update={"structure": ad.model_dump(mode="json")})
 
 
 def _check_ready(ctx: Context, job: dict, board: Storyboard, *, phase: str) -> None:
@@ -436,7 +451,9 @@ def preview_clips(
     """The exact text each clip would get for this (unsaved) storyboard. Free: nothing is called or saved."""
     job = _own_job(ctx, job_id, sess)
     brief = Brief.model_validate(job["brief"])
-    return [ClipView(**c.__dict__) for c in clip_texts(ctx.settings, board, brief)]
+    stored = Storyboard.model_validate(job["storyboard"]) if job.get("storyboard") else None
+    board = with_structure(board, stored)
+    return [ClipView(**asdict(c)) for c in clip_texts(ctx.settings, board, brief)]
 
 
 def _editable_text(job: dict) -> bool:
@@ -455,14 +472,15 @@ def shorten(
         raise HTTPException(status_code=409, detail="The scenes are fixed once the video is being made.")
     if not 0 <= idx < min(len(board.scenes), ctx.settings.render_scenes):
         raise HTTPException(status_code=404, detail="No such scene.")
+    board = with_structure(board, Storyboard.model_validate(job["storyboard"]) if job.get("storyboard") else None)
     try:
-        text = shorten_scene(ctx, job, board, idx)
+        text, field = shorten_scene(ctx, job, board, idx)
     except BudgetExceeded as e:
         raise HTTPException(status_code=409, detail=e.message) from None
     except Exception:  # noqa: BLE001 - details go to the log
         log.exception("shortening scene %s failed for job %s", idx, job_id)
         raise HTTPException(status_code=502, detail="Shortening failed. Try again, or shorten it yourself.") from None
-    return ShortenOut(text=text)
+    return ShortenOut(text=text, field=field)
 
 
 @router.post("/{job_id}/scenes/{idx}/image", dependencies=[Depends(require_access_code)])

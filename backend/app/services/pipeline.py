@@ -43,7 +43,7 @@ from .providers.storage import Storage
 from .providers.voice import VoiceProvider, build_voice
 from .scene_splitter import Split, split_story
 from .storyboard_checks import fix_instructions, flag_testimonials
-from .video_gen import ClipText, clip_prompt, plan_scene_video, too_long_by
+from .video_gen import ClipText, clip_prompt, plan_scene_video
 from .voice import plan_voice, usage_for
 
 log = logging.getLogger(__name__)
@@ -743,10 +743,19 @@ def chain_frame(ctx: Context, job: dict, idx: int, prev_video: dict, cut_s: floa
     return asset
 
 
+def board_structure(board: Storyboard):
+    """The cast and world sheet and the scene cards by scene id, or (None, {}) for an older board."""
+    if not board.structure:
+        return None, {}
+    ad = AdStructure.model_validate(board.structure)
+    return ad.sheet, {c.uid: c for c in ad.scenes if c.uid}
+
+
 def clip_texts(s: Settings, board: Storyboard, brief: Brief) -> list[ClipText]:
     """The exact text each scene's clip gets, as the worker will send it (D30), for the preview."""
     scenes = board.scenes[: s.render_scenes]
     n = len(scenes)
+    sheet, cards = board_structure(board)
     return [
         clip_prompt(
             sc,
@@ -757,6 +766,8 @@ def clip_texts(s: Settings, board: Storyboard, brief: Brief) -> list[ClipText]:
             continuous=board.continuity == "continuous",
             ends_on_next=i + 1 < n and ends_on_next_picture(board, i + 1, scenes[i + 1]),
             keep_same=board.keep_same,
+            sheet=sheet,
+            card=cards.get(sc.uid),
         )
         for i, sc in enumerate(scenes)
     ]
@@ -767,26 +778,20 @@ def scenes_too_long(s: Settings, board: Storyboard, brief: Brief) -> list[tuple[
     return [(i + 1, c.too_long_by) for i, c in enumerate(clip_texts(s, board, brief)) if c.too_long_by > 0]
 
 
-def shorten_scene(ctx: Context, job: dict, board: Storyboard, idx: int) -> str:
-    """ "Shorten it for me": one cheap LLM call; returns the scene's shorter movement text (not saved)."""
+def shorten_scene(ctx: Context, job: dict, board: Storyboard, idx: int) -> tuple[str, str]:
+    """ "Shorten it for me": one cheap LLM call; returns the scene's shorter text (not saved) and the
+    field it goes in: the movement, or, for a clip built from the user's own scene text, the scene text."""
     s = ctx.settings
     brief = Brief.model_validate(job["brief"])
-    scenes = board.scenes[: s.render_scenes]
-    scene = scenes[idx]
-    over = too_long_by(
-        scene,
-        style=brief.visual_style,
-        idx=idx,
-        count=len(scenes),
-        ends_on_next=idx + 1 < len(scenes) and ends_on_next_picture(board, idx + 1, scenes[idx + 1]),
-        continuous=board.continuity == "continuous",
-    )
-    text = scene.motion_prompt.strip() or scene.description.strip()
+    scene = board.scenes[: s.render_scenes][idx]
+    clip = clip_texts(s, board, brief)[idx]
+    field = clip.shorten_field
+    text = (scene.description if field == "description" else scene.motion_prompt).strip() or scene.description.strip()
     # Fit with some room left for how the shot starts and ends and the style notes.
-    target = max(300, len(text) - over - 400)
+    target = max(300, len(text) - clip.too_long_by - (100 if board.structure else 400))
     llm = ctx.llm_factory("shorten")
     sr = repo.get_stage_run(ctx.db, str(job["id"]), "shorten", idx)
-    return _run_llm_stage(
+    shorter = _run_llm_stage(
         ctx,
         str(job["id"]),
         "shorten",
@@ -795,6 +800,7 @@ def shorten_scene(ctx: Context, job: dict, board: Storyboard, idx: int) -> str:
         attempt=(sr["attempt"] + 1) if sr else 1,
         scene_idx=idx,
     )
+    return shorter, field
 
 
 def crop_keep_image(a: float, b: float) -> float:
@@ -859,6 +865,7 @@ def run_job(ctx: Context, job: dict) -> None:
             run_voice_stage(ctx, job, row["idx"], scene.voiceover, brief.voice, tone)
     prev_video = None
     prev_scene = None
+    sheet, cards = board_structure(board)  # phase 4: every clip is built from the structure's slots
     scenes = [Scene.model_validate(r["data"]) for r in rows]
     for pos, row in enumerate(rows):
         idx = row["idx"]
@@ -893,6 +900,8 @@ def run_job(ctx: Context, job: dict) -> None:
                 end_image=as_input(end) if end else None,
                 end_image_sha256=end["sha256"] if end else None,
                 keep_same=board.keep_same,
+                sheet=sheet,
+                card=cards.get(scene.uid),
             )
 
         video = run_media_stage(ctx, job, "video", idx, plan_video, meta={"ends_on_next": True} if end else None)

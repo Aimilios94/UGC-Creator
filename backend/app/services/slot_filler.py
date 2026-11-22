@@ -112,9 +112,12 @@ Read the user's brief, the photo analysis and the user's story into the structur
   word, a short exact phrase from the <story> or <brief>). Where the user gave nothing, write a
   short, concrete guess that fits the product, the brief and the story (from_user false). Every
   person in the ad gets an entry with an id (P1, P2...). The product's own look is given in code:
-  do not describe it, only details the photo cannot show (product_unseen).
+  do not describe it. product_unseen: only visible details the photo or the user's text cannot show
+  (the back, the inside, the other side), never facts the user did not give (sizes, capacity,
+  materials, features, claims); empty when there are none.
 - scenes: exactly the number of scene cards asked for, in order. For each: who (cast ids and
-  "product" when it is in frame), action (one main action, plain verbs), camera, product_moment
+  "product" when it is in frame), action (one main action, plain verbs), camera (shot size and one
+  move, a few words, no times: the writer adds the timeline), product_moment
   (how the product is shown), place_change (only when this scene's place or light differs from
   the sheet), end (the last moment; for the last scene, how the ad ends), spoken_line (only words
   the user wrote to be said, word for word; otherwise empty).

@@ -24,7 +24,7 @@ Live today (M1):
 2. **Storyboard.** A vision LLM reads the photo and writes a 3-scene plan (hook, demo, call to action) with three hook ideas tagged by formula. You edit and approve it. Nothing paid renders before that.
 3. **Generate.** The real photo is edited into the first scene (image editing, so the product stays the same), then animated into a clip (image-to-video). Progress and cost show live, in euros.
 
-Coming with M2 (on `v2`): your own story and video length set the scenes (1–5), read from timestamps, scene headings, lists or paragraphs, with every gap the AI fills marked "AI's guess"; starting pictures you make or bring; one connected video where every scene flows into the next (also with your own pictures) or separate shots; voice, music, captions and an end card; every shape; the model and cost of each step on the result page.
+Coming with M2 (on `v2`): your own story and video length set the scenes (1–5), read from timestamps, scene headings, lists or paragraphs, with every gap the AI fills marked "AI's guess" and editable, and your own words sent to the video AI word for word; starting pictures you make or bring; one connected video where every scene flows into the next (also with your own pictures) or separate shots; voice, music, captions and an end card; every shape; the model and cost of each step on the result page.
 
 ## How it is built
 

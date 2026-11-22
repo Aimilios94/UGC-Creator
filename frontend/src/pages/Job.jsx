@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Circle, Clapperboard, Film, Loader2, RotateCcw, Sparkles, Upload, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Clapperboard, Film, Loader2, Pencil, RotateCcw, Sparkles, Undo2, Upload, XCircle } from 'lucide-react';
 import { api, rememberJob } from '../lib/api';
 import { navigate, useCurrency } from '../lib/hooks';
 import { formatMoney } from '../lib/money';
@@ -309,14 +309,58 @@ const PERSON_ROWS = [
   ['unseen', 'not on camera'],
 ];
 
-function SlotList({ rows }) {
+// One value with its mark, editable in place (phase 4): what you type becomes "yours" and goes into
+// every clip that uses it.
+function SlotValue({ label, value, source, path, onEdit, disabled }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  if (editing) {
+    const done = () => {
+      onEdit(path, draft);
+      setEditing(false);
+    };
+    return (
+      <div className="slot-edit">
+        <AutoTextarea minRows={1} value={draft} onChange={(e) => setDraft(e.target.value)} aria-label={label} autoFocus maxLength={600} />
+        <div className="slot-edit-actions">
+          <button type="button" className="btn btn-secondary btn-small" onClick={done}>
+            Done
+          </button>
+          <button type="button" className="btn btn-ghost btn-small" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      {value || <span className="muted">(none)</span>} <Mark source={source} />
+      {path && onEdit && !disabled && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-small slot-edit-btn"
+          onClick={() => {
+            setDraft(value);
+            setEditing(true);
+          }}
+          aria-label={`Edit ${label}`}
+        >
+          <Pencil size={12} aria-hidden="true" /> Edit
+        </button>
+      )}
+    </>
+  );
+}
+
+function SlotList({ rows, onEdit, disabled }) {
   return (
     <dl className="slot-list">
-      {rows.map(([key, label, value, source]) => (
+      {rows.map(([key, label, value, source, path]) => (
         <div key={key} className="slot-row">
           <dt>{label}</dt>
           <dd>
-            {value} <Mark source={source} />
+            <SlotValue label={label} value={value} source={source} path={path} onEdit={onEdit} disabled={disabled} />
           </dd>
         </div>
       ))}
@@ -327,17 +371,17 @@ function SlotList({ rows }) {
 const countGuesses = (rows) => rows.filter((r) => r[3] === 'ai_guess').length;
 const guessText = (k) => (k === 0 ? 'all from your words' : `${k} AI’s ${k === 1 ? 'guess' : 'guesses'}`);
 
-function CastWorld({ structure }) {
+function CastWorld({ structure, onEdit, disabled }) {
   if (!structure) return null;
   const sheet = structure.sheet;
   const rows = [];
   const product = sheet.product;
-  if (product.value) rows.push(['product', 'Product', product.value, product.source]);
-  for (const p of sheet.people) {
+  if (product.value) rows.push(['product', 'Product', product.value, product.source, ['sheet', 'product']]);
+  sheet.people.forEach((p, pi) => {
     const name = p.label ? `${p.label[0].toUpperCase()}${p.label.slice(1)} (${p.id})` : p.id;
-    for (const [k, part] of PERSON_ROWS) if (p[k].value) rows.push([`${p.id}-${k}`, `${name}: ${part}`, p[k].value, p[k].source]);
-  }
-  for (const [k, label] of SHEET_ROWS.slice(1)) if (sheet[k].value) rows.push([k, label, sheet[k].value, sheet[k].source]);
+    for (const [k, part] of PERSON_ROWS) if (p[k].value) rows.push([`${p.id}-${k}`, `${name}: ${part}`, p[k].value, p[k].source, ['sheet', 'people', pi, k]]);
+  });
+  for (const [k, label] of SHEET_ROWS.slice(1)) if (sheet[k].value) rows.push([k, label, sheet[k].value, sheet[k].source, ['sheet', k]]);
   return (
     <details className="card fold">
       <summary>
@@ -346,27 +390,50 @@ function CastWorld({ structure }) {
         </span>
         <span className="muted small fold-sum">Same in every scene · {guessText(countGuesses(rows))}</span>
       </summary>
-      <p className="muted small">The same in every scene. To change an entry, say it in your story and build the scenes again, or edit the scenes below.</p>
-      <SlotList rows={rows} />
+      <p className="muted small">The same in every scene. Edit an entry and every scene that uses it changes; what you type becomes yours.</p>
+      <SlotList rows={rows} onEdit={onEdit} disabled={disabled} />
     </details>
   );
 }
 
-function SceneGuesses({ structure, scene, last }) {
-  const card = structure?.scenes.find((c) => c.uid && c.uid === scene.uid);
+const plain = (t) => (t || '').trim().replace(/[.\s]+$/, ''); // no full stop before our own
+const cardFor = (structure, scene) => structure?.scenes.find((c) => c.uid && c.uid === scene.uid);
+
+// Plan A1: the AI changed the user's action because the video AI renders it badly. Always shown, with Undo.
+function AiChanged({ card, onUndo, disabled }) {
+  if (!card?.swap) return null;
+  return (
+    <div className="ai-changed" role="note">
+      <p>
+        <strong>AI changed:</strong> {plain(card.swap.reason)}. The clip gets &ldquo;{plain(card.swap.value)}&rdquo; instead of your words &ldquo;{plain(card.swap.original)}&rdquo;.
+      </p>
+      {onUndo && (
+        <button type="button" className="btn btn-ghost btn-small" onClick={onUndo} disabled={disabled}>
+          <Undo2 size={14} aria-hidden="true" /> Undo the change
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SceneGuesses({ structure, scene, last, onEdit, disabled }) {
+  const card = cardFor(structure, scene);
   if (!card) return null;
+  const ci = structure.scenes.indexOf(card);
+  const at = (name) => ['scenes', ci, name];
   const names = card.who.ids.map((id) => (id === 'product' ? 'the product' : structure.sheet.people.find((p) => p.id === id)?.label || id));
-  const rows = [['who', 'Who is in it', names.join(', '), card.who.source]];
-  if (card.action.value && card.action.value !== card.text.value) rows.push(['action', 'What happens', card.action.value, card.action.source]);
-  if (card.product_moment.value) rows.push(['moment', 'How the product is shown', card.product_moment.value, card.product_moment.source]);
-  if (card.place_change.value) rows.push(['place', 'Place or light here', card.place_change.value, card.place_change.source]);
-  if (last && card.end.value) rows.push(['end', 'How the ad ends', card.end.value, card.end.source]);
+  const rows = [['who', 'Who is in it', names.join(', '), card.who.source, null]];
+  // The action reaches the clip only when the scene has no text of its own from the story.
+  if (card.action.value && !card.text.value) rows.push(['action', 'What happens', card.action.value, card.action.source, at('action')]);
+  if (card.product_moment.value) rows.push(['moment', 'How the product is shown', card.product_moment.value, card.product_moment.source, at('product_moment')]);
+  if (card.place_change.value) rows.push(['place', 'Place or light here', card.place_change.value, card.place_change.source, at('place_change')]);
+  if (last && card.end.value) rows.push(['end', 'How the ad ends', card.end.value, card.end.source, at('end')]);
   return (
     <details className="guesses">
       <summary>
         What the AI used <span className="muted small">({guessText(countGuesses(rows))})</span> <Help text={HELP.guesses} />
       </summary>
-      <SlotList rows={rows} />
+      <SlotList rows={rows} onEdit={onEdit} disabled={disabled} />
     </details>
   );
 }
@@ -434,6 +501,22 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const editScene = (i, field, value) =>
     change({ ...board, scenes: board.scenes.map((s, j) => (j === i ? { ...s, [field]: value } : s)) });
   const onScene = (i, field) => (e) => editScene(i, field, e.target.value);
+  // Phase 4: a mark edited in place becomes "yours" (the server checks it on save) and reaches the clips.
+  const editSlot = (path, value) => {
+    const structure = structuredClone(board.structure);
+    let owner = structure;
+    for (const k of path.slice(0, -1)) owner = owner[k];
+    const key = path.at(-1);
+    if ((owner[key].value || '').trim() === value.trim()) return;
+    owner[key] = { value: value.trim(), source: value.trim() ? 'user' : 'ai_guess' };
+    change({ ...board, structure });
+  };
+  const undoSwap = (scene) => {
+    const structure = structuredClone(board.structure);
+    const card = structure.scenes.find((c) => c.uid && c.uid === scene.uid);
+    if (card) card.swap = null;
+    change({ ...board, structure });
+  };
   const editTop = (field) => (e) => change({ ...board, [field]: e.target.value });
   // The whole video: the scenes plus the end card. Typed freely, applied on Enter or when leaving the box.
   const endCard = config?.end_card_s ?? 2;
@@ -628,9 +711,9 @@ function StoryboardStep({ job, onChange, readOnly }) {
     setBusy(`shorten${i}`);
     setError('');
     try {
-      const { text } = await api.shortenScene(job.id, i, board);
-      setShortened({ ...shortened, [i]: board.scenes[i].motion_prompt });
-      editScene(i, 'motion_prompt', text);
+      const { text, field = 'motion_prompt' } = await api.shortenScene(job.id, i, board);
+      setShortened({ ...shortened, [i]: { field, text: board.scenes[i][field] } });
+      editScene(i, field, text);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -638,7 +721,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
     }
   };
   const undoShorten = (i) => {
-    editScene(i, 'motion_prompt', shortened[i]);
+    editScene(i, shortened[i].field, shortened[i].text);
     const rest = { ...shortened };
     delete rest[i];
     setShortened(rest);
@@ -740,7 +823,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
         {board.notes && <CharCount value={board.notes} max={STORY_MAX} label="The notes" />}
       </details>
 
-      <CastWorld structure={board.structure} />
+      <CastWorld structure={board.structure} onEdit={editSlot} disabled={disabled} />
 
       {flags.length > 0 && (
         <div className="notice flag-notice" role="status">
@@ -911,6 +994,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 <h2>
                   {sceneTitle(s, i)} <Help text={HELP[s.role]} />
                   {s.ai_added && <span className="mark guess">Added by the AI</span>}
+                  {cardFor(board.structure, s)?.swap && <span className="mark changed">AI changed</span>}
                 </h2>
                 {!readOnly && n > 1 && (
                   <button type="button" className="btn btn-ghost btn-small" onClick={() => removeScene(i)} disabled={disabled} aria-label={`Remove scene ${i + 1}`}>
@@ -925,12 +1009,14 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 onShorten={() => shortenFor(i)}
                 canUndo={shortened[i] != null}
                 onUndo={() => undoShorten(i)}
+                undoField={shortened[i]?.field}
               />
+              <AiChanged card={cardFor(board.structure, s)} onUndo={readOnly ? null : () => undoSwap(s)} disabled={disabled} />
               <div className="scene-grid">
                 <div className="scene-main">
                   <FieldLabel htmlFor={`d${i}`} text="What happens in this scene" help={HELP.description} />
                   <AutoTextarea id={`d${i}`} className={cls(`scenes.${i}.description`)} value={s.description} onChange={onScene(i, 'description')} disabled={disabled} />
-                  <SceneGuesses structure={board.structure} scene={s} last={i === n - 1} />
+                  <SceneGuesses structure={board.structure} scene={s} last={i === n - 1} onEdit={editSlot} disabled={disabled} />
                   <div className="grid-2 tight">
                     <div>
                       <FieldLabel htmlFor={`v${i}`} text="Voiceover" help={HELP.voiceover} />
@@ -1189,9 +1275,9 @@ function ImagesStep({ job, onChange, readOnly = false }) {
     setShortBusy(i);
     setError('');
     try {
-      const { text } = await api.shortenScene(job.id, i, board);
-      setShortened({ ...shortened, [i]: board.scenes[i].motion_prompt });
-      editScene(i, 'motion_prompt', text);
+      const { text, field = 'motion_prompt' } = await api.shortenScene(job.id, i, board);
+      setShortened({ ...shortened, [i]: { field, text: board.scenes[i][field] } });
+      editScene(i, field, text);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1199,7 +1285,7 @@ function ImagesStep({ job, onChange, readOnly = false }) {
     }
   }
   function undoShorten(i) {
-    editScene(i, 'motion_prompt', shortened[i]);
+    editScene(i, shortened[i].field, shortened[i].text);
     const rest = { ...shortened };
     delete rest[i];
     setShortened(rest);
@@ -1254,6 +1340,7 @@ function ImagesStep({ job, onChange, readOnly = false }) {
                   onShorten={() => shortenFor(i)}
                   canUndo={shortened[i] != null}
                   onUndo={() => undoShorten(i)}
+                  undoField={shortened[i]?.field}
                 />
               )}
               {chained && !image ? (

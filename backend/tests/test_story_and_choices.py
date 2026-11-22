@@ -213,7 +213,7 @@ def test_video_step_takes_text_and_motion_edits_but_not_image_changes(client, ct
     assert scene["image_prompt"] != "something else entirely" and scene["image_source"] == "generate"
     worker.run_once(ctx)
     clip = next(r for r in ctx.media.submits if r.kind == "video")
-    assert clip.arguments["prompt"].startswith("0-5 s: slow orbit") and "3D animation" in clip.arguments["prompt"]
+    assert "0-5 s: slow orbit" in clip.arguments["prompt"] and "3D animation" in clip.arguments["prompt"]
     assert "letters" in clip.arguments["negative_prompt"]  # no made-up lettering
     assert ctx.voice.requests[0].text == "Your boots, finally locked in."
 
@@ -231,7 +231,11 @@ def test_a_shot_list_story_drives_the_visuals_and_the_scene_lengths(client, ctx,
     job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": SHOT_LIST}).json()
     scenes = job["storyboard"]["scenes"]
     assert [s["duration_s"] for s in scenes] == [2, 4, 4]  # from the story's timestamps
-    assert "zebra crossing" in scenes[0]["motion_prompt"] and "push-in on the back print" in scenes[2]["motion_prompt"]
+    # Phase 4: the user's timed text is the scene text and goes to the clip word for word; the writer
+    # adds no timeline of its own (the user's text has its times).
+    assert "zebra crossing" in scenes[0]["description"] and "push-in on the back print" in scenes[2]["description"]
+    assert all(s["motion_prompt"] == "" for s in scenes)
+    assert all(s["description"] in c["text"] for s, c in zip(scenes, job["clips"], strict=True))
     assert all(s["voiceover"] == "" for s in scenes)  # no spoken lines in a shot list
     assert {h["formula"] for h in job["storyboard"]["hooks"]} == {"pov", "problem_first", "three_reasons"}
 

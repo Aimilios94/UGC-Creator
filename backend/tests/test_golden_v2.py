@@ -15,11 +15,12 @@ from pathlib import Path
 
 import pytest
 
-from app.models import Brief, Hook, JobView, ProductAnalysis, Scene, Storyboard
+from app.models import Brief, Hook, JobView, ProductAnalysis, Scene, Storyboard, render_seconds
 from app.services import compose as compose_module
 from app.services.ad_structure import AdStructure, key_gaps
+from app.services.continuity import check_continuity
 from app.services.llm_trace import usd_to_eur
-from app.services.pipeline import estimate_board_usd
+from app.services.pipeline import clip_texts, estimate_board_usd
 from app.services.providers.llm import build_llm, mock_analysis
 from app.services.scene_plan import length_line, real_length
 from app.services.scene_splitter import split_story
@@ -30,7 +31,7 @@ from conftest import make_settings
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden_v2"
 FIXTURES = sorted(GOLDEN.glob("*.json"))
-CHECKED_NOW = 3
+CHECKED_NOW = 4
 
 # The phase of the plan that can check each expected result.
 PHASE = {
@@ -225,6 +226,56 @@ def test_phase_3_checks(path):
     if expect.get("no_hold_frame_added_to_fill_length"):
         # Compose plays the scenes as they are, then the end card: it never reads the picked length.
         assert "video_length_s" not in inspect.getsource(compose_module)
+
+
+PHASE_4_KEYS = {k for k, n in PHASE.items() if n == 4}
+
+
+def built_ad(fx: dict):
+    """The fixture through the slot filler, the writer and the continuity check (mock), and every
+    clip as the worker would send it."""
+    inp = fx["input"]
+    brief = brief_from_fixture(inp)
+    analysis = ProductAnalysis.model_validate(mock_analysis(brief.model_dump())) if inp["photo"] else None
+    s = make_settings()
+    (ad, split), _ = fill_slots(build_llm(s, "slots"), brief, analysis, split_story(brief.story))
+    board, _ = write_storyboard(
+        build_llm(s, "storyboard"), brief, analysis or mock_photo_analysis(brief), split=split, structure=ad
+    )
+    board, _ = check_continuity(build_llm(s, "continuity"), board, brief)
+    return brief, board, clip_texts(s, board, brief)
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
+def test_phase_4_checks(path):
+    """The clip builder (mock writer): the user's words reach the clip word for word, every clip
+    within the 2,310 budget, each scene's clip length, no cut inside a take."""
+    fx = _load(path)
+    expect = fx["expect"]
+    keys = set(_keys(expect))
+    if "ci" not in fx["runs_in"] or not PHASE_4_KEYS & keys:
+        pytest.skip("no phase 4 checks in CI for this fixture")
+    brief, board, clips = built_ad(fx)
+    structure = AdStructure.model_validate(board.structure)
+    if limit := expect.get("max_clip_prompt_chars"):
+        assert all(c.chars <= limit for c in clips), [c.chars for c in clips]
+        assert all(c.too_long_by == 0 for c in clips)
+    if "clip_durations" in expect:
+        assert [str(render_seconds(sc.duration_s)) for sc in board.scenes] == expect["clip_durations"]
+    if expect.get("user_scene_text_kept_verbatim"):
+        for card, clip in zip(structure.scenes, clips, strict=True):
+            assert card.text.source == "user" and card.text.value in clip.text
+    for n, sc in enumerate(board.scenes, start=1):
+        want = expect.get(f"scene_{n}") or {}
+        text = clips[n - 1].text
+        if "clip_seconds" in want:
+            assert render_seconds(sc.duration_s) == want["clip_seconds"]
+        if word := want.get("clip_must_not_contain_whole_word"):
+            assert not re.search(r"(?<![A-Za-z])" + re.escape(word) + r"(?![A-Za-z])", text, re.I), text
+        for part in want.get("clip_contains_all", []):
+            assert part in text
+        for part in want.get("clip_must_not_contain_any", []):
+            assert part not in text
 
 
 def mock_photo_analysis(brief):

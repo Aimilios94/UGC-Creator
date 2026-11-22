@@ -4,16 +4,19 @@ The clip's aspect ratio comes from the reference image. The model's own audio is
 used: the voiceover and music are added in compose (M2).
 
 Kling takes at most 2,500 characters per prompt. Each clip's text is built here, in one
-place, for the render and for the preview the user sees (D30): the scene's movement (never
-shortened by the app), the fixed rules, how the shot starts and ends, what stays the same,
-then the style and world notes: the user's own notes when they fit, otherwise the short
-version the continuity check wrote for this scene.
+place, for the render and for the preview the user sees (D30). Since phase 4 of the strategy
+plan (D31) it is built from the structure's slots with a budget per part (`build_clip`): the
+movement (the user's action word for word, unless the writer swapped a Kling weak spot, A1),
+who is in the shot and the product, how it starts and ends, the place and look, the user's
+notes when there is room, then the fixed rules; at most 2,310 characters. "Never" and "Avoid"
+go to Kling's separate negative prompt. Without a structure the older build is used: the
+scene's movement, how it starts and ends, what stays the same and the notes.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..models import Scene, render_seconds
 from .image_gen import PlannedRender
@@ -130,12 +133,225 @@ def fit_text(text: str, room: int) -> str:
 
 
 @dataclass
+class ClipPart:
+    name: str
+    chars: int
+    budget: int
+
+
+@dataclass
 class ClipText:
     text: str
     chars: int
     limit: int = MAX_PROMPT
     too_long_by: int = 0  # the scene's own text is this much over the limit (the user shortens it)
     notes: str = "none"  # full | short | none: which style and world notes went in
+    parts: list[ClipPart] = field(default_factory=list)  # built from the structure: each part and its budget
+    negative: str = VIDEO_NEGATIVE  # Kling's separate negative prompt field
+    shorten_field: str = "motion_prompt"  # the scene field "Shorten it for me" rewrites
+
+
+# --- the clip builder (strategy plan phase 4, D31) ----------------------------------------------
+# Every clip is built from the structure's slots, most important part first, each part within its
+# budget, so the text is planned to fit instead of cut afterwards. The budgets add up to 2,310.
+TOTAL_MAX = 2310
+MOVE_MAX = 1000  # the movement: the action, the camera and the timeline
+MOVE_BORROW_MAX = 1400  # the movement may borrow what the other parts leave unused, up to this
+WHO_MAX = 400  # who is in the shot and the product
+FLOW_PART_MAX = 180  # each of "Starts" and "Ends"
+FLOW_PART_SHORT = 120  # each, when the clip would pass the total
+PLACE_MAX = 250  # place, light, look
+BUDGETS = {"movement": MOVE_MAX, "who": WHO_MAX, "start_end": 2 * FLOW_PART_MAX, "place": PLACE_MAX, "rules": RULES_MAX}
+TIME_MARK = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:-|–|to)\s*\d+(?:[.,]\d+)?\s*s\b|\b\d{1,2}:\d{2}\b", re.I)
+
+
+def negative_prompt(sheet=None, card=None) -> str:
+    """Kling's negative prompt: the base list, then the ad's "Never" and the scene's "Avoid"."""
+    extra = [s.value.strip() for s in (sheet.never if sheet else None, card.avoid if card else None) if s and s.value]
+    return ", ".join([VIDEO_NEGATIVE, *extra])[:MAX_PROMPT]
+
+
+def scene_action(scene: Scene, card) -> tuple[str, bool]:
+    """What happens in the scene, and whether it is the user's own words. The user's scene text or
+    action goes to Kling word for word (plan A1), unless the writer swapped it (shown, with Undo)."""
+    if card.swap is not None and card.swap.value.strip():
+        return card.swap.value.strip(), False
+    if card.text.locked:
+        return (scene.description.strip() or card.text.value.strip()), True
+    if not card.action.empty:
+        return card.action.value.strip(), card.action.locked
+    return scene.description.strip(), False
+
+
+def _who_part(card, sheet, room: int) -> str:
+    """Who is in the shot (only the people in it) and the product: the product kept whole first."""
+    people = {p.id: p for p in sheet.people}
+    lines = []
+    for pid in card.who.ids:
+        p = people.get(pid)
+        if p is None:
+            continue
+        bits = [b for b in (p.label, p.look.value.strip(), p.clothes.value.strip()) if b]
+        lines.append(f"{p.id}, " + ", ".join(bits))
+    product = ""
+    if "product" in card.who.ids or not lines:
+        product = "Product: " + sheet.product.value.strip().rstrip(".") + "." if not sheet.product.empty else ""
+        if not sheet.product_unseen.empty:
+            product += " " + sheet.product_unseen.value.strip()
+    people_txt = ("In shot: " + "; ".join(lines) + ".") if lines else ""
+    if sheet.product.locked and sheet.product.source == "user":
+        product_room = max(len(product), 0)  # the user's own product words (no photo, A6): never cut
+    else:
+        product_room = room - min(len(people_txt), room // 2)
+    product = fit_text(product, product_room) if product else ""
+    people_room = room - len(product) - (1 if product and people_txt else 0)
+    people_txt = fit_text(people_txt, people_room) if people_room > 20 else ""
+    return " ".join(p for p in (people_txt, product) if p)
+
+
+def _sentence(text: str, *, mine: bool = False) -> str:
+    """The text as a sentence that ends cleanly, so the parts join into readable text. The user's
+    own words keep their letters: at most a full stop is added."""
+    text = text.strip()
+    if not text:
+        return ""
+    if not mine:
+        text = text[0].upper() + text[1:]
+    return text if text[-1] in ".!?\"”')" else text + "."
+
+
+def _place_part(card, sheet, room: int) -> str:
+    """Place, light and look, most important first, within the room."""
+    place = card.place_change.value.strip() or sheet.place.value.strip()
+    bits = [f"Place: {place}" if place else ""]
+    bits += [sheet.time_light.value.strip(), sheet.look.value.strip(), sheet.camera_style.value.strip()]
+    out = ""
+    for b in (_sentence(b) for b in bits if b):
+        nxt = f"{out} {b}" if out else b
+        if len(nxt) > room:
+            return out or fit_text(nxt, room)
+        out = nxt
+    return out
+
+
+def build_clip(
+    scene: Scene,
+    card,
+    sheet,
+    *,
+    idx: int,
+    count: int,
+    style: str,
+    notes: str,
+    continuous: bool,
+    ends_on_next: bool,
+    render_s: int,
+    has_photo: bool,
+) -> ClipText:
+    """One clip's text from the slots, with the budget table: the movement, who and the product,
+    how it starts and ends, the place and look, the user's notes when there is room, the fixed rules."""
+    rules = clip_rules(
+        style=style, duration_s=render_s, used_s=scene.duration_s, idx=idx, count=count,
+        continuous=continuous, ends_on_next=ends_on_next, has_photo=has_photo,
+    )  # fmt: skip
+    action, action_mine = scene_action(scene, card)
+    # The user's own timeline (A5) comes inside their text; the writer's timeline then stays out.
+    timeline = scene.motion_prompt.strip()
+    timeline_mine = card.timeline.locked
+    timed = bool(TIME_MARK.search(action)) and action_mine
+    if timed and not timeline_mine:
+        timeline = ""
+    # A guessed camera only when nothing else says how the shot moves.
+    camera = card.camera.value.strip() if (card.camera.locked or not (timeline or timed)) else ""
+    camera = f"Camera: {_sentence(camera)}" if camera else ""
+    raw = {"action": len(action), "timeline": len(timeline)}  # the user's own text, as typed
+    action, timeline = _sentence(action, mine=True), _sentence(timeline, mine=timeline_mine)
+
+    who = _who_part(card, sheet, WHO_MAX)
+    starts = scene.starts.strip() if continuous and idx > 0 else ""
+    if not starts and card.start.locked:
+        starts = card.start.value.strip()
+    ends = scene.ends.strip() if continuous and idx < count - 1 else ""
+    if idx == count - 1 and not card.end.empty:
+        ends = card.end.value.strip()  # how the ad ends
+    place = _place_part(card, sheet, PLACE_MAX)
+
+    def flow(n: int) -> str:
+        return " ".join(
+            f"{label}: {_sentence(fit_text(t, n - 1), mine=True)}"
+            for label, t in (("Starts", starts), ("Ends", ends))
+            if t
+        )
+
+    flows = flow(FLOW_PART_MAX)
+    spare = (WHO_MAX - len(who)) + (2 * FLOW_PART_MAX - len(flows)) + (PLACE_MAX - len(place))
+    move_room = min(MOVE_BORROW_MAX, MOVE_MAX + max(0, spare))
+    own = [
+        t for t, mine in ((action, action_mine), (camera, card.camera.locked), (timeline, timeline_mine)) if t and mine
+    ]
+    own_len = len(" ".join(own))
+    typed = sum(n for k, n in raw.items() if (action_mine if k == "action" else timeline_mine)) + (
+        len(camera) if card.camera.locked else 0
+    )
+    over = max(0, typed - MOVE_BORROW_MAX)
+    move_room = max(move_room, min(own_len, MOVE_BORROW_MAX))
+    pieces = []
+    left = move_room - own_len
+    for text, mine in ((action, action_mine), (camera, card.camera.locked), (timeline, timeline_mine)):
+        if not text:
+            continue
+        if mine:
+            pieces.append(text)
+        elif left > 40:
+            cut = fit_text(text, left - 1)
+            pieces.append(cut)
+            left -= len(cut) + 1
+    movement = " ".join(pieces)
+
+    def total() -> int:
+        return len(" ".join(p for p in (movement, who, flows, place) if p)) + len(rules)
+
+    if total() > TOTAL_MAX:
+        flows = flow(FLOW_PART_SHORT)
+    if total() > TOTAL_MAX:
+        place = fit_text(place, max(0, len(place) - (total() - TOTAL_MAX)))
+    if total() > TOTAL_MAX:
+        who = fit_text(who, max(0, len(who) - (total() - TOTAL_MAX)))
+    body = " ".join(p for p in (movement, who, flows, place) if p)
+    room = TOTAL_MAX - len(body) - len(rules)
+    used_notes = "none"
+    if notes.strip() and room > 80:
+        full = f" Style and world: {notes.strip()}"
+        if len(full) <= room:
+            body, used_notes = body + full, "full"
+        else:
+            label = " Style and world (short): " if scene.notes_short.strip() else " Style and world: "
+            body += label + fit_text(scene.notes_short.strip() or notes, room - len(label))
+            used_notes = "short"
+    body = body[: MAX_PROMPT - len(rules)]  # only if the user sends a too-long scene on anyway; the page blocks it
+    text = body + rules
+    parts = [
+        ClipPart("movement", len(movement), move_room),
+        ClipPart("who", len(who), WHO_MAX),
+        ClipPart("start_end", len(flows), 2 * FLOW_PART_MAX),
+        ClipPart("place", len(place), PLACE_MAX),
+        ClipPart("rules", len(rules), RULES_MAX),
+    ]
+    if used_notes != "none":
+        parts.insert(4, ClipPart("notes", len(body) - len(" ".join(p for p in (movement, who, flows, place) if p)),
+                                 max(0, room)))  # fmt: skip
+    field_name = "motion_prompt" if timeline_mine and len(timeline) >= len(action) else "description"
+    if not action_mine:
+        field_name = "motion_prompt"
+    return ClipText(
+        text=text,
+        chars=len(text),
+        too_long_by=over,
+        notes=used_notes,
+        parts=parts,
+        negative=negative_prompt(sheet, card),
+        shorten_field=field_name,
+    )
 
 
 def clip_prompt(
@@ -150,10 +366,23 @@ def clip_prompt(
     keep_same: str = "",
     render_s: int | None = None,
     has_photo: bool = True,
+    card=None,
+    sheet=None,
 ) -> ClipText:
     """The exact text Kling gets for this scene (at most 2,500 characters). `render_s` is the clip
-    the model makes (5 or 10 s; by default the one the scene's length needs)."""
+    the model makes (5 or 10 s; by default the one the scene's length needs). With the structure
+    (`sheet`, and the scene's `card` when it has one) it is built from the slots (phase 4);
+    without it, as before (an older storyboard, or the slot filler failed)."""
     duration_s = render_s or render_seconds(scene.duration_s)
+    if sheet is not None:
+        if card is None:
+            from .ad_structure import SceneCard  # a scene added on the page: its own text, the shared sheet
+
+            card = SceneCard()
+        return build_clip(
+            scene, card, sheet, idx=idx, count=count, style=style, notes=notes, continuous=continuous,
+            ends_on_next=ends_on_next, render_s=duration_s, has_photo=has_photo,
+        )  # fmt: skip
     rules = clip_rules(
         style=style,
         duration_s=duration_s,
@@ -211,6 +440,8 @@ def plan_scene_video(
     end_image_sha256: str | None = None,
     keep_same: str = "",
     has_photo: bool = True,
+    card=None,
+    sheet=None,
 ) -> PlannedRender:
     """One clip. In a continuous shot (D30) the clip also gets how it starts and ends (from the
     continuity check) and what stays the same; when the next scene has its own picture, the clip
@@ -230,12 +461,16 @@ def plan_scene_video(
         ends_on_next=end_image is not None,
         keep_same=keep_same,
         has_photo=has_photo,
-    ).text
-    arguments = {"prompt": prompt, "duration": str(duration_s), "negative_prompt": VIDEO_NEGATIVE}
+        card=card,
+        sheet=sheet,
+    )
+    arguments = {"prompt": prompt.text, "duration": str(duration_s), "negative_prompt": prompt.negative}
     settings: dict = {"duration": duration_s}
     if end_image is not None:
         settings["tail_image_sha256"] = end_image_sha256
-    key = cache_key(model=model, prompt=prompt, seed=None, input_sha256=reference_sha256, settings=settings)
+    if prompt.negative != VIDEO_NEGATIVE:
+        settings["negative_prompt"] = prompt.negative
+    key = cache_key(model=model, prompt=prompt.text, seed=None, input_sha256=reference_sha256, settings=settings)
     return PlannedRender(
         request=MediaRequest(
             kind="video",

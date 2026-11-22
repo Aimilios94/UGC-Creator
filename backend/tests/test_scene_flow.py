@@ -92,7 +92,9 @@ def test_the_start_and_end_notes_reach_the_clips_in_a_continuous_shot_only(clien
     scenes = job["storyboard"]["scenes"]
     assert scenes[1]["starts"][:40] in clips[1].arguments["prompt"]
     assert scenes[0]["ends"][:40] in clips[0].arguments["prompt"]
-    assert "Same in every scene:" in clips[0].arguments["prompt"]
+    # Phase 4: the cast and world sheet says what stays the same in every clip (place, look...).
+    sheet = job["storyboard"]["structure"]["sheet"]
+    assert all(f"Place: {sheet['place']['value']}" in c.arguments["prompt"] for c in clips)
     image = next(r for r in ctx.media.submits if r.kind == "image")
     assert "Same in every scene:" in image.arguments["prompt"]
 

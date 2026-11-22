@@ -514,6 +514,15 @@ details.fold-plain > summary { cursor: pointer; font-weight: 600; }
 .slot-row dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .slot-row { grid-template-columns: 1fr; gap: 2px; } }
 details.guesses { margin-top: 8px; }
+.mark.changed { border: 1px solid rgba(96, 165, 250, 0.6); color: #93c5fd; background: rgba(96, 165, 250, 0.1); margin-left: 0; }
+h2 .mark.changed { margin-left: 6px; }
+.ai-changed { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; padding: 8px 12px; border: 1px solid rgba(96, 165, 250, 0.35); border-radius: 10px; background: rgba(96, 165, 250, 0.06); font-size: 0.9rem; }
+.ai-changed p { margin: 0; flex: 1 1 260px; overflow-wrap: anywhere; }
+.slot-edit-btn { margin-left: 6px; padding: 0 6px; min-height: 0; font-size: 0.75rem; vertical-align: middle; }
+.slot-edit { display: grid; gap: 6px; }
+.slot-edit-actions { display: flex; gap: 6px; }
+.clip-parts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 8px; padding: 0; list-style: none; }
+.clip-parts li.over { color: #fca5a5; }
 details.guesses > summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; list-style: none; }
 details.guesses > summary::-webkit-details-marker { display: none; }
 details.guesses > summary::before { content: '▸ '; color: var(--text-secondary); }

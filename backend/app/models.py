@@ -139,6 +139,14 @@ def _roles_in_order(scenes):
     return scenes
 
 
+class ActionSwap(BaseModel):
+    """The writer's safe version of a user's action that the video AI does badly (strategy plan A1)."""
+
+    scene: int = Field(ge=1, le=MAX_SCENES, description="The scene's number")
+    action: str = Field(max_length=STORY_MAX, description="The scene's text with the weak spot changed, the rest kept")
+    reason: str = Field(max_length=200, description='A short reason, for example "Kling renders throws badly"')
+
+
 class StoryboardDraft(BaseModel):
     """Three scenes (hook, demo, call to action) and three alternative hooks, as the AI writes them."""
 
@@ -146,6 +154,11 @@ class StoryboardDraft(BaseModel):
     scenes: list[SceneDraft] = Field(min_length=MIN_SCENES, max_length=MAX_SCENES)
     hooks: list[Hook] = Field(min_length=3, max_length=3)
     cta_text: str = Field(max_length=60)
+    swaps: list[ActionSwap] = Field(
+        default_factory=list,
+        max_length=MAX_SCENES,
+        description="Only with a <sheet>: user actions the video AI does badly, swapped (else empty)",
+    )
 
     @field_validator("scenes")
     @classmethod
@@ -299,6 +312,14 @@ class ApproveIn(BaseModel):
     mode: Literal["images", "video"] = "images"
 
 
+class ClipPartView(BaseModel):
+    """One part of a clip's text against its budget (strategy plan, the clip builder)."""
+
+    name: str
+    chars: int
+    budget: int
+
+
 class ClipView(BaseModel):
     """The exact text a scene's clip gets (Kling reads at most 2,500 characters, D30)."""
 
@@ -307,10 +328,14 @@ class ClipView(BaseModel):
     limit: int
     too_long_by: int = 0  # the scene's own text is this much over: shorten it (or "Shorten it for me")
     notes: str = "none"  # full | short | none: which style and world notes went in
+    parts: list[ClipPartView] = []  # built from the structure: each part and its budget (phase 4)
+    negative: str = ""  # Kling's separate negative prompt
+    shorten_field: str = "motion_prompt"  # the scene field "Shorten it for me" rewrites
 
 
 class ShortenOut(BaseModel):
     text: str
+    field: str = "motion_prompt"  # description | motion_prompt: where the shorter text goes
 
 
 class LengthLine(BaseModel):

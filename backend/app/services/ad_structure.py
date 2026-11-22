@@ -11,8 +11,9 @@ back if a model changes them (`restore_locked`).
 
 Since phase 3 the slot filler (`slot_filler.py`) fills it before the writer, and the storyboard
 carries it (`Storyboard.structure`, each card matched to its scene by uid) so the page can mark
-every guess. The clip builder of phase 4 will build the clips from it. `from_storyboard` reads an
-older storyboard into the structure.
+every guess. Since phase 4 the clip builder (`video_gen.clip_prompt`) builds every clip from it,
+and a value the user edits on the page becomes theirs (`merge_structure`). `from_storyboard` reads
+an older storyboard into the structure.
 """
 
 from __future__ import annotations
@@ -85,9 +86,11 @@ class CastRefs(BaseModel):
 
 
 class Swap(BaseModel):
-    """An action the writer replaced because Kling does it badly (plan A1); Undo puts `original` back."""
+    """An action the writer replaced because Kling does it badly (plan A1): the clip gets `value`
+    instead of the user's `original`, the page says "AI changed: reason", and Undo removes the swap."""
 
     original: str = Field(max_length=SLOT_MAX)
+    value: str = Field(default="", max_length=SLOT_MAX)
     reason: str = Field(max_length=200)
 
 
@@ -257,3 +260,49 @@ def from_storyboard(
         scenes=scenes,
         notes=board.notes,
     )
+
+
+# --- the user's edits on the page (phase 4) -----------------------------------------------------
+def _edited(old: Slot, new: Slot) -> Slot:
+    """A value the user changed on the page becomes theirs; an unchanged one keeps its source."""
+    if new.value.strip() == old.value.strip():
+        return old
+    return user(new.value.strip()) if new.value.strip() else guess()
+
+
+def merge_structure(old: AdStructure, new: AdStructure | None, old_scenes=(), new_scenes=()) -> AdStructure:
+    """The stored structure with the user's edits from the page. Only values change (an edited value
+    is the user's); sources, who is in each shot, the questions and the swaps stay the server's,
+    except that the user may undo a swap. The scene texts follow the storyboard's own fields: an
+    edited description is the user's scene text, an edited movement the user's timeline."""
+    ad = old.model_copy(deep=True)
+    if new is not None:
+        for name in SHEET_SLOTS:
+            setattr(ad.sheet, name, _edited(getattr(ad.sheet, name), getattr(new.sheet, name)))
+        people = {p.id: p for p in new.sheet.people}
+        for p in ad.sheet.people:
+            if p.id in people:
+                for name in PERSON_SLOTS:
+                    setattr(p, name, _edited(getattr(p, name), getattr(people[p.id], name)))
+        cards = {c.uid: c for c in new.scenes if c.uid}
+        for card in ad.scenes:
+            edit = cards.get(card.uid) if card.uid else None
+            if edit is None:
+                continue
+            for name in SCENE_SLOTS:
+                if name != "text":
+                    setattr(card, name, _edited(getattr(card, name), getattr(edit, name)))
+            if card.swap is not None and edit.swap is None:
+                card.swap = None  # "Undo the change": the user's own words go back to the clip
+    before = {s.uid: s for s in old_scenes if s.uid}
+    for sc in new_scenes:
+        card = next((c for c in ad.scenes if c.uid and c.uid == sc.uid), None)
+        was = before.get(sc.uid)
+        if card is None or was is None:
+            continue
+        if sc.description.strip() != was.description.strip() and sc.description.strip():
+            card.text = user(sc.description.strip())
+            card.swap = None  # the user rewrote the scene: their new words go to the clip
+        if sc.motion_prompt.strip() != was.motion_prompt.strip():
+            card.timeline = user(sc.motion_prompt.strip()) if sc.motion_prompt.strip() else guess()
+    return ad

@@ -29,6 +29,8 @@ PARAGRAPHS_RE = re.compile(r"<paragraphs>(.*?)</paragraphs>", re.S)
 TARGET_RE = re.compile(r"at most (\d+) characters")
 COUNT_RE = re.compile(r"write exactly (\d+) scene", re.I)
 ADD_RE = re.compile(r"<add>(.*?)</add>", re.S)
+SHEET_RE = re.compile(r"<sheet>(.*?)</sheet>", re.S)
+TIMED_RE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:-|–|to)\s*\d+(?:[.,]\d+)?\s*s\b|\b\d{1,2}:\d{2}\b", re.I)
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+|(?<=[.!?][\"”])\s+")  # a sentence may end inside quotes
 
 
@@ -70,6 +72,7 @@ def _brief_from(messages) -> dict:
             ("_beats", BEATS_RE),
             ("_paragraphs", PARAGRAPHS_RE),
             ("_add", ADD_RE),
+            ("_sheet", SHEET_RE),
         ):
             if match := rx.search(t):
                 try:
@@ -242,7 +245,33 @@ def mock_storyboard(brief: dict) -> dict:
     else:
         for scene, line in zip(scenes, lines, strict=True):
             scene["voiceover"] = line
-    return {"title": name, "scenes": scenes, "hooks": hooks, "cta_text": "Shop now"}
+    swaps = []
+    if sheet := brief.get("_sheet"):
+        # Like the real writer with a sheet (phase 4): the movement is only a timeline for the
+        # scene's own action (none when the user's text has its times), and a user action that
+        # Kling renders badly is swapped, with a reason.
+        cards = sheet.get("scenes") or []
+        for i, scene in enumerate(scenes):
+            own = scene["description"] if parts else ""
+            scene["motion_prompt"] = "" if TIMED_RE.search(own) else _mock_timeline(scene.get("duration_s", 5))
+            card = cards[i] if i < len(cards) else {}
+            action = card.get("action") or ""
+            if card.get("action_is_users") and re.search(r"\bthrow", action, re.I):
+                safe = re.sub(r"\bthrows\b", "holds out", action)
+                safe = re.sub(r"\bthrow\b", "hold out", safe)
+                swaps.append({"scene": i + 1, "action": safe.rstrip(".") + "; the crowd stays still behind them.",
+                              "reason": "Kling renders throws and catches badly"})  # fmt: skip
+    return {"title": name, "scenes": scenes, "hooks": hooks, "cta_text": "Shop now", "swaps": swaps}
+
+
+def _mock_timeline(seconds: int) -> str:
+    """A short timeline for the scene's own action (mock only)."""
+    end = int(seconds or 5)
+    mid = max(1, end // 2)
+    return (
+        f"0-{mid} s: the camera moves in slowly as the action starts. "
+        f"{mid}-{end} s: it holds steady as the moment ends."
+    )
 
 
 _BEAT_RE = re.compile(r"\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*s:")
@@ -321,6 +350,8 @@ def mock_slots(brief: dict) -> dict:
         texts = [s.get("text", "") for s in scenes]
     else:
         texts = [""] * int(brief.get("_count") or 3)
+        if story.strip():
+            texts[0] = story.strip()  # a story with no shape: its words are the first scene's action
     person = bool(_PERSON.search(story))
     people = (
         [{"id": "P1", "label": "the person", "look": {"value": "late 20s, short dark hair, relaxed smile"},

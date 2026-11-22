@@ -18,11 +18,14 @@ Test prompts from the prompt-to-ad strategy plan (`docs/plan/prompt-to-ad-strate
 - Every key in `expect` is an assertion. The test maps each key to the phase that can check it;
   keys the code cannot check yet are reported as skipped with their phase, never deleted. A new
   key with no phase fails the test, so nothing is dropped silently.
-- Checked now (phase 3): the fixed rules and the projected cost (phase 1); the scene count and
+- Checked now (phase 4): the fixed rules and the projected cost (phase 1); the scene count and
   lengths of every fixture through the mock writer, and each scene's text as the splitter read it
   (phase 2); through the mock slot filler, every key slot filled or marked as the AI's guess, the
   user's words kept, the product slot's source and words, the cost shown, and the real-length line
-  with its two buttons (phase 3). The 8 prompt shapes of the setup note are in
+  with its two buttons (phase 3); through the mock slot filler, writer and continuity check, every
+  clip within 2,310 characters, each scene's own text word for word in its clip, the clip lengths,
+  and 05's one-take wording with no "cut" (phase 4). 03 (the A1 swap) is live only; the mock
+  swap is tested in `tests/test_clip_builder.py`. The 8 prompt shapes of the setup note are in
   `../prompt_shapes.json` (`tests/test_scene_splitter.py`).
 - 01-06 come from the 21 Nov 2026 review (product names and photos changed to the owner's test
   photos); 07 tests the A4 rule (the person in the photo is the reference).

@@ -3,7 +3,7 @@
 This note is for planning a new way to read any prompt: long or short, with scenes or without, well or badly written.
 It describes what the app does **today**, step by step, then where it is weak.
 Code: `backend/app/services/` (each step names its file).
-Decisions behind it: `DECISIONS.md` D27–D31. Updated as the strategy plan's phases ship (phase 3: 22 Nov 2026).
+Decisions behind it: `DECISIONS.md` D27–D31. Updated as the strategy plan's phases ship (phase 4: 22 Nov 2026).
 
 ## 1. Tools and hard limits
 
@@ -94,8 +94,7 @@ Other fixed rules:
   - **description** = the beat's own text, whole;
   - **length** = from the stamps;
   - **notes** = the story's notes (step 3).
-- **Important:** the clip does **not** use the description. It uses the writer's **motion_prompt** (see step 10). In a timed story, the user's exact words therefore reach the screen and the "What happens" box, but the video AI gets the writer's rewrite of them. Nothing checks that the rewrite kept every detail.
-  - The free mock writer copies the beat text into the motion prompt, so the mock browser check showed the user's words in the clip text; the real writer does not.
+- **Before phase 4** the clip used the writer's **motion_prompt**, a rewrite of the user's words that nothing checked (the free mock copied the beat text, which hid it). **Since phase 4 (D31)**, with the slot filler's sheet, the clip starts with the user's own scene text word for word, and the writer's motion_prompt is only a timeline (2-4 time marks, under 90 words; none when the user's text has its own times). The writer may swap a user action only for a Kling weak spot (A1): the page says "AI changed", with Undo.
 
 ### Step 6. Testimonial check, in code (`storyboard_checks.py`)
 - It looks for invented claims: "I've used this for 3 months", reviews, ratings, awards, results over time, unless the brief or story states them.
@@ -158,7 +157,16 @@ Other fixed rules:
 
 ## 3. The 2,500-character clip text, piece by piece
 
-The order is fixed:
+**Since phase 4 (D31)** a storyboard with the slot filler's structure is built by `video_gen.build_clip`, each part within its budget, at most 2,310:
+1. **Movement** (up to 1,000, borrowing unused room up to 1,400): the user's scene text or action word for word (or the A1 swap), then the camera when nothing else says it, then the writer's timeline. A user text over 1,400 asks to be shortened.
+2. **Who and the product** (400): "In shot:" only the people in this scene (look, clothes), then "Product:" (kept; the people's details are trimmed first).
+3. **Starts / Ends** (2 x 180, 120 each when the clip would pass the total): the continuity check's; the last scene ends as its card says.
+4. **Place and look** (250): the scene's place change or the sheet's place, time and light, look, camera style.
+5. **The user's style and world notes** when there is room: in full, or the scene's short version.
+6. **Fixed rules** (300 at most).
+"Never" and the scene's "Avoid" go to Kling's separate negative prompt. "Same in every scene" stays in the pictures; in the clips the sheet replaces it. The page shows each part against its budget.
+
+Without a structure (an older storyboard, or the slot filler failed) the build below is still used. The order is fixed:
 
 1. **The movement:** the scene's motion_prompt (or its description if empty). Never shortened by the app; if it is too long, the page blocks and offers "Shorten it for me".
 2. **Starts** (not scene 1) and **Ends** (not the last scene), up to 230 characters each, in "One connected video".
@@ -186,20 +194,20 @@ Example, the owner's 20 s prompt (7,279 characters, 5 timed scenes, 3,371 charac
 | Short, vague story ("guy wearing my hoodie in the rain") | Since phase 3: 3 scenes on Auto; the slot filler fills the gaps and the storyboard marks each one "AI's guess" | The user sees what was assumed but is not asked yet (quick questions: phase 5) |
 | Long story without times | Since phase 3: paragraphs are split into scenes and notes by the slot filler, checked in code, in the user's words | One block with no paragraphs still goes to the writer whole |
 | "Scene 1: …, Scene 2: …" without times | Since phase 2 (D31): one scene per heading in code, seconds from the heading if given, the text around them as notes; numbered or bulleted lists of actions the same way | Fixed in phase 2 |
-| Timed shot list (`0:00 – 0:04 …`) | Exact scenes and lengths; beat text kept as the description; notes extracted | The clip still gets the writer's rewrite of the beat (step 5) |
+| Timed shot list (`0:00 – 0:04 …`) | Exact scenes and lengths; beat text kept as the description; notes extracted; since phase 4 the beat goes to the clip word for word | Fixed in phase 4 |
 | More than 5 timed scenes | Shortest neighbours merged | Merged scenes carry two beats into one clip |
 | Story with spoken lines | Lines go to the voiceover word for word (writer's job, not checked in code) | Not verified; a line too long for its scene is spoken faster or the scene is held |
-| Scene text over 2,500 on its own | Blocked with the exact excess; "Shorten it for me" | Fine; the user must act |
+| Scene text over 2,500 on its own (since phase 4: over 1,400) | Blocked with the exact excess; "Shorten it for me" | Fine; the user must act |
 
 ## 5. What is missing for "any prompt in, a good ad out"
 
 1. **No questions.** The app never asks the user to fill a gap: who is in it, where, which product moment, how it ends. The writer guesses.
-2. **No fixed structure for a scene.** Each scene is free text. There is no checklist (subject, action, camera, start, end, product moment, light) that every scene must fill, so we cannot tell what is missing. *(Since phase 3: the slot filler fills the structure and marks every guess; the clips are built from it in phase 4.)*
+2. **No fixed structure for a scene.** Each scene is free text. There is no checklist (subject, action, camera, start, end, product moment, light) that every scene must fill, so we cannot tell what is missing. *(Since phase 3: the slot filler fills the structure and marks every guess; since phase 4 the clips are built from it.)*
 3. **Scene detection depends on time stamps.** Headings, numbered lists or paragraphs are not used. *(Fixed in phases 2 and 3.)*
-4. **The user's words are not what Kling reads.** The writer rewrites the movement, and nothing checks that details were kept.
+4. **The user's words are not what Kling reads.** The writer rewrites the movement, and nothing checks that details were kept. *(Fixed in phase 4: the user's words go to the clip word for word; a swap for a Kling weak spot is shown with Undo.)*
 5. **Characters and products are not stored as reusable pieces.** A face or outfit described once is re-written (or lost) in each scene. The per-scene short notes help, but they are written by AI each time.
-6. **The 2,500 budget is checked, not planned.** We fit text after writing it, instead of writing each clip to a known budget from the start.
-7. **No "what I assumed" view.** Gaps filled by the AI are not marked, so the user cannot confirm or fix them quickly. *(Since phase 3: "Cast and world" and "What the AI used" mark every guess; editing them in place comes with phase 4.)*
+6. **The 2,500 budget is checked, not planned.** We fit text after writing it, instead of writing each clip to a known budget from the start. *(Fixed in phase 4: a budget per part, 2,310 at most.)*
+7. **No "what I assumed" view.** Gaps filled by the AI are not marked, so the user cannot confirm or fix them quickly. *(Since phase 3: "Cast and world" and "What the AI used" mark every guess; since phase 4 they are edited in place and reach the clips.)*
 
 ## 6. Constraints any new strategy must keep
 

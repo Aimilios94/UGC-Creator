@@ -119,19 +119,21 @@ def _write_prompts(ctx: Context, job: dict, brief: Brief, board: Storyboard, sta
             (dst / f"picture_{i + 1}.txt").write_text(got["prompt"], encoding="utf-8")
         elif i in pictures:
             (dst / f"picture_{i + 1}.txt").write_text(rebuilt + pictures[i], encoding="utf-8")
-    negative = VIDEO_NEGATIVE
+    negatives = []  # each clip's own (phase 4: the base list, the ad's "Never", the scene's "Avoid")
     for i, clip in enumerate(clip_texts(ctx.settings, board, brief)):
         sc = board.scenes[i]
         head = f"# scene {i + 1}: {sc.duration_s} s on screen, {render_seconds(sc.duration_s)} s clip"
         got = sent.get(("video", i))
         if got and got.get("prompt"):
             text, note = got["prompt"], "as sent"
-            negative = got.get("negative_prompt", negative)
+            negatives.append(got.get("negative_prompt") or clip.negative)
         else:
             text, note = clip.text, "rebuilt with today's code: it may differ from what was sent"
+            negatives.append(clip.negative)
         head += f", {len(text)} of {clip.limit} characters ({note})\n\n"
         (dst / f"clip_{i + 1}.txt").write_text(head + text, encoding="utf-8")
-    (dst / "negative.txt").write_text(negative, encoding="utf-8")
+    lines = [f"scene {i + 1}: {n}" for i, n in enumerate(negatives)] if len(set(negatives)) > 1 else negatives[:1]
+    (dst / "negative.txt").write_text("\n".join(lines) or VIDEO_NEGATIVE, encoding="utf-8")
 
 
 def _cut_frames(ctx: Context, job_id: str, master_ratio: str, dst: Path) -> None:
