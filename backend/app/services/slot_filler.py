@@ -26,7 +26,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from ..models import MAX_SCENES, Brief, ProductAnalysis
+from ..models import MAX_PLANNED_SCENES, MAX_SCENES, Brief, ProductAnalysis
 from .ad_structure import (
     AdStructure,
     CastRefs,
@@ -42,7 +42,7 @@ from .llm_trace import LlmCall, Usage, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
 from .rules import rules_for
 from .scene_plan import scenes_for_length
-from .scene_splitter import Beat, Split, _paragraphs, _split_cuts
+from .scene_splitter import Beat, Split, _paragraphs, _split_cuts, fast_story
 from .styles import LABELS as STYLE_LABELS
 
 VALUE_MAX = 600
@@ -163,9 +163,10 @@ def scene_count(split: Split, brief: Brief, end_card_s: float) -> int | None:
         return len(split.beats)
     if split.shape == "paragraphs":
         return None
+    fast = fast_story(brief.story)
     if brief.video_length_s:
-        return scenes_for_length(brief.video_length_s, end_card_s)
-    return 3
+        return scenes_for_length(brief.video_length_s, end_card_s, fast=fast)
+    return MAX_PLANNED_SCENES if fast else 3
 
 
 def build_prompt(
@@ -201,6 +202,8 @@ def build_prompt(
         parts.append("<paragraphs>" + json.dumps(numbered, ensure_ascii=False) + "</paragraphs>")
     elif want:
         how = "spread the story across them, in order" if brief.story else "hook, demo and call to action"
+        if fast_story(brief.story):
+            how += "; the story asks for a fast edit: one short shot per place, moment or detail it names"
         parts.append(f"Write exactly {want} scene cards ({how}).")
     if feedback:
         parts.append(feedback)

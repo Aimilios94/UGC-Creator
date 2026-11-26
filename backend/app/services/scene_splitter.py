@@ -45,6 +45,14 @@ _MONTAGE = re.compile(
 # A part that is a logo or brand reveal on screen: the ad's end card (only the story's last part).
 _CARD_WHAT = re.compile(r"\b(?:logo|brand\s+reveal|end\s+card|end\s+screen|title\s+card|brand\s+name)\b", re.I)
 _CARD_HOW = re.compile(r"\b(?:black|screen|slams?|appears?|reveals?|pops?|fades?\s+in|on\s+screen|card)\b", re.I)
+# A story that asks for a fast edit as a whole ("fast-paced shots", "quick cuts", "a montage"):
+# shorter shots, more of them, each a clean cut (D32).
+_FAST = re.compile(
+    r"\b(?:fast|quick|rapid)[- ](?:paced|fire|cut)\b"
+    r"|\b(?:rapid|quick|fast|jump|hard|staccato|short|snappy)\s+(?:cuts?|shots|edits?|editing|pace)\b"
+    r"|\bmontage\b",
+    re.I,
+)
 _BEAT_START = re.compile(rf"(?=(?<![\d:.]){_STAMP}\s*[-–—]\s*{_STAMP})")
 _RANGE = re.compile(rf"({_STAMP})\s*[-–—]\s*({_STAMP})")
 _BULLET = re.compile(r"^[\s•○◦*\-]+", re.M)
@@ -323,6 +331,20 @@ def _mark_card(split: Split) -> None:
             f"Scene {_names(last.numbers)} (a logo or brand on screen) becomes the ad's end card, made by us "
             "with your product name: the video AI writes letters badly."
         )
+
+
+def fast_story(story: str) -> bool:
+    """The story asks for a fast edit: shorter shots, more of them, cut cleanly (D32)."""
+    return bool(_FAST.search(story or ""))
+
+
+def card_sentence(text: str) -> tuple[str, str] | None:
+    """(the text before, the last sentence) when a scene's last sentence is a logo or brand reveal
+    on screen, else None. That sentence is the ad's end card, drawn by us (D32)."""
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", (text or "").strip()) if s]
+    if sentences and _CARD_WHAT.search(sentences[-1]) and _CARD_HOW.search(sentences[-1]):
+        return " ".join(sentences[:-1]).strip(), sentences[-1]
+    return None
 
 
 def _split_cuts(split: Split) -> None:

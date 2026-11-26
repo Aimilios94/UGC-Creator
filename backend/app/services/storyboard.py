@@ -15,8 +15,8 @@ from .analyze import brief_block
 from .llm_trace import LlmCall, Usage, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
 from .scene_plan import at_least_speech, fit_lengths, scenes_for_length
-from .scene_splitter import Split, split_story
-from .shots import plan_joins
+from .scene_splitter import Split, fast_story, split_story
+from .shots import plan_joins, split_end_card
 from .styles import LABELS as STYLE_LABELS
 from .weak_spots import weak_spot
 
@@ -157,7 +157,7 @@ def target_scenes(
     if structure is not None:
         return len(structure.scenes)
     if brief.video_length_s:
-        return scenes_for_length(brief.video_length_s, end_card_s)
+        return scenes_for_length(brief.video_length_s, end_card_s, fast=fast_story(brief.story))
     return None
 
 
@@ -388,6 +388,7 @@ def write_storyboard(
     board = Storyboard.model_validate(data)
     if structure is not None and len(structure.scenes) == len(board.scenes):
         board.structure = attach(structure, board, beats, swaps, fixes).model_dump(mode="json")
+    split_end_card(board, end_card_s)
     plan_joins(board, brief)
     return board, call
 

@@ -20,9 +20,11 @@ WORDS_PER_SECOND = 2.5
 MIN_SCENE_S, MAX_SCENE_S = 2, 10
 
 
-def scenes_for_length(video_s: int, end_card_s: float) -> int:
+def scenes_for_length(video_s: int, end_card_s: float, *, fast: bool = False) -> int:
+    """About 2.5 s per scene, at most 5; a story that asks for a fast edit is not held to 5 (D32)."""
     scenes_s = max(MIN_SCENE_S, video_s - end_card_s)
-    return max(MIN_SCENES, min(MAX_PLANNED_SCENES, round(scenes_s / SECONDS_PER_SCENE)))
+    cap = MAX_SCENES if fast else MAX_PLANNED_SCENES
+    return max(MIN_SCENES, min(cap, round(scenes_s / SECONDS_PER_SCENE)))
 
 
 def speech_seconds(line: str) -> int:

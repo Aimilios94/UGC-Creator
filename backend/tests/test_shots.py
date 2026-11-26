@@ -12,8 +12,9 @@ from app.services.ad_structure import AdStructure, CastRefs, Person, SceneCard, 
 from app.services.pipeline import ends_on_next_picture, estimate_board_usd, is_chained
 from app.services.providers.media import MOCK_CLIP
 from app.services.providers.voice import MockVoice, VoiceRequest
-from app.services.scene_splitter import split_story
-from app.services.shots import plan_joins, voice_rooms
+from app.services.scene_plan import scenes_for_length
+from app.services.scene_splitter import fast_story, split_story
+from app.services.shots import plan_joins, split_end_card, voice_rooms
 from app.services.slot_filler import SlotOut, _slot, code_questions, content_words, named_in_story, open_questions
 from app.services.storyboard import fill_placeholders
 from app.services.storyboard_checks import flag_testimonials
@@ -74,6 +75,41 @@ def _with_cards(board: Storyboard, who: list[list[str]], places: list[str]) -> S
     ad = AdStructure(sheet={"people": people}, scenes=cards)
     board.structure = ad.model_dump(mode="json")
     return board
+
+
+HOODIE = (
+    "A stylish, 20-second lifestyle commercial celebrating the creative spirit of artists. It follows a creator "
+    "in unexpected urban spaces: a rain-slicked alley, a quiet bridge at dawn, and a bustling studio late at night. "
+    "Through poetic, fast-paced shots emphasizing texture, movement, and raw creativity, it captures the idea of "
+    "wearing your art as armor. The ad culminates in a sharp, minimalist reveal of the brand logo, positioning the "
+    "hoodie as a statement of identity."
+)
+
+
+def test_a_logo_reveal_ending_a_written_scene_becomes_the_end_card():
+    board = _with_cards(_board(3), [["P1"]] * 3, ["", "", ""])
+    board.scenes[2].description = "Wearing your art as armor. " + HOODIE.split(". ")[-1]
+    assert split_end_card(board, 2.0)
+    last, card = board.scenes[-2], board.scenes[-1]
+    assert len(board.scenes) == 4 and card.kind == "card" and card.duration_s == 2 and "logo" in card.description
+    assert "logo" not in last.description and last.kind == "clip"
+    assert len(board.structure["scenes"]) == 4 and board.structure["scenes"][-1]["uid"] == card.uid
+    assert "end card" in board.split_note
+    Storyboard.model_validate(board.model_dump())  # still a valid storyboard
+    # Already a card, or no logo: nothing changes.
+    assert not split_end_card(board, 2.0)
+    assert not split_end_card(_board(3), 2.0)
+
+
+def test_a_fast_paced_story_gets_more_shots_and_clean_cuts():
+    assert fast_story(HOODIE) and fast_story("quick cuts between places") and not fast_story("a slow walk")
+    assert scenes_for_length(20, 2.0) == 5 and scenes_for_length(20, 2.0, fast=True) == 7
+    board = _board(4)
+    plan_joins(board, Brief(**{**BRIEF, "story": HOODIE}))
+    assert [s.join for s in board.scenes] == ["flow", "cut", "cut", "cut"]
+    board = _board(4)  # without "fast" the shots flow on
+    plan_joins(board, Brief(**{**BRIEF, "story": "A slow walk through a park."}))
+    assert [s.join for s in board.scenes] == ["flow"] * 4
 
 
 def test_auto_flows_on_but_cuts_where_the_person_or_place_changes():

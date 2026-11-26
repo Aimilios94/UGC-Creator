@@ -669,7 +669,9 @@ function StoryboardStep({ job, onChange, readOnly }) {
   };
   const editTop = (field) => (e) => change({ ...board, [field]: e.target.value });
   // The whole video: the scenes plus the end card. Typed freely, applied on Enter or when leaving the box.
-  const endCard = config?.end_card_s ?? 2;
+  // The story's own end card (D32) is the last shot and replaces ours, so it is not added on top.
+  const storyCard = board.scenes[n - 1]?.kind === 'card';
+  const endCard = storyCard ? 0 : (config?.end_card_s ?? 2);
   const scenesLength = board.scenes.slice(0, n).reduce((t, s) => t + s.duration_s, 0);
   const videoLength = scenesLength + endCard;
   const minVideo = MIN_SCENE_S * n + endCard;
@@ -1026,9 +1028,9 @@ function StoryboardStep({ job, onChange, readOnly }) {
               Your video: {n} {n === 1 ? 'scene' : 'scenes'} (
               {board.scenes
                 .slice(0, n)
-                .map((s) => `${s.duration_s} s`)
+                .map((s) => (s.kind === 'card' ? `${s.duration_s} s your end card` : `${s.duration_s} s`))
                 .join(' + ')}
-              ) + {endCard} s end card = <strong>{videoLength} s</strong>.
+              ){storyCard ? '' : ` + ${endCard} s end card`} = <strong>{videoLength} s</strong>.
               <br />
               With {n} {n === 1 ? 'scene' : 'scenes'} you can choose {minVideo} to {maxVideo} s (each scene 2–10 s).
             </p>
