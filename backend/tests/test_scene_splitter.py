@@ -124,12 +124,21 @@ def test_time_ranges_win_over_headings():
 
 
 # --- rules for every shape ------------------------------------------------------------------------
-def test_more_than_five_headings_are_joined_and_the_user_is_told():
+def test_seven_headings_stay_seven_shots():
+    """Free cuts (D32): a story may have as many scenes as it wants, up to 20 shots."""
     story = "\n".join(f"Scene {i} (2 s): beat number {i} happens here." for i in range(1, 8))
     split = split_story(story)
-    assert len(split.beats) == 5 and sum(b.seconds for b in split.beats) == 14
-    assert "at most 5 scenes" in split.summary() and "scenes 1 and 2" in split.summary()
-    assert all(f"beat number {i}" in " ".join(b.text for b in split.beats) for i in range(1, 8))  # nothing lost
+    assert len(split.beats) == 7 and [b.part for b in split.beats] == [1, 2, 3, 4, 5, 6, 7]
+    assert "joined" not in split.summary()
+
+
+def test_more_than_twenty_headings_are_joined_and_the_user_is_told():
+    story = "\n".join(f"Scene {i} (2 s): beat number {i} happens here." for i in range(1, 23))
+    split = split_story(story)
+    assert len(split.beats) == 20 and sum(b.seconds for b in split.beats) == 44
+    assert "at most 20 shots" in split.summary() and "scenes 1 and 2" in split.summary()
+    text = " ".join(b.text for b in split.beats) + " "
+    assert all(f"beat number {i} " in text for i in range(1, 23))  # nothing lost
 
 
 def test_cut_to_starts_a_new_scene_when_there_is_room():
@@ -142,15 +151,16 @@ def test_cut_to_starts_a_new_scene_when_there_is_room():
         ("A close-up of the print.", 3),
         ("he smiles at the camera.", 4),
     ]
-    assert '"cut to", so it became two scenes' in split.summary()
+    assert '"cut to", so it became two shots' in split.summary()
+    assert [(b.part, b.join) for b in split.beats] == [(1, ""), (1, "cut"), (2, "")]  # one part, two shots
 
 
 def test_cut_to_with_no_room_stays_one_scene_and_says_so():
-    story = "\n".join(f"Scene {i} (4 s): he does thing {i} in the rain." for i in range(1, 5))
-    story += "\nScene 5 (4 s): he walks out of the hall, cut to the street outside."
+    story = "\n".join(f"Scene {i} (2 s): he does thing {i} in the rain." for i in range(1, 20))
+    story += "\nScene 20 (4 s): he walks out of the hall, cut to the street outside."
     split = split_story(story)
-    assert len(split.beats) == 5 and "cut to the street" in split.beats[4].text
-    assert "there are already 5 scenes" in split.summary()
+    assert len(split.beats) == 20 and "cut to the street" in split.beats[19].text
+    assert "there are already 20 shots" in split.summary()
 
 
 def test_a_word_containing_cut_is_not_a_cut():

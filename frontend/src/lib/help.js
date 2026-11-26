@@ -33,7 +33,7 @@ export const HELP = {
   theme: 'Sets the settings, props, pace and the music track.',
   ad_type: 'The format of the story. Testimonial uses only quotes and claims you write yourself.',
   voice: 'The AI voice that reads the voiceover. Viewers must be told it is AI: turn on the AI label when you post.',
-  continuity: 'One connected video: every scene flows into the next with no jump. A scene set to "Continue" starts from the last frame of the one before; a scene with your own picture is reached by the clip before it, which ends on that picture. Separate shots: each scene starts from its own picture, with a soft blend at each cut (best for different places or angles).',
+  continuity: 'Each shot also has its own switch: "Flows on" or "Cut to a new picture". One connected video: every scene flows into the next with no jump. A scene set to "Continue" starts from the last frame of the one before; a scene with your own picture is reached by the clip before it, which ends on that picture. Separate shots: each scene starts from its own picture, with a soft blend at each cut (best for different places or angles).',
   flow: 'Written for you after the story is read, so each cut matches: how this scene starts and ends (camera position, direction and speed, pose, light), and what stays the same in every scene. Only the AI gets it; your story text is not changed. You can edit it.',
   notes: 'Optional. Things true for the whole ad (look, place, weather, light, colours, camera rules). When your story has them before the timed parts, they are put here for you. They are added to every scene, so all scenes match.',
   video_length: 'How long the finished video should be. The app turns it into scenes of about 2.5 s each (more scenes give more detail). Auto follows your story. If your story has timestamps, they decide.',
@@ -41,7 +41,13 @@ export const HELP = {
   music: 'A licensed background track for the theme, lowered while the voice speaks.',
   captions: 'The voiceover as burned-in text, for people watching with the sound off.',
   sound: 'The voice, music and captions of the whole ad. Press the list icon to listen before you choose. You can change them until the video is made.',
-  add_scene: 'Add a scene (up to 5). Each scene is one picture and one clip.',
+  add_scene: 'Add a scene or shot (up to 20). Each shot is one picture and one clip.',
+  cutting:
+    'Your story decides how many cuts there are: write "cut to", "quick cuts of A, B and C", scene headings or timestamps, and each cut becomes its own shot (up to 20). This choice says how the shots meet. Auto: a shot flows on from the one before, and cuts where your story says so or where the person or place changes. One flowing take: as few cuts as possible. Many quick cuts: a clean cut at every shot. Separate shots: each from its own picture with a soft blend. Each shot costs one clip (about 0.32 EUR), so the price is shown before anything is made.',
+  join:
+    'Flows on: this shot starts from the last frame of the one before, so there is no jump. Cut to a new picture: a clean cut to a picture of its own, for a new person, place or angle (one picture\'s price).',
+  end_card:
+    'Your story ends on a logo or brand on screen, so we make it as the end card: your product name, offer and button on a plain background, with the spoken line. The video AI writes letters and logos badly, so this is sharper and free.',
   cast_world:
     'Who and what is in your ad, the same in every scene: the product, the people, the place, the light, the look and what never to show. Taken from your words where you gave them ("yours") and guessed by the AI where you did not ("AI\'s guess"). The scenes below were written with it, and every clip is built from it: press Edit to change an entry, and it becomes yours in every scene.',
   guesses:

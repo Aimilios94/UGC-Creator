@@ -127,8 +127,9 @@ Read the user's brief, the photo analysis and the user's story into the structur
 - scenes: exactly the number of scene cards asked for, in order. For each: who (cast ids and
   "product" when it is in frame), action (one main action, plain verbs), camera (shot size and one
   move, a few words, no times: the writer adds the timeline), product_moment
-  (how the product is shown), place_change (only when this scene's place or light differs from
-  the sheet), end (the last moment; for the last scene, how the ad ends), spoken_line (only words
+  (how the product is shown), place_change (this scene's own place or light whenever it differs from
+  the sheet: when the story moves between places, give each scene its own, and keep the sheet's place
+  to the main one), end (the last moment; for the last scene, how the ad ends), spoken_line (only words
   the user wrote to be said, word for word; otherwise empty).
 - Fill every key slot: who, action, product_moment, the sheet's place and the last scene's end.
   When the user did not say, guess, and set from_user false: the page marks it "AI's guess".
@@ -262,14 +263,16 @@ def content_words(text: str) -> set[str]:
 
 def _slot(out: SlotOut, source_text: str, story_words: frozenset[str] | set[str] = frozenset()) -> Slot:
     """The AI's value and where it came from: the user's when it is found word for word in their text;
-    "from your story" when it says what the story says in other words (code checks a meaningful word
-    of it is in the story); else the AI's guess."""
+    "from your story" when it says what the story says in other words (code checks that at least half
+    of its meaningful words are in the story, so "a runner" never makes "short dark hair, stubble"
+    the user's); else the AI's guess."""
     value = out.value.strip()
     if not value:
         return Slot(value="", source=GUESS)
     if out.from_user and _norm(value) in source_text:
         return Slot(value=value, source="user")
-    if (out.from_story or out.from_user) and content_words(value) & story_words:
+    words = content_words(value)
+    if (out.from_story or out.from_user) and words and len(words & story_words) * 2 >= len(words):
         return Slot(value=value, source="story")
     return Slot(value=value, source=GUESS)
 
@@ -383,7 +386,9 @@ PERSON_WORDS = re.compile(
     r"kid|kids|child|lady|gentleman|athlete|runner|player|customer|influencer)\b",
     re.I,
 )
-NOT_NAMES = frozenset("i pov ugc cta scene shot style camera light notes voiceover text the a then cut".split())
+NOT_NAMES = frozenset("i pov ugc cta scene shot style camera light notes voiceover text the a then cut am pm".split())
+# What breaks a sentence for the name check: brackets ("[0:11-0:16]", "[Brand Name]"), time stamps, quotes.
+_NOT_TEXT = re.compile(r"\[[^\]]*\]|\([^)]*\)|\d{1,2}[:.]\d{2}(?:\s*[-–—]\s*\d{1,2}[:.]\d{2})?|[\"“”]")
 
 
 def named_in_story(story: str, product: str) -> list[str]:
@@ -392,7 +397,7 @@ def named_in_story(story: str, product: str) -> list[str]:
     skip = content_words(product) | NOT_NAMES
     names: list[str] = []
     for line in (story or "").splitlines():
-        for sentence in re.split(r"(?<=[.!?:;])\s+", line):
+        for sentence in re.split(r"(?<=[.!?:;])\s+|\s*\.\s*", _NOT_TEXT.sub(" . ", line)):
             for word in re.findall(r"[A-Za-zÀ-ÿ][\w'’-]*", sentence)[1:]:
                 if word[0].isupper() and not word.isupper() and len(word) >= 3 and word.lower() not in skip:
                     if word not in names:
@@ -504,13 +509,37 @@ def still_guessed(ad: AdStructure, slot: str) -> bool:
     return False
 
 
-def open_questions(ad: AdStructure) -> list[Question]:
+def code_questions(ad: AdStructure) -> list[Question]:
+    """Questions code asks itself when a vague idea left the cast or the product moment to the AI and
+    the slot filler proposed none (owner's test, 26 Nov 2026: three invented people, no question)."""
+    out = []
+    if still_guessed(ad, "who") and ad.sheet.people:
+        guesses = [p.label or p.look.value for p in ad.sheet.people if (p.label or p.look.value)][:2]
+        options = [g[:60] for g in guesses] + ["Only hands", "No people, just the product"]
+        out.append(Question(slot="who", text="Who is in the video?", options=list(dict.fromkeys(options))[:4]))
+    if still_guessed(ad, "product_moment"):
+        out.append(
+            Question(
+                slot="product_moment",
+                text="How should the product be shown?",
+                options=["Worn or used in action", "Close-up of the details", "Held up to the camera"],
+            )
+        )
+    return out
+
+
+def open_questions(ad: AdStructure, *, vague: bool = False) -> list[Question]:
     """The slot filler's questions that code keeps: only about key slots still guessed, one per slot,
-    in the plan's order, at most 3. A detailed prompt usually keeps none."""
+    in the plan's order, at most 3. A detailed prompt usually keeps none. For a vague idea (a story
+    with no shape) where the slot filler asked nothing, code asks about who and the product moment."""
     by_slot: dict[str, Question] = {}
     for q in ad.questions:
         if q.slot in QUESTION_ORDER and q.slot not in by_slot and still_guessed(ad, q.slot):
             by_slot[q.slot] = q
+    if vague and not by_slot:
+        for q in code_questions(ad):
+            by_slot[q.slot] = q
+        ad.questions = [*ad.questions, *(q for q in by_slot.values() if q not in ad.questions)]
     return [by_slot[s] for s in QUESTION_ORDER if s in by_slot][:MAX_QUESTIONS]
 
 

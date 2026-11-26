@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import re
 import tempfile
 import time
 from collections.abc import Callable
@@ -41,7 +42,9 @@ from .providers.llm import LlmHandle, build_llm
 from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
 from .providers.voice import VoiceProvider, build_voice
+from .scene_plan import end_card_for
 from .scene_splitter import Beat, Split, split_story
+from .shots import voice_rooms
 from .storyboard_checks import drop_flagged_ideas, fix_instructions, flag_testimonials
 from .video_gen import ClipText, clip_prompt, plan_scene_video
 from .voice import plan_voice, usage_for
@@ -178,7 +181,16 @@ def write_board(
     edit on the Storyboard step (Approve is refused while any remain).
     """
     structure, split = filled or fill_slots(ctx, job_id, brief, analysis, attempt=attempt)
-    if ask and structure is not None and (questions := slot_filler.open_questions(structure)):
+    # A vague idea (code asks when the AI did not, D32): a short story with no scenes and no spoken
+    # lines, like "guy wearing my hoodie in the rain" or a one-paragraph concept.
+    story = brief.story.strip()
+    vague = (
+        bool(story)
+        and not (split is not None and split.beats)
+        and not re.search(r"[\"“”]", story)
+        and len(story.split()) <= 80
+    )
+    if ask and structure is not None and (questions := slot_filler.open_questions(structure, vague=vague)):
         structure.questions = questions
         repo.set_pending(ctx.db, job_id, {"structure": structure.model_dump(mode="json"), "split": dump_split(split)})
         return None
@@ -298,7 +310,9 @@ def add_scenes_to_board(ctx: Context, job: dict) -> Storyboard:
         job_id,
         "add_scenes",
         llm,
-        lambda: add_scenes.add_scenes(llm, board, brief, analysis, end_card_s=ctx.settings.end_card_s),
+        lambda: add_scenes.add_scenes(
+            llm, board, brief, analysis, end_card_s=end_card_for(board.scenes, ctx.settings.end_card_s)
+        ),
         attempt=attempt,
     )
     board = check_scene_flow(ctx, job_id, board, brief, attempt=attempt)
@@ -603,18 +617,25 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
             scenes: list[SceneInput] = []
             last_image = None
             rows = repo.list_scenes(ctx.db, job_id)[: s.render_scenes]
+            all_scenes = [Scene.model_validate(r["data"]) for r in rows]
+            rooms = voice_rooms(all_scenes)
+            card_row = rows[-1] if rows and all_scenes[-1].kind == "card" else None
+            if card_row is not None:
+                rows = rows[:-1]  # the story's own end card is drawn by us (D32), never filmed
             for pos, row in enumerate(rows):
                 idx = row["idx"]
-                scene = Scene.model_validate(row["data"])
+                scene = all_scenes[pos]
                 video_sr = repo.get_stage_run(ctx.db, job_id, "video", idx) or {}
                 ends_on_next = bool((video_sr.get("output") or {}).get("ends_on_next"))
                 cut = "separate"
                 if pos + 1 < len(rows) and board.continuity == "continuous":
-                    nxt = Scene.model_validate(rows[pos + 1]["data"])
+                    nxt = all_scenes[pos + 1]
                     if is_chained(board, rows[pos + 1]["idx"], nxt):
                         cut = "chain"
                     elif ends_on_next:
                         cut = "end_frame"
+                    elif nxt.join == "cut":
+                        cut = "cut"
                 video = repo.get_asset(ctx.db, str(row["video_asset_id"]))
                 clip = work / f"clip_{idx}.mp4"
                 clip.write_bytes(ctx.storage.get(video["storage_key"]))
@@ -637,8 +658,21 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
                         voice_s=voice_s,
                         fit_clip=ends_on_next,
                         blend_out_s=CUT_BLEND_S[cut],
+                        voice_room_s=rooms[pos],
                     )
                 )
+            end_card_s = s.end_card_s
+            card_voice, card_voice_s, card_line, card_headline = None, 0.0, "", ""
+            if card_row is not None:
+                card = all_scenes[-1]
+                end_card_s = float(card.duration_s)
+                card_line, card_headline = card.voiceover, card.on_screen_text or brief.product_name
+                voice_sr = repo.get_stage_run(ctx.db, job_id, "voice", card_row["idx"])
+                if voice_sr and voice_sr["status"] == "done":
+                    wav = repo.get_asset(ctx.db, voice_sr["output"]["asset_id"])
+                    card_voice = work / "voice_card.wav"
+                    card_voice.write_bytes(ctx.storage.get(wav["storage_key"]))
+                    card_voice_s = float(voice_sr["output"]["duration_s"])
             end_image = None
             if last_image is not None:
                 end_image = work / f"endcard_product.{TYPE_EXTS.get(last_image['content_type'], 'jpg')}"
@@ -655,7 +689,11 @@ def run_compose_stage(ctx: Context, job: dict, brief: Brief, board: Storyboard) 
                 captions=brief.captions,
                 branding=_branding(ctx, job, work),
                 scale=s.compose_scale,
-                end_card_s=s.end_card_s,
+                end_card_s=end_card_s,
+                end_card_voice=card_voice,
+                end_card_voice_s=card_voice_s,
+                end_card_voiceover=card_line,
+                end_card_headline=card_headline,
             )
             result = compose(spec, work / "out")
             checks = check_compose(spec, result)
@@ -747,15 +785,35 @@ def use_own_image(ctx: Context, job: dict, idx: int, scene: Scene, ratio: str) -
 
 
 def is_chained(board: Storyboard, idx: int, scene: Scene) -> bool:
-    """Continuous mode: a scene after the first, without a picture of its own, starts from the frame
-    where the previous scene is cut (D29)."""
-    return board.continuity == "continuous" and idx > 0 and scene.image_source == "generate"
+    """Continuous mode: a shot after the first that flows on (D32), without a picture of its own,
+    starts from the frame where the previous shot is cut (D29). A shot after a cut gets its own picture."""
+    return (
+        board.continuity == "continuous"
+        and idx > 0
+        and scene.image_source == "generate"
+        and scene.join == "flow"
+        and scene.kind == "clip"
+        and board.scenes[idx - 1].kind == "clip"
+    )
 
 
 def ends_on_next_picture(board: Storyboard, next_idx: int, next_scene: Scene) -> bool:
-    """Continuous mode (D30): a scene with its own picture is reached by the clip before it, which
-    ends on that picture (Kling's end frame), so the cut between them matches."""
-    return board.continuity == "continuous" and next_idx > 0 and next_scene.image_source != "generate"
+    """Continuous mode (D30): a shot with its own picture that flows on is reached by the clip before
+    it, which ends on that picture (Kling's end frame), so the cut between them matches. A cut (D32)
+    is a clean cut to the new picture instead: one person never morphs into another."""
+    return (
+        board.continuity == "continuous"
+        and next_idx > 0
+        and next_scene.image_source != "generate"
+        and next_scene.join == "flow"
+        and next_scene.kind == "clip"
+    )
+
+
+def flows_out(board: Storyboard, idx: int) -> bool:
+    """Whether the shot after this one flows on from its last frame (D32)."""
+    nxt = board.scenes[idx + 1] if idx + 1 < len(board.scenes) else None
+    return nxt is not None and nxt.join == "flow" and nxt.kind == "clip"
 
 
 SENT_FIELDS = ("prompt", "negative_prompt", "duration", "aspect_ratio", "seed")
@@ -763,7 +821,7 @@ SENT_FIELDS = ("prompt", "negative_prompt", "duration", "aspect_ratio", "seed")
 # How each cut is joined in compose (D30): a chained cut has the same frame on both sides, so a
 # clean cut; a cut onto the clip's end picture gets a very short blend for the model's small
 # difference; separate shots keep the 0.3 s soft blend (D29).
-CUT_BLEND_S = {"chain": 0.0, "end_frame": 0.1, "separate": 0.3}
+CUT_BLEND_S = {"chain": 0.0, "end_frame": 0.1, "separate": 0.3, "cut": 0.0}  # cut: a story's clean cut (D32)
 
 
 def chain_frame(ctx: Context, job: dict, idx: int, prev_video: dict, cut_s: float) -> dict:
@@ -808,7 +866,9 @@ def clip_texts(s: Settings, board: Storyboard, brief: Brief) -> list[ClipText]:
     n = len(scenes)
     sheet, cards = board_structure(board)
     return [
-        clip_prompt(
+        ClipText(text="", chars=0, notes="none", negative="")  # the end card: drawn by us, never filmed (D32)
+        if sc.kind == "card"
+        else clip_prompt(
             sc,
             idx=i,
             count=n,
@@ -816,6 +876,7 @@ def clip_texts(s: Settings, board: Storyboard, brief: Brief) -> list[ClipText]:
             notes=board.notes,
             continuous=board.continuity == "continuous",
             ends_on_next=i + 1 < n and ends_on_next_picture(board, i + 1, scenes[i + 1]),
+            flows_out=flows_out(board, i),
             keep_same=board.keep_same,
             sheet=sheet,
             card=cards.get(sc.uid),
@@ -884,6 +945,8 @@ def run_job(ctx: Context, job: dict) -> None:
     for row in rows:
         idx = row["idx"]
         scene = Scene.model_validate(row["data"])
+        if scene.kind == "card":
+            continue  # the story's own end card: drawn by us in compose (D32), no picture
         if is_chained(board, idx, scene):
             continue  # its starting picture is the previous clip's last frame, made in the video phase
         if scene.image_source != "generate":
@@ -921,6 +984,8 @@ def run_job(ctx: Context, job: dict) -> None:
     for pos, row in enumerate(rows):
         idx = row["idx"]
         scene = scenes[pos]
+        if scene.kind == "card":
+            continue  # drawn by us in compose (D32), never filmed
         if is_chained(board, idx, scene):
             images[idx] = chain_frame(ctx, job, idx, prev_video, float(prev_scene.duration_s))
             repo.set_scene_asset(ctx.db, job_id, idx, "image", str(images[idx]["id"]))
@@ -948,6 +1013,7 @@ def run_job(ctx: Context, job: dict) -> None:
                 notes=board.notes,
                 position=(idx, count),
                 continuous=board.continuity == "continuous",
+                flows_out=flows_out(board, idx),
                 end_image=as_input(end) if end else None,
                 end_image_sha256=end["sha256"] if end else None,
                 keep_same=board.keep_same,
@@ -997,12 +1063,13 @@ def estimate_board_usd(
     """(images, video) estimate for this storyboard: own pictures are free unless they must be
     extended to the ad's shape (`extend`, from `own_to_extend`); clips by each scene's length."""
     scenes = board.scenes[: s.render_scenes]
+    filmed = [(i, sc) for i, sc in enumerate(scenes) if sc.kind == "clip"]  # an end card is free (D32)
     images = sum(
         cost_usd(s.image_model, Usage(images=1))
-        for i, sc in enumerate(scenes)
+        for i, sc in filmed
         if (sc.image_source == "generate" and not is_chained(board, i, sc)) or i in extend
     )
-    video = sum(cost_usd(s.video_model, Usage(seconds=render_seconds(sc.duration_s))) for sc in scenes)
+    video = sum(cost_usd(s.video_model, Usage(seconds=render_seconds(sc.duration_s))) for _, sc in filmed)
     if voice != "none":
         video += sum(voice_est_usd(s, sc.voiceover) for sc in scenes if sc.voiceover.strip())
     return round(images, 6), round(video, 6)

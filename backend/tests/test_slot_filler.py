@@ -205,9 +205,11 @@ def test_length_line_says_the_real_length_and_offers_fixes():
     assert line["add_lengths"] == [9, 9]
     longer = length_line([10, 10, 10], 20, 2)
     assert longer["text"] == "Your scenes make a 32 s ad (you picked 20 s)." and longer["add"] == ""
-    full = length_line([5, 5, 5, 5, 5], 40, 2)
-    assert full["add"] == "" and full["keep"] == "Keep 27 s"  # 5 scenes already: only Keep
-    assert add_plan([4, 4, 4], 52, 2) == [10, 10]  # as close as 5 scenes allow, never more than 10 s each
+    more = length_line([5, 5, 5, 5, 5], 40, 2)
+    assert more["add_lengths"] == [7, 6] and more["keep"] == "Keep 27 s"  # free cuts (D32): room after 5
+    full = length_line([2] * 20, 52, 2)
+    assert full["add"] == "" and full["keep"] == "Keep 42 s"  # 20 shots already: only Keep
+    assert add_plan([4, 4, 4], 52, 2) == [10, 10, 9, 9]  # free cuts (D32): reaches 52 s, never more than 10 s each
     assert add_plan([10, 10], 23, 2) == []  # one second short: no 2 s scene for it
 
 

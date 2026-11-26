@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 
-from ..models import MAX_SCENES, MIN_SCENES
+from ..models import MAX_PLANNED_SCENES, MAX_SCENES, MIN_SCENES
 
 SECONDS_PER_SCENE = 2.5  # owner's choice (D28): more, shorter scenes give more detail
 WORDS_PER_SECOND = 2.5
@@ -22,7 +22,7 @@ MIN_SCENE_S, MAX_SCENE_S = 2, 10
 
 def scenes_for_length(video_s: int, end_card_s: float) -> int:
     scenes_s = max(MIN_SCENE_S, video_s - end_card_s)
-    return max(MIN_SCENES, min(MAX_SCENES, round(scenes_s / SECONDS_PER_SCENE)))
+    return max(MIN_SCENES, min(MAX_PLANNED_SCENES, round(scenes_s / SECONDS_PER_SCENE)))
 
 
 def speech_seconds(line: str) -> int:
@@ -56,9 +56,10 @@ def real_length(durations: list[int], end_card_s: float) -> int:
 
 def add_plan(durations: list[int], picked_s: int, end_card_s: float) -> list[int]:
     """Lengths of the scenes to add to get closer to the picked length: as few as can carry the
-    missing seconds (each 2-10 s), within the 5-scene limit. Empty when none can be added."""
+    missing seconds (each 2-10 s), at most 5 added and within the shot limit (D32). Empty when none
+    can be added."""
     missing = picked_s - real_length(durations, end_card_s)
-    room = MAX_SCENES - len(durations)
+    room = min(MAX_PLANNED_SCENES, MAX_SCENES - len(durations))
     if missing < MIN_SCENE_S or room <= 0:
         return []
     n = min(room, math.ceil(missing / MAX_SCENE_S))
@@ -84,6 +85,12 @@ def length_line(durations: list[int], picked_s: int | None, end_card_s: float) -
         "add_lengths": adds,
         "keep": f"Keep {real} s",
     }
+
+
+def end_card_for(scenes, default_s: float) -> float:
+    """The extra end card's seconds: none when the story ends on its own card shot (D32), which then
+    is the end card."""
+    return 0.0 if scenes and getattr(scenes[-1], "kind", "clip") == "card" else default_s
 
 
 def at_least_speech(lengths: list[int], voiceovers: list[str]) -> list[int]:

@@ -18,7 +18,14 @@ Tone = Literal["energetic", "calm", "playful", "premium"]
 Font = Literal["Inter", "Montserrat", "Bebas Neue", "Playfair Display"]  # bundled by compose (OFL)
 Voice = Literal["marin", "cedar", "coral", "onyx", "none"]  # gpt-4o-mini-tts voices offered, or no voiceover
 Music = Literal["theme", "none", "sport", "beauty", "tech", "food", "fashion"]  # the theme's bed, none, or any bed
-MIN_SCENES, MAX_SCENES = 1, 5
+# A "scene" in the storyboard is one shot: one clip, one cut (D32). The user's story may have as many
+# cuts as it wants, up to MAX_SCENES shots; a length or "Add scenes" plans at most MAX_PLANNED_SCENES.
+MIN_SCENES, MAX_SCENES = 1, 20
+MAX_PLANNED_SCENES = 5
+MIN_SHOT_S = 1  # a rapid cut can be 1 second on screen (the video model still makes 5 s)
+Cutting = Literal["auto", "flowing", "cuts", "separate"]  # "How it's cut" on the Create page (D32)
+Join = Literal["flow", "cut"]  # how a shot meets the one before it
+ShotKind = Literal["clip", "card"]  # card: the story's own end card (logo, brand reveal), drawn by us
 STORY_MAX = 12000  # the user's story and its style notes, in characters (D30)
 SPLIT_NOTE_MAX = 600  # the line saying how the story was split into scenes (D31)
 CaptionStyle = Literal["bold", "clean", "off"]
@@ -46,6 +53,10 @@ class Brief(BaseModel):
     visual_style: VisualStyle = "realistic"
     story: str = Field(default="", max_length=STORY_MAX)  # the user's own story or script, if any
     video_length_s: int | None = Field(default=None, ge=4, le=52)  # whole ad incl. end card; None = auto
+    # auto: flows where the story continues, cuts where it says so or the person or place changes;
+    # flowing: one flowing take (a new person or place still cuts); cuts: a hard cut at every shot;
+    # separate: separate shots with a soft blend (D32).
+    cutting: Cutting = "auto"
 
     @field_validator("product_name", "description", "audience", "offer", "story", mode="before")
     @classmethod
@@ -95,7 +106,10 @@ class SceneDraft(BaseModel):
         default_factory=list, max_length=3, description="2-3 short on-screen headlines, to pick from"
     )
     duration_s: int = Field(
-        default=5, ge=2, le=10, description="Seconds this scene is on screen, 2-10; follow the story's timing if given"
+        default=5,
+        ge=MIN_SHOT_S,
+        le=10,
+        description="Seconds this scene is on screen, 1-10 (usually 2-10); follow the story's timing if given",
     )
 
 
@@ -119,6 +133,12 @@ class Scene(SceneDraft):
     notes_short: str = Field(default="", max_length=2500)
     # Added by "Add scenes to reach N s" (plan v2.3): the AI's guess, marked on the page, with Undo.
     ai_added: bool = False
+    # Scenes and shots (D32): shots cut from one part of the user's story share its number (0 = its
+    # own part); `join` says how this shot meets the one before (flows on from its last frame, or a
+    # cut to a new picture); a "card" shot is the story's own end card, drawn by us, never filmed.
+    part: int = Field(default=0, ge=0, le=MAX_SCENES)
+    join: Join = "flow"
+    kind: ShotKind = "clip"
 
 
 class Hook(BaseModel):
@@ -214,6 +234,10 @@ class Storyboard(BaseModel):
     @field_validator("scenes")
     @classmethod
     def _roles_by_position(cls, scenes: list[Scene]) -> list[Scene]:
+        for sc in scenes[:-1]:
+            sc.kind = "clip"  # only the last shot can be the story's own end card (D32)
+        if len(scenes) == 1:
+            scenes[0].kind = "clip"  # an ad needs at least one filmed shot
         return _roles_in_order(scenes)
 
     @field_validator("structure")

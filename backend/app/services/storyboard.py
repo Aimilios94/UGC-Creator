@@ -16,6 +16,7 @@ from .llm_trace import LlmCall, Usage, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
 from .scene_plan import at_least_speech, fit_lengths, scenes_for_length
 from .scene_splitter import Split, split_story
+from .shots import plan_joins
 from .styles import LABELS as STYLE_LABELS
 from .weak_spots import weak_spot
 
@@ -29,10 +30,11 @@ PLATFORM_NAMES = {
 INSTRUCTIONS = """\
 You plan short user-generated-content (UGC) style video ads for social platforms.
 Write a storyboard of scenes. Without a <story>: exactly three scenes, in this order: hook, demo, cta.
-With a <story>: follow the story's own structure, one scene per beat or shot it describes, 1 to 5 scenes
-(merge beats if it has more); the first scene is the hook and the last the cta, any between are demo.
-Each scene becomes one reference image (made by editing the real product photo) and one image-to-video
-clip. duration_s is how many seconds the scene is on screen (2-10, usually 5).
+With a <story>: follow the story's own structure, one scene per beat or shot it describes; the first
+scene is the hook and the last the cta, any between are demo.
+Each scene is one shot: one reference image (made by editing the real product photo) and one
+image-to-video clip, one continuous take. A cut is always a new scene, never inside one. duration_s is
+how many seconds the scene is on screen (1-10, usually 2-5).
 
 image_prompt (80-150 words), one detailed paragraph covering, in this order:
 - subject and action: who or what is in frame, where the product is and how it is held or placed;
@@ -54,6 +56,9 @@ camera movement (static, slow push-in, pull-out, pan, tilt, orbit, handheld sway
 subject and the product do, any change in light or focus, and finish with the final frame, which should
 lead naturally into the next scene. Keep the product fully visible and unchanged. Avoid beats that depend
 on object physics (a ball going in, a throw being caught, liquid poured precisely): they render badly.
+Never write "cut", "jump cut", "montage" or "fast cuts" inside a scene: describe camera moves only. Never
+write a logo, brand reveal, title or text appearing: the end card (product name and button) is added in
+editing.
 
 Other rules:
 - title: the product name only (no words like "ad" or "UGC").
@@ -172,6 +177,24 @@ def keep_users_lines(scenes: list[dict], story: str) -> None:
                 pool = [line, *[i for i in sc.get(ideas) or [] if i.strip() and i.strip() != line]]
                 sc[ideas] = pool[:3]
                 sc[field] = ""
+
+
+_PLACEHOLDER = re.compile(
+    r"\[\s*(?:your\s+)?(?:brand|brand\s+name|product|product\s+name|company|company\s+name)\s*\]", re.I
+)
+
+
+def fill_placeholders(scenes: list[dict], product_name: str) -> bool:
+    """ "[Brand Name]" or "[Product]" in a spoken line or on-screen text becomes the product name, so
+    the voice never reads a placeholder aloud. True when one was filled."""
+    filled = False
+    for sc in scenes:
+        for name in ("voiceover", "on_screen_text"):
+            line = sc.get(name) or ""
+            new = _PLACEHOLDER.sub(product_name, line)
+            if new != line:
+                sc[name], filled = new, True
+    return filled
 
 
 def flagged(card) -> str:
@@ -334,6 +357,9 @@ def write_storyboard(
     data["continuity"] = "continuous"  # every scene flows into the next (D30); "separate" is the user's choice
     scenes = data["scenes"]
     keep_users_lines(scenes, brief.story)
+    if fill_placeholders(scenes, brief.product_name) and data.get("split_note"):
+        note = f'{data["split_note"]} Your product name is used where your story says "[Brand Name]".'
+        data["split_note"] = note[:SPLIT_NOTE_MAX]
     lines = [sc.get("voiceover") or "" for sc in scenes]
     if beats and len(scenes) == len(beats):
         # Scenes without seconds of their own share what the chosen length leaves after the timed
@@ -348,6 +374,10 @@ def write_storyboard(
         for scene, beat, length in zip(scenes, beats, plan, strict=True):
             scene["description"] = beat.text  # the user's own words for this scene, whole
             scene["duration_s"] = beat.seconds or length
+            # Scenes and shots (D32): the part of the story, a cut the story asks for, its end card.
+            scene["part"] = beat.part
+            scene["join"] = "cut" if beat.join == "cut" else "flow"
+            scene["kind"] = "card" if beat.card else "clip"
     elif brief.video_length_s:
         for scene, length in zip(scenes, fit_lengths(lines, round(brief.video_length_s - end_card_s)), strict=True):
             scene["duration_s"] = length
@@ -358,6 +388,7 @@ def write_storyboard(
     board = Storyboard.model_validate(data)
     if structure is not None and len(structure.scenes) == len(board.scenes):
         board.structure = attach(structure, board, beats, swaps, fixes).model_dump(mode="json")
+    plan_joins(board, brief)
     return board, call
 
 

@@ -56,7 +56,7 @@ from ..services.pipeline import (
     shorten_scene,
     storyboard_from_story,
 )
-from ..services.scene_plan import length_line
+from ..services.scene_plan import end_card_for, length_line
 from ..services.slot_filler import fill_gaps
 from ..services.storyboard_checks import flag_testimonials
 from ..services.uploads import sanitise_image
@@ -153,7 +153,8 @@ def job_view(ctx: Context, job: dict) -> JobView:
 
 
 def _length_line(s, board: Storyboard, brief: Brief) -> LengthLine | None:
-    line = length_line([sc.duration_s for sc in board.scenes], brief.video_length_s, s.end_card_s)
+    end_s = end_card_for(board.scenes, s.end_card_s)  # none extra when the story ends on its own card (D32)
+    line = length_line([sc.duration_s for sc in board.scenes], brief.video_length_s, end_s)
     return LengthLine(**line) if line else None
 
 

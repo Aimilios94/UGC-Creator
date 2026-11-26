@@ -106,7 +106,7 @@ def test_only_the_people_in_the_shot_are_described():
 def test_never_and_avoid_go_to_the_negative_prompt_not_the_clip():
     card = _card(text=user("he walks"), avoid=guess("umbrellas"))
     clip = _clip(card=card)
-    assert clip.negative == f"{VIDEO_NEGATIVE}, no other people, umbrellas"
+    assert clip.negative == f"{VIDEO_NEGATIVE}, other people, umbrellas"  # "no" dropped: the field means avoid (D32)
     assert "umbrellas" not in clip.text and "no other people" not in clip.text
     assert negative_prompt() == VIDEO_NEGATIVE
 

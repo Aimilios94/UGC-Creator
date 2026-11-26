@@ -16,8 +16,28 @@ import { goToBrief } from '../lib/steps';
 
 const POLL_MS = 3000;
 const ROLE_NAME = { hook: 'Hook', demo: 'Demo', cta: 'Call to action' };
-const sceneTitle = (s, i) => `Scene ${i + 1} · ${ROLE_NAME[s.role] || s.role}`;
-const MAX_SCENES = 5;
+// Scenes and shots (D32): shots cut from one part of the story share its number, so the page shows
+// "Scene 2 · shot 1 of 3"; the story's own end card is drawn by us.
+function shotInfo(scenes, i) {
+  let scene = 0;
+  for (let j = 0; j <= i; j += 1) {
+    if (j === 0 || !scenes[j].part || scenes[j].part !== scenes[j - 1].part) scene += 1;
+  }
+  const part = scenes[i].part;
+  let first = i;
+  let last = i;
+  while (part && first > 0 && scenes[first - 1].part === part) first -= 1;
+  while (part && last < scenes.length - 1 && scenes[last + 1].part === part) last += 1;
+  return { scene, shot: i - first + 1, shots: last - first + 1 };
+}
+const sceneTitle = (s, i, scenes) => {
+  if (!scenes) return `Scene ${i + 1} · ${ROLE_NAME[s.role] || s.role}`;
+  const { scene, shot, shots } = shotInfo(scenes, i);
+  const base = shots > 1 ? `Scene ${scene} · shot ${shot} of ${shots}` : `Scene ${scene}`;
+  return `${base} · ${s.kind === 'card' ? 'End card' : ROLE_NAME[s.role] || s.role}`;
+};
+const MAX_SCENES = 20; // shots: the story sets the cuts (D32)
+const MAX_PLANNED = 5; // a length or a recommendation plans at most 5 scenes
 const rolesFor = (n) => (n === 1 ? ['cta'] : ['hook', ...Array(n - 2).fill('demo'), 'cta']);
 const FORMULA_LABEL = {
   pov: 'POV',
@@ -43,7 +63,7 @@ const SOURCE_LABEL = { generate: 'Generate', product: 'My product photo', upload
 const isActive = (j) => j.status === 'queued' || j.status === 'running';
 const ZERO = { usd: 0, eur: 0 };
 const add = (a, b, k = 1) => ({ usd: a.usd + b.usd * k, eur: a.eur + b.eur * k });
-const MIN_SCENE_S = 2;
+const MIN_SCENE_S = 1; // a quick cut can be 1 s (D32)
 const MAX_SCENE_S = 10;
 const renderSeconds = (d) => (d <= 5 ? 5 : 10); // the video model makes 5 s or 10 s clips; shorter scenes are cut
 const clampScene = (v) => Math.max(MIN_SCENE_S, Math.min(MAX_SCENE_S, Math.round(Number(v) || MIN_SCENE_S)));
@@ -58,12 +78,23 @@ function splitLength(total, n) {
 // Live estimate from the server's unit prices (own images are free; clips by their length).
 // A scene after the first, in a continuous shot, without a picture of its own, starts from the
 // previous scene's last frame (no new picture).
-const isChained = (board, i, s) => board?.continuity === 'continuous' && i > 0 && s.image_source === 'generate';
+// D32: a shot after a cut gets its own picture; the story's end card is never filmed.
+const joinOf = (board, i, s) => s.join ?? board?.scenes?.[i]?.join ?? 'flow';
+const kindOf = (board, i, s) => s.kind ?? board?.scenes?.[i]?.kind ?? 'clip';
+const isChained = (board, i, s) =>
+  board?.continuity === 'continuous' &&
+  i > 0 &&
+  s.image_source === 'generate' &&
+  joinOf(board, i, s) !== 'cut' &&
+  kindOf(board, i, s) !== 'card' &&
+  board?.scenes?.[i - 1]?.kind !== 'card';
 // D30: in a connected video, a scene with its own picture is reached by the clip before it,
 // which ends on that picture.
 const endsOnNext = (board, i) => {
   const next = board?.scenes?.[i + 1];
-  return board?.continuity === 'continuous' && Boolean(next) && next.image_source !== 'generate';
+  return (
+    board?.continuity === 'continuous' && Boolean(next) && next.image_source !== 'generate' && next.join !== 'cut' && next.kind !== 'card'
+  );
 };
 
 // D31: an own picture that a crop to the ad's shape would cut by more than a quarter is extended to
@@ -92,6 +123,10 @@ function estimateBoard(board, prices, n = 3, voice = 'marin', extend = new Set()
   let video = ZERO;
   if (!board || !prices) return null;
   board.scenes.slice(0, n).forEach((s, i) => {
+    if (s.kind === 'card') {
+      if (s.voiceover.trim() && voice !== 'none') video = add(video, prices.voice_line);
+      return; // drawn by us, free (D32)
+    }
     if ((s.image_source === 'generate' && !isChained(board, i, s)) || extend.has(i)) images = add(images, prices.image);
     video = add(video, prices.video_per_second, renderSeconds(s.duration_s));
     if (s.voiceover.trim() && voice !== 'none') video = add(video, prices.voice_line);
@@ -198,7 +233,7 @@ function Chip({ name, value, checked, onChange, children, disabled }) {
 // What each scene's clip starts from, said plainly (the video AI animates one picture per scene).
 function pictureNote(scenes, board, extend = new Set()) {
   const chained = scenes.filter((s, i) => isChained(board, i, s)).length;
-  const count = (src) => scenes.filter((s, i) => s.image_source === src && !isChained(board, i, s)).length;
+  const count = (src) => scenes.filter((s, i) => s.kind !== 'card' && s.image_source === src && !isChained(board, i, s)).length;
   const [gen, product, own] = [count('generate'), count('product'), count('upload')];
   const word = (k) => (k === 1 ? 'scene' : 'scenes');
   const parts = [];
@@ -586,7 +621,11 @@ function StoryboardStep({ job, onChange, readOnly }) {
   const estimate = useMemo(() => estimateBoard(board, config?.prices, n, sound.voice, extend), [board, config, n, sound.voice, extend]);
   const hasStory = storyMode === 'own' || Boolean(job.brief.story);
   // New pictures: generated ones, plus own pictures the AI extends to the ad's shape (D31).
-  const newImages = board ? board.scenes.filter((s, i) => (s.image_source === 'generate' && !isChained(board, i, s)) || extend.has(i)).length : 0;
+  const newImages = board
+    ? board.scenes.filter((s, i) => s.kind !== 'card' && ((s.image_source === 'generate' && !isChained(board, i, s)) || extend.has(i))).length
+    : 0;
+  const filmed = board ? board.scenes.slice(0, n).filter((s) => s.kind !== 'card').length : n; // the end card is ours (D32)
+  const hasCard = filmed < n;
   const clips = useClipTexts(job, board); // what each clip gets, as you type (D30)
   const [shortened, setShortened] = useState({}); // scene -> its text before "Shorten it for me"
 
@@ -771,7 +810,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
   // Recommendation: about 2.5 s per scene for this video's length; joining neighbours keeps people
   // and places more consistent (fewer separate clips) and costs less. Nothing is cut: texts are joined.
   const perScene = config?.seconds_per_scene ?? 2.5;
-  const recommended = Math.max(1, Math.min(MAX_SCENES, Math.round(scenesLength / perScene)));
+  const recommended = Math.max(1, Math.min(MAX_PLANNED, Math.round(scenesLength / perScene)));
   // "0-2 s" / "0:00-0:02" / "0.00-0.02 s" in the second part move on by the first part's length.
   const shiftTimes = (text, by) =>
     text
@@ -1103,7 +1142,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
             <article key={i} className="card scene scene-wide">
               <div className="scene-head">
                 <h2>
-                  {sceneTitle(s, i)} <Help text={HELP[s.role]} />
+                  {sceneTitle(s, i, board.scenes)} <Help text={HELP[s.kind === 'card' ? 'end_card' : s.role]} />
                   {s.ai_added && <span className="mark guess">Added by the AI</span>}
                   {cardFor(board.structure, s)?.swap && <span className="mark changed">AI changed</span>}
                 </h2>
@@ -1142,13 +1181,42 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   </div>
                 </div>
                 <div className="scene-side">
+                  {s.kind === 'card' ? (
+                    <>
+                      <p className="flow-note small">
+                        Made by us, free: {s.on_screen_text || job.brief.product_name}, your offer and your button on a plain background, with this scene&rsquo;s spoken line. The video AI writes letters badly, so it never draws this.
+                      </p>
+                      {!readOnly && (
+                        <button type="button" className="btn btn-ghost btn-small" onClick={() => editScene(i, 'kind', 'clip')} disabled={disabled}>
+                          Film it with the video AI instead
+                        </button>
+                      )}
+                      <SceneLength id={`len${i}`} value={s.duration_s} onChange={(v) => editScene(i, 'duration_s', v)} disabled={disabled} prices={null} currency={currency} endsOnNext={false} />
+                    </>
+                  ) : (
+                  <>
+                  {i > 0 && board.continuity === 'continuous' && (
+                    <>
+                      <span className="label-like">
+                        How it starts <Help text={HELP.join} />
+                      </span>
+                      <div className="choice-row" role="radiogroup" aria-label={`How shot ${i + 1} starts`}>
+                        <Chip name={`join${i}`} value="flow" checked={s.join !== 'cut'} disabled={disabled} onChange={() => editScene(i, 'join', 'flow')}>
+                          Flows on
+                        </Chip>
+                        <Chip name={`join${i}`} value="cut" checked={s.join === 'cut'} disabled={disabled} onChange={() => editScene(i, 'join', 'cut')}>
+                          Cut to a new picture
+                        </Chip>
+                      </div>
+                    </>
+                  )}
                   <span className="label-like">
                     Starting picture <Help text={HELP.image_source} />
                   </span>
                   <div className="choice-row stack" role="radiogroup" aria-label={`Starting picture for scene ${i + 1}`}>
                     {['generate', 'product', 'upload'].map((src) => (
                       <Chip key={src} name={`src${i}`} value={src} checked={s.image_source === src} disabled={disabled || (src === 'upload' && !own)} onChange={() => editScene(i, 'image_source', src)}>
-                        {src === 'generate' && isChained(board, i, { image_source: 'generate' }) ? `Continue from scene ${i}` : SOURCE_LABEL[src]}
+                        {src === 'generate' && isChained(board, i, { image_source: 'generate' }) ? 'Continue from the shot before' : SOURCE_LABEL[src]}
                         {config && (
                           <span className="muted small">
                             {(src === 'generate' && !isChained(board, i, { image_source: 'generate' })) || (src !== 'generate' && needsExtend(ownPicture(job, i, src), job.brief.aspect_ratio))
@@ -1179,9 +1247,12 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     currency={currency}
                     endsOnNext={endsOnNext(board, i)}
                   />
+                  </>
+                  )}
                 </div>
               </div>
 
+              {s.kind !== 'card' && (
               <details className="ai-instructions">
                 <summary>
                   Show what the AI gets <span className="muted small">(the starting picture and the movement, written from this scene)</span>
@@ -1226,6 +1297,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 )}
                 <ClipExact clip={clips[i]} n={board.continuity === 'continuous' ? 4 : 3} />
               </details>
+              )}
             </article>
           );
         })}
@@ -1325,7 +1397,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 ...(newImages > 0
                   ? [[`${newImages} starting ${newImages === 1 ? 'picture' : 'pictures'}${mode === 'images' ? ' (now)' : ''}`, estimate.images]]
                   : []),
-                [`Video: ${n} ${n === 1 ? 'clip' : 'clips'}${sound.voice !== 'none' ? ' and voiceover' : ''}${mode === 'images' && newImages > 0 ? ' (later, only if you choose it)' : ''}`, estimate.video],
+                [`Video: ${filmed} ${filmed === 1 ? 'clip' : 'clips'}${hasCard ? ', your end card (free)' : ''}${sound.voice !== 'none' ? ' and voiceover' : ''}${mode === 'images' && newImages > 0 ? ' (later, only if you choose it)' : ''}`, estimate.video],
               ]}
               total={mode === 'video' || newImages === 0 ? estimate.total : null}
               note={pictureNote(board.scenes.slice(0, n), board, extend)}
@@ -1443,7 +1515,7 @@ function ImagesStep({ job, onChange, readOnly = false }) {
           return (
             <article key={i} className="card scene">
               <h2>
-                {sceneTitle(s, i)} <Help text={HELP[s.role]} />
+                {sceneTitle(s, i, board.scenes)} <Help text={HELP[s.kind === 'card' ? 'end_card' : s.role]} />
               </h2>
               {!locked && (
                 <ClipTooLong
@@ -1540,7 +1612,8 @@ function StageIcon({ status }) {
 function progressGroups(job, n) {
   const videoPhase = job.phase === 'video';
   const scenes = job.storyboard?.scenes || [];
-  const firstPictures = videoPhase ? n : scenes.slice(0, n).filter((s, i) => !isChained(job.storyboard, i, s)).length;
+  const filmed = scenes.slice(0, n).filter((s) => s.kind !== 'card').length; // the story's end card is ours (D32)
+  const firstPictures = videoPhase ? filmed : scenes.slice(0, n).filter((s, i) => s.kind !== 'card' && !isChained(job.storyboard, i, s)).length;
   const of = (stage) => job.stages.filter((s) => s.stage === stage);
   const status = (rows, expected) => {
     if (rows.some((r) => r.status === 'failed')) return 'failed';
@@ -1555,7 +1628,7 @@ function progressGroups(job, n) {
   ];
   if (videoPhase) {
     if (voiced) groups.push({ label: `Voiceover (${voiced} ${voiced === 1 ? 'line' : 'lines'})`, rows: of('voice'), expected: voiced });
-    groups.push({ label: `Video clips (${n})`, rows: of('video'), expected: n });
+    groups.push({ label: `Video clips (${filmed})`, rows: of('video'), expected: filmed });
     groups.push({ label: 'Final edit: captions, music, end card, every shape', rows: of('compose'), expected: 1 });
   }
   return groups.map((g) => ({
@@ -1585,7 +1658,7 @@ function AdSummary({ job, variant, testMode }) {
   const total = job.costs.reduce((acc, c) => add(acc, c.cost), ZERO);
   const tiles = [
     ['Length', variant?.duration_s ? `${variant.duration_s.toFixed(0)} s` : '—'],
-    ['Scenes', String(scenes.length)],
+    ['Scenes', (() => { const parts = scenes.length ? shotInfo(scenes, scenes.length - 1).scene : 0; return parts === scenes.length ? String(parts) : `${parts} scenes, ${scenes.length} shots`; })()],
     ['Style', STYLE_LABEL[b.visual_style] || b.visual_style],
     ['Voice', VOICE_LABEL[b.voice] || b.voice],
     ['Music', b.music === 'none' ? 'No music' : track ? `${track.title}` : '…', track ? `${track.artist} · CC0` : ''],

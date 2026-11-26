@@ -48,9 +48,8 @@
       "length": null,
       "expect": {
         "shape": "time_ranges",
-        "scene_count": 5,
-        "total_seconds": 14,
-        "message_contains": "at most 5 scenes"
+        "scene_count": 7,
+        "total_seconds": 14
       }
     },
     {

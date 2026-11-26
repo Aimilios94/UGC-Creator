@@ -17,7 +17,7 @@ import time
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from ..models import Brief, Storyboard
+from ..models import MAX_SCENES, Brief, Storyboard
 from .llm_trace import LlmCall, cost_usd, tokens_from_run_usage
 from .providers.llm import LlmHandle
 from .styles import LABELS as STYLE_LABELS
@@ -47,7 +47,7 @@ class ContinuityPlan(BaseModel):
         description="What stays the same in every scene: camera language (lens, height, handheld or smooth), "
         "people and clothes, place, time of day, light and colours",
     )
-    scenes: list[SceneFlow] = Field(min_length=1, max_length=5)
+    scenes: list[SceneFlow] = Field(min_length=1, max_length=MAX_SCENES)
 
 
 INSTRUCTIONS = """\

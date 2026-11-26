@@ -56,9 +56,13 @@ def clip_rules(
     continuous: bool,
     ends_on_next: bool,
     has_photo: bool = True,
+    flows_in: bool = True,
+    flows_out: bool = True,
 ) -> str:
     """The fixed rules every clip gets, at the end of its text. At most RULES_MAX characters.
-    `duration_s` is the clip Kling makes (5 or 10 s), `used_s` the scene's length on screen."""
+    `duration_s` is the clip Kling makes (5 or 10 s), `used_s` the scene's length on screen.
+    `flows_in` / `flows_out`: the shot flows on from the one before / into the one after (D32); a
+    cut on either side drops that continue line."""
     used = min(used_s, duration_s)
     product = PRODUCT_LINE_PHOTO if has_photo else PRODUCT_LINE_NO_PHOTO
     parts = [product, VIDEO_STYLE.get(style, VIDEO_STYLE["realistic"])]
@@ -72,9 +76,9 @@ def clip_rules(
         parts.append(TEN_SECONDS)
     if continuous and count > 1:
         # Only in one connected video: separate shots each start from their own picture.
-        if idx > 0:
+        if idx > 0 and flows_in:
             parts.append(CONTINUES)
-        if idx < count - 1:
+        if idx < count - 1 and flows_out:
             parts.append(END_MID)
     return " " + " ".join(parts)  # the leading space joins it to the text before
 
@@ -165,22 +169,79 @@ BUDGETS = {"movement": MOVE_MAX, "who": WHO_MAX, "start_end": 2 * FLOW_PART_MAX,
 TIME_MARK = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:-|–|to)\s*\d+(?:[.,]\d+)?\s*s\b|\b\d{1,2}:\d{2}\b", re.I)
 
 
+_NO = re.compile(r"^\s*(?:no|never|avoid|without|not)\s+(?:any\s+)?", re.I)
+
+
+def _as_avoid(text: str) -> str:
+    """ "no bright daytime, no staged smiles" -> "bright daytime, staged smiles": the field already
+    means "avoid", so a "no" in it would be a double negative."""
+    return ", ".join(x for x in (_NO.sub("", p).strip(" .") for p in re.split(r"[,;]", text)) if x)
+
+
 def negative_prompt(sheet=None, card=None) -> str:
     """Kling's negative prompt: the base list, then the ad's "Never" and the scene's "Avoid"."""
-    extra = [s.value.strip() for s in (sheet.never if sheet else None, card.avoid if card else None) if s and s.value]
-    return ", ".join([VIDEO_NEGATIVE, *extra])[:MAX_PROMPT]
+    extra = [
+        _as_avoid(s.value) for s in (sheet.never if sheet else None, card.avoid if card else None) if s and s.value
+    ]
+    return ", ".join([VIDEO_NEGATIVE, *[x for x in extra if x]])[:MAX_PROMPT]
+
+
+# Spoken words and sounds in a scene's text are for the voice and music, not the silent video AI
+# (D32): a quoted line with its lead-in ("voiceover says: "...""), and "audio: ..." / "sound: ...".
+_SPOKEN = re.compile(
+    r"[^;.\"“]*?\b(?:voice\s*-?\s*over|voice|vo|narrat\w*|whispers?|shouts?|speaks?|says\s*:|said\s*:)[^\"“;]*"
+    r"[\"“][^\"”]*[\"”]\.?",
+    re.I,
+)
+_SOUND = re.compile(r"\b(?:audio|sound|sfx|music)\s*:\s*[^;.]*[;.]?", re.I)
+_ACCOMPANIED = re.compile(r",?\s*accompanied by (?:a |an |the )?[^;.]*(?:thud|beat|sound|music|bass|hit)\b[^;.]*", re.I)
+
+
+def film_only(text: str) -> str:
+    """The scene's text without what the camera cannot film: spoken lines (they are the voiceover)
+    and sound cues. Everything else stays word for word."""
+    out = _SOUND.sub("", _ACCOMPANIED.sub("", _SPOKEN.sub("", text)))
+    out = re.sub(r"\s*;\s*(?=[;.]|$)", "", out)
+    out = re.sub(r"\s*;\s+(?=[A-Z])", ". ", out)  # "hands; She smiles" once the line between is gone
+    out = re.sub(r"\s{2,}", " ", out)
+    return out.strip(" ;,")
 
 
 def scene_action(scene: Scene, card) -> tuple[str, bool]:
     """What happens in the scene, and whether it is the user's own words. The user's scene text or
     action goes to Kling word for word (plan A1), unless the writer swapped it (shown, with Undo)."""
     if card.swap is not None and card.swap.value.strip():
-        return card.swap.value.strip(), False
+        return film_only(card.swap.value.strip()), False
     if card.text.locked:
-        return (scene.description.strip() or card.text.value.strip()), True
+        return film_only(scene.description.strip() or card.text.value.strip()), True
     if not card.action.empty:
-        return card.action.value.strip(), card.action.locked
-    return scene.description.strip(), False
+        return film_only(card.action.value.strip()), card.action.locked
+    return film_only(scene.description.strip()), False
+
+
+def _with_subject(action: str, card, sheet) -> str:
+    """A guessed action that starts with its verb ("sprints through puddles") gets its person first,
+    so the clip says who does it."""
+    if not action or not action[0].islower():
+        return action
+    people = {p.id: p for p in sheet.people}
+    for pid in card.who.ids:
+        p = people.get(pid)
+        if p is not None and pid not in action:
+            return f"{pid} ({p.label}) {action}" if p.label else f"{pid} {action}"
+    return action
+
+
+def _clause_cut(text: str, room: int) -> str:
+    """Our own text cut to the room at a sentence or clause end (never mid-phrase when it can help)."""
+    text = text.strip()
+    if len(text) <= room:
+        return text
+    cut = text[:room]
+    ends = [m.start() for m in re.finditer(r"[.;!?,](?=\s)", cut)]
+    if ends and ends[-1] > room * 0.5:
+        return cut[: ends[-1]].strip()
+    return fit_text(text, room)
 
 
 def _who_part(card, sheet, room: int) -> str:
@@ -254,14 +315,20 @@ def build_clip(
     ends_on_next: bool,
     render_s: int,
     has_photo: bool,
+    flows_out: bool = True,
 ) -> ClipText:
     """One clip's text from the slots, with the budget table: the movement, who and the product,
-    how it starts and ends, the place and look, the user's notes when there is room, the fixed rules."""
+    how it starts and ends, the place and look, the user's notes when there is room, the fixed rules.
+    A shot after a cut has no "Starts" or continue line; one before a cut no "Ends" (D32)."""
+    flows_in = scene.join == "flow"
     rules = clip_rules(
         style=style, duration_s=render_s, used_s=scene.duration_s, idx=idx, count=count,
         continuous=continuous, ends_on_next=ends_on_next, has_photo=has_photo,
+        flows_in=flows_in, flows_out=flows_out,
     )  # fmt: skip
     action, action_mine = scene_action(scene, card)
+    if not action_mine:
+        action = _with_subject(action, card, sheet)
     # The user's own timeline (A5) comes inside their text; the writer's timeline then stays out.
     timeline = scene.motion_prompt.strip()
     timeline_mine = card.timeline.locked
@@ -275,17 +342,17 @@ def build_clip(
     action, timeline = _sentence(action, mine=True), _sentence(timeline, mine=timeline_mine)
 
     who = _who_part(card, sheet, WHO_MAX)
-    starts = scene.starts.strip() if continuous and idx > 0 else ""
+    starts = scene.starts.strip() if continuous and idx > 0 and flows_in else ""
     if not starts and card.start.locked:
         starts = card.start.value.strip()
-    ends = scene.ends.strip() if continuous and idx < count - 1 else ""
+    ends = scene.ends.strip() if continuous and idx < count - 1 and flows_out else ""
     if idx == count - 1 and not card.end.empty:
         ends = card.end.value.strip()  # how the ad ends
     place = _place_part(card, sheet, PLACE_MAX)
 
     def flow(n: int) -> str:
         return " ".join(
-            f"{label}: {_sentence(fit_text(t, n - 1).rstrip(' ,;:-'), mine=True)}"
+            f"{label}: {_sentence(_clause_cut(t, n - len(label) - 3).rstrip(' ,;:-'), mine=True)}"
             for label, t in (("Starts", starts), ("Ends", ends))
             if t
         )
@@ -375,6 +442,7 @@ def clip_prompt(
     has_photo: bool = True,
     card=None,
     sheet=None,
+    flows_out: bool = True,
 ) -> ClipText:
     """The exact text Kling gets for this scene (at most 2,500 characters). `render_s` is the clip
     the model makes (5 or 10 s; by default the one the scene's length needs). With the structure
@@ -388,7 +456,7 @@ def clip_prompt(
             card = SceneCard()
         return build_clip(
             scene, card, sheet, idx=idx, count=count, style=style, notes=notes, continuous=continuous,
-            ends_on_next=ends_on_next, render_s=duration_s, has_photo=has_photo,
+            ends_on_next=ends_on_next, render_s=duration_s, has_photo=has_photo, flows_out=flows_out,
         )  # fmt: skip
     rules = clip_rules(
         style=style,
@@ -399,6 +467,8 @@ def clip_prompt(
         continuous=continuous,
         ends_on_next=ends_on_next,
         has_photo=has_photo,
+        flows_in=scene.join == "flow",
+        flows_out=flows_out,
     )
     own = scene_text(scene)
     over = max(0, len(own) + len(rules) - MAX_PROMPT)
@@ -406,8 +476,8 @@ def clip_prompt(
     room = MAX_PROMPT - len(rules) - len(body)
     if continuous:
         for label, text, show in (
-            ("Starts", scene.starts, idx > 0),
-            ("Ends", scene.ends, idx < count - 1),
+            ("Starts", scene.starts, idx > 0 and scene.join == "flow"),
+            ("Ends", scene.ends, idx < count - 1 and flows_out),
             ("Same in every scene", keep_same, not notes.strip()),  # the notes already say it
         ):
             if show and text.strip() and room > 60:
@@ -449,6 +519,7 @@ def plan_scene_video(
     has_photo: bool = True,
     card=None,
     sheet=None,
+    flows_out: bool = True,
 ) -> PlannedRender:
     """One clip. In a continuous shot (D30) the clip also gets how it starts and ends (from the
     continuity check) and what stays the same; when the next scene has its own picture, the clip
@@ -470,6 +541,7 @@ def plan_scene_video(
         has_photo=has_photo,
         card=card,
         sheet=sheet,
+        flows_out=flows_out,
     )
     arguments = {"prompt": prompt.text, "duration": str(duration_s), "negative_prompt": prompt.negative}
     settings: dict = {"duration": duration_s}

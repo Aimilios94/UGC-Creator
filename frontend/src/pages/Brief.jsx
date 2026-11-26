@@ -46,6 +46,13 @@ const STYLES = {
   '3d': '3D animation',
   '2d': '2D illustration / anime',
 };
+// "How it's cut" (D32): the story sets the cuts; this says how the shots meet.
+const CUTTING = {
+  auto: 'Auto: flows on, cuts where my story says (recommended)',
+  flowing: 'One flowing take',
+  cuts: 'Many quick cuts',
+  separate: 'Separate shots, soft blends',
+};
 const DEFAULT_COLORS = { primary: '#6366f1', secondary: '#f0abfc', background: '#0f172a' };
 
 // Planned options (plan §7–§10). Shown so visitors can see what is coming; not sent to the API yet.
@@ -260,6 +267,7 @@ export default function Brief() {
     music: 'theme',
     captions: 'bold',
     visual_style: 'realistic',
+    cutting: 'auto',
     video_length_s: '',
     story: '',
     ...readPrefill(),
@@ -482,6 +490,7 @@ export default function Brief() {
             <Select id="theme" label="Theme" value={form.theme} onChange={set('theme')} options={THEMES} help={HELP.theme} />
             <Select id="adtype" label="Ad type" value={form.ad_type} onChange={set('ad_type')} options={AD_TYPES} help={HELP.ad_type} />
             <Select id="style" label="Visual style" value={form.visual_style} onChange={set('visual_style')} options={STYLES} help={HELP.visual_style} />
+            <Select id="cutting" label="How it's cut" value={form.cutting} onChange={set('cutting')} options={CUTTING} help={HELP.cutting} />
             <div>
               <label htmlFor="vlen">
                 Video length

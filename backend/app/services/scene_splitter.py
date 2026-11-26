@@ -12,9 +12,12 @@ Shapes, tried in this order; the first that matches wins:
 5. No shape: the scene count comes from the chosen length, or 3 (hook, demo, call to action).
 
 For every shape: text that is not a scene (style, place, characters, rules, headings) becomes the
-story's notes, never dropped; more than 5 scenes are joined, shortest neighbours first, and the
-user is told; "cut to" inside a scene starts a new scene when there is room, because one Kling
-clip is one continuous take. Each scene keeps the user's own words.
+story's notes, never dropped. Scenes and shots (D32): one Kling clip is one continuous take, so
+every cut the story asks for becomes its own shot: "cut to" splits a scene, and "rapid cuts of A, B
+and C" (or "a montage of ...") becomes one shot each, all in the same part of the story. A last
+part that is a logo or brand reveal on screen becomes the ad's end card, drawn by us (the video AI
+writes letters badly). Only past MAX_SCENES shots are the shortest neighbours joined, and the user
+is told. Each shot keeps the user's own words.
 """
 
 from __future__ import annotations
@@ -23,13 +26,25 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
-from ..models import MAX_SCENES
+from ..models import MAX_PLANNED_SCENES, MAX_SCENES, MIN_SHOT_S
 
 Shape = Literal["time_ranges", "headings", "list", "paragraphs", "none"]
 SOURCE = {"time_ranges": "your timestamps", "headings": "your scene headings", "list": "your list"}
-MIN_S, MAX_S = 2, 10
+MIN_S, MAX_S = MIN_SHOT_S, 10
 
 _STAMP = r"\d{1,2}[:.]\d{2}(?:\.\d+)?"
+# "[0:00-0:05]" or "(0:00-0:05)": the brackets go, the times stay with the shot.
+_BRACKETED = re.compile(rf"[\[(]\s*({_STAMP}\s*[-–—]\s*{_STAMP})\s*[\])]")
+# "rapid cuts of A, B and C", "quick shots of ...", "a montage of ...", "cuts between ...".
+_MONTAGE = re.compile(
+    r"\b(?:(?:rapid|quick|fast|jump|hard|staccato|short)\s+(?:cuts?|shots|flashes|inserts)"
+    r"|(?:a\s+)?(?:montage|series|sequence)\s+of\s+(?:(?:quick|rapid|fast|short)\s+)?(?:cuts?|shots|moments|images|inserts)?"
+    r"|cuts?\s+between)\s*(?:of|between|showing|:)?\s+",
+    re.I,
+)
+# A part that is a logo or brand reveal on screen: the ad's end card (only the story's last part).
+_CARD_WHAT = re.compile(r"\b(?:logo|brand\s+reveal|end\s+card|end\s+screen|title\s+card|brand\s+name)\b", re.I)
+_CARD_HOW = re.compile(r"\b(?:black|screen|slams?|appears?|reveals?|pops?|fades?\s+in|on\s+screen|card)\b", re.I)
 _BEAT_START = re.compile(rf"(?=(?<![\d:.]){_STAMP}\s*[-–—]\s*{_STAMP})")
 _RANGE = re.compile(rf"({_STAMP})\s*[-–—]\s*({_STAMP})")
 _BULLET = re.compile(r"^[\s•○◦*\-]+", re.M)
@@ -52,8 +67,11 @@ _CUT_TO = re.compile(r"[,;]?\s*\b(?:and\s+then\s+|then\s+|and\s+)?(?:hard\s+)?cu
 @dataclass
 class Beat:
     text: str  # the user's own words for this scene
-    seconds: int | None  # 2-10 when the story gives it, else None (the length plan decides)
+    seconds: int | None  # 1-10 when the story gives it, else None (the length plan decides)
     numbers: list[int] = field(default_factory=list)  # the user's scene numbers in it (for messages)
+    part: int = 0  # the part of the story it comes from (shots cut from one part share it)
+    join: str = ""  # "cut" when the story cuts to this shot
+    card: bool = False  # the story's own end card (a logo or brand reveal on screen)
 
 
 @dataclass
@@ -95,7 +113,7 @@ def _secs(stamp: str) -> float:
 
 
 def _time_ranges(story: str) -> Split | None:
-    text = _BULLET.sub("", story)
+    text = _BRACKETED.sub(r"\1", _BULLET.sub("", story))
     pieces = [p.strip() for p in _BEAT_START.split(text) if p.strip()]
     notes = [p for p in pieces if not _RANGE.match(p)]
     timed = [p for p in pieces if _RANGE.match(p)]
@@ -236,11 +254,79 @@ def _join_extra(split: Split) -> None:
     if joined:
         groups = [b.numbers for b in beats if len(b.numbers) > 1]
         parts = "; ".join(f"scenes {_names(g)}" for g in groups)
-        split.messages.append(f"An ad has at most {MAX_SCENES} scenes, so these were joined: {parts}.")
+        split.messages.append(f"An ad has at most {MAX_SCENES} shots, so these were joined: {parts}.")
+
+
+def _montage_items(text: str) -> list[str]:
+    """The items of a list like "gym chalk clapping off hands, rain hitting a court, and a swimmer
+    breaking the water surface" (each at least two words), or [] when it is not such a list."""
+    parts = [p.strip() for p in re.split(r",\s*(?:and\s+|or\s+|then\s+)?", text) if p.strip()]
+    if len(parts) == 1:
+        parts = [p.strip() for p in re.split(r"\s+and\s+", text) if p.strip()]
+    elif " and " in parts[-1]:  # "A, B and C"
+        parts[-1:] = [p.strip() for p in parts[-1].split(" and ", 1)]
+    if not 2 <= len(parts) <= 6 or any(len(p.split()) < 2 for p in parts):
+        return []
+    return parts
+
+
+def _share(seconds: int | None, n: int) -> list[int | None]:
+    if seconds is None:
+        return [None] * n
+    base, extra = divmod(max(seconds, n * MIN_S), n)
+    return [min(MAX_S, base + (1 if i < extra else 0)) for i in range(n)]
+
+
+def _split_montage(split: Split) -> None:
+    """ "Rapid cuts of A, B and C" in a scene: one shot each, in the same part of the story (D32).
+    The words before the list and after it (a spoken line, a sound) stay with the first shot."""
+    out: list[Beat] = []
+    for beat in split.beats:
+        m = _MONTAGE.search(beat.text)
+        if not m:
+            out.append(beat)
+            continue
+        rest = beat.text[m.end() :]
+        stop = re.search(r"[;.:]\s|[;.:]$", rest)
+        listed = rest[: stop.start()] if stop else rest
+        items = _montage_items(listed)
+        if not items or len(out) + len(items) > MAX_SCENES:
+            out.append(beat)
+            continue
+        before = _RANGE.sub("", beat.text[: m.start()]).strip(" ,;-–—")
+        after = rest[stop.start() :].strip() if stop else ""
+        lengths = _share(beat.seconds, len(items))
+        for i, (item, secs) in enumerate(zip(items, lengths, strict=True)):
+            text = item[0].upper() + item[1:]
+            if i == 0:
+                stamp = _RANGE.search(beat.text[: m.start()])
+                text = " ".join(x for x in (stamp.group(0) if stamp else "", before, text) if x)
+                if after:
+                    text = text.rstrip() + (after if after[0] in ";.:" else " " + after)
+            out.append(
+                Beat(text=text.strip(), seconds=secs, numbers=beat.numbers, part=beat.part,
+                     join="cut")  # a montage starts with a cut, and cuts at every item
+            )  # fmt: skip
+        split.messages.append(f"Scene {_names(beat.numbers)}'s quick cuts became {len(items)} shots, one per cut.")
+    split.beats = out
+
+
+def _mark_card(split: Split) -> None:
+    """The story's last part showing a logo or brand reveal on screen is the ad's end card, drawn by
+    us: the video AI writes letters and logos badly (D32)."""
+    if len(split.beats) < 2:
+        return
+    last = split.beats[-1]
+    if _CARD_WHAT.search(last.text) and _CARD_HOW.search(last.text):
+        last.card = True
+        split.messages.append(
+            f"Scene {_names(last.numbers)} (a logo or brand on screen) becomes the ad's end card, made by us "
+            "with your product name: the video AI writes letters badly."
+        )
 
 
 def _split_cuts(split: Split) -> None:
-    """ "Cut to" inside a scene starts a new scene while there is room (one clip is one take)."""
+    """ "Cut to" inside a scene starts a new shot while there is room (one clip is one take)."""
     out: list[Beat] = []
     pending = list(split.beats)
     while pending:
@@ -256,7 +342,7 @@ def _split_cuts(split: Split) -> None:
             continue
         name = _names(beat.numbers)
         if not room or short:
-            why = f"there are already {MAX_SCENES} scenes" if not room else f"it is only {beat.seconds} s"
+            why = f"there are already {MAX_SCENES} shots" if not room else f"it is only {beat.seconds} s"
             split.messages.append(
                 f'Scene {name} says "cut to", but {why}: it stays one shot, '
                 "so the cut may look like a fast camera move."
@@ -269,9 +355,9 @@ def _split_cuts(split: Split) -> None:
             a = max(MIN_S, min(beat.seconds - MIN_S, round(beat.seconds * len(head) / (len(head) + len(tail)))))
             b = beat.seconds - a
         tail = tail[0].upper() + tail[1:]
-        out.append(Beat(text=head, seconds=a, numbers=beat.numbers))
-        pending.insert(0, Beat(text=tail, seconds=b, numbers=beat.numbers))
-        split.messages.append(f'Scene {name} says "cut to", so it became two scenes (one clip is one take).')
+        out.append(Beat(text=head, seconds=a, numbers=beat.numbers, part=beat.part, join=beat.join))
+        pending.insert(0, Beat(text=tail, seconds=b, numbers=beat.numbers, part=beat.part, join="cut"))
+        split.messages.append(f'Scene {name} says "cut to", so it became two shots (one clip is one take).')
     split.beats = out
 
 
@@ -288,11 +374,15 @@ def split_story(story: str) -> Split:
         found = find(text)
         if found is not None:
             _join_extra(found)
+            for i, beat in enumerate(found.beats, start=1):
+                beat.part = i  # the shots cut from one part share its number (D32)
             _split_cuts(found)
+            _split_montage(found)
+            _mark_card(found)
             # Repeated messages (two cuts in one scene) are said once.
             found.messages = list(dict.fromkeys(found.messages))
             return found
-    if 2 <= len(_paragraphs(text)) <= MAX_SCENES:
+    if 2 <= len(_paragraphs(text)) <= MAX_PLANNED_SCENES:
         return Split("paragraphs", [], "")
     return Split("none", [], "")
 

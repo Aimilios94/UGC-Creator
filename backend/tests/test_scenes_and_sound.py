@@ -44,8 +44,12 @@ def test_scenes_can_be_added_and_removed_before_approval_only(client, ctx, sessi
     board["scenes"] = [*board["scenes"][:2], extra, extra, board["scenes"][2]]
     view = client.put(f"/jobs/{job['id']}/storyboard", json=board, headers=_h(session_id)).json()
     assert [s["role"] for s in view["storyboard"]["scenes"]] == ["hook", "demo", "demo", "demo", "cta"]
-    six = {**board, "scenes": [*board["scenes"], extra]}
-    assert client.put(f"/jobs/{job['id']}/storyboard", json=six, headers=_h(session_id)).status_code == 422
+    # Free cuts (D32): up to 20 shots; one more is refused.
+    many = {**board, "scenes": [*board["scenes"], *([extra] * 15)]}
+    assert client.put(f"/jobs/{job['id']}/storyboard", json=many, headers=_h(session_id)).status_code == 200
+    too_many = {**board, "scenes": [*board["scenes"], *([extra] * 16)]}
+    assert client.put(f"/jobs/{job['id']}/storyboard", json=too_many, headers=_h(session_id)).status_code == 422
+    client.put(f"/jobs/{job['id']}/storyboard", json=board, headers=_h(session_id))
     empty = {**board, "scenes": [{**extra, "description": "", "image_prompt": ""}]}
     assert client.put(f"/jobs/{job['id']}/storyboard", json=empty, headers=_h(session_id)).status_code == 422
     one = {**board, "scenes": [board["scenes"][0]]}

@@ -67,6 +67,9 @@ class SceneInput:
     # (a little faster) and its last frame meets the cut.
     fit_clip: bool = False
     blend_out_s: float | None = None  # the blend into the next scene; None = the spec's crossfade_s
+    # Seconds the voice line may run before the scene must be held (D32): its own length plus the
+    # following quick cuts of the same part that say nothing. None = the scene's own length.
+    voice_room_s: float | None = None
 
 
 @dataclass
@@ -93,6 +96,11 @@ class ComposeSpec:
     ratios: tuple[str, ...] = RATIOS
     scale: float = 1.0  # tests render small frames
     end_card_s: float = 2.0
+    # The story's own end card (D32): its spoken line, said over the card, and its headline on it.
+    end_card_voice: Path | None = None
+    end_card_voice_s: float = 0.0
+    end_card_voiceover: str = ""
+    end_card_headline: str = ""
     crossfade_s: float = 0.3  # the blend at a cut whose scene sets none (D29); 0 = clean cuts
     loudness_lufs: float = -14.0
 
@@ -232,12 +240,14 @@ def plan_timeline(spec: ComposeSpec) -> list[SceneTiming]:
         if i < n - 1:
             blend = spec.crossfade_s if scene.blend_out_s is None else scene.blend_out_s
         target = scene.length_s or clip_s  # a clip shorter than its scene is held on its last frame
+        room = max(target, scene.voice_room_s or 0.0)  # the line may run over the part's next quick cuts
         tempo = 1.0
         need = scene.voice_s + VOICE_LEAD_S + VOICE_TAIL_S if scene.voice else 0.0
-        if need > target:
-            tempo = min(MAX_TEMPO, need / target)
+        if need > room:
+            tempo = min(MAX_TEMPO, need / room)
         spoken = scene.voice_s / tempo if scene.voice else 0.0
-        duration = max(target, spoken + VOICE_LEAD_S + VOICE_TAIL_S if scene.voice else target)
+        overflow = max(0.0, spoken + VOICE_LEAD_S + VOICE_TAIL_S - room) if scene.voice else 0.0
+        duration = target + overflow
         vs = t + VOICE_LEAD_S
         out.append(
             SceneTiming(
@@ -300,6 +310,19 @@ def build_master(spec: ComposeSpec, timeline: list[SceneTiming], size: tuple[int
 
 
 # --- audio -----------------------------------------------------------------------------------
+def end_card_tempo(spec: ComposeSpec) -> float:
+    need = spec.end_card_voice_s + VOICE_LEAD_S + VOICE_TAIL_S
+    return min(MAX_TEMPO, need / spec.end_card_s) if spec.end_card_voice is not None and need > spec.end_card_s else 1.0
+
+
+def end_card_seconds(spec: ComposeSpec) -> float:
+    """The end card's length: the spec's, or longer when its spoken line needs the time."""
+    if spec.end_card_voice is None:
+        return spec.end_card_s
+    spoken = spec.end_card_voice_s / end_card_tempo(spec)
+    return max(spec.end_card_s, round(spoken + VOICE_LEAD_S + VOICE_TAIL_S, 3))
+
+
 def build_audio(spec: ComposeSpec, timeline: list[SceneTiming], total: float, dst: Path) -> None:
     args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
     parts: list[str] = []
@@ -313,6 +336,17 @@ def build_audio(spec: ComposeSpec, timeline: list[SceneTiming], total: float, ds
         tempo = f"atempo={tm.tempo:.4f}," if tm.tempo != 1.0 else ""
         parts.append(
             f"[{idx}:a]aformat=sample_rates=48000:channel_layouts=stereo,{tempo}adelay={delay}|{delay}[vo{idx}]"
+        )
+        voices.append(f"[vo{idx}]")
+        idx += 1
+    if spec.end_card_voice is not None:  # the story's own end card line (D32), said over the card
+        args += ["-i", str(spec.end_card_voice)]
+        scenes_s = sum(t.duration for t in timeline)
+        delay = int((scenes_s + VOICE_LEAD_S) * 1000)
+        tempo = end_card_tempo(spec)
+        tempo_f = f"atempo={tempo:.4f}," if tempo != 1.0 else ""
+        parts.append(
+            f"[{idx}:a]aformat=sample_rates=48000:channel_layouts=stereo,{tempo_f}adelay={delay}|{delay}[vo{idx}]"
         )
         voices.append(f"[vo{idx}]")
         idx += 1
@@ -530,6 +564,13 @@ def render_end_card(spec: ComposeSpec, w: int, h: int, zone: SafeZone) -> tuple[
             card.paste(logo, (cx - lw // 2, y), logo)
             y += lh + round(ah * 0.03)
     # text block sizes first, so the product image takes the space that is left
+    head_fit = None
+    if spec.end_card_headline.strip():
+        head_fit = fit_text(
+            spec.end_card_headline, b.font, round(short * 0.085), round(aw * 0.9), 2, round(short * 0.035)
+        )
+        if head_fit is None:
+            return card, False, "the end card's headline does not fit"
     offer_fit = None
     if spec.offer.strip():
         offer_fit = fit_text(spec.offer, b.font, round(short * 0.06), round(aw * 0.9), 3, round(short * 0.03))
@@ -540,11 +581,14 @@ def render_end_card(spec: ComposeSpec, w: int, h: int, zone: SafeZone) -> tuple[
     )
     if cta_fit is None:
         return card, False, "the call to action does not fit the end card"
-    offer_h = round(len(offer_fit[1]) * offer_fit[0] * 1.25) if offer_fit else 0
+    text_h = offer_h = round(len(offer_fit[1]) * offer_fit[0] * 1.25) if offer_fit else 0
+    head_h = round(len(head_fit[1]) * head_fit[0] * 1.25) if head_fit else 0
+    if head_fit:
+        text_h += head_h + round(ah * 0.03)  # the headline sits above the offer
     btn_pad = round(cta_fit[0] * 0.55)
     btn_h = round(cta_fit[0] * 1.25) + 2 * btn_pad
     gap = round(ah * 0.03)
-    image_h = area[3] - y - offer_h - btn_h - 3 * gap
+    image_h = area[3] - y - text_h - btn_h - 3 * gap
     if spec.end_card_image is not None and image_h > ah * 0.2:
         with Image.open(spec.end_card_image) as prod:
             prod = prod.convert("RGB")
@@ -556,7 +600,11 @@ def render_end_card(spec: ComposeSpec, w: int, h: int, zone: SafeZone) -> tuple[
             card.paste(prod, (cx - pw // 2, y + gap), mask)
             y += ph + 2 * gap
     else:
-        y = area[1] + (ah - offer_h - btn_h - gap) // 2
+        y = area[1] + (ah - text_h - btn_h - gap) // 2
+    if head_fit:
+        size, lines = head_fit
+        _draw_lines(draw, lines, load_font(b.font, size), cx, y, fg, round(size * 1.25))
+        y += head_h + gap
     if offer_fit:
         size, lines = offer_fit
         _draw_lines(draw, lines, load_font(b.font, size), cx, y, fg, round(size * 1.25))
@@ -701,7 +749,7 @@ def render_ratio(
 
     scenes_s = sum(t.duration for t in timeline)
     args = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(master)]
-    args += ["-loop", "1", "-framerate", str(FPS), "-t", f"{spec.end_card_s:.3f}", "-i", card_png.name]
+    args += ["-loop", "1", "-framerate", str(FPS), "-t", f"{end_card_seconds(spec):.3f}", "-i", card_png.name]
     args += ["-i", str(audio)]
     graph = [_transform(mode, w, h), f"[base]subtitles=filename={ass.name}:fontsdir=fonts[sub]"]
     last = "[sub]"
@@ -734,7 +782,7 @@ def compose(spec: ComposeSpec, work: Path) -> ComposeResult:
 
     timeline = plan_timeline(spec)
     scenes_s = sum(t.duration for t in timeline)
-    total = round(scenes_s + spec.end_card_s, 3)
+    total = round(scenes_s + end_card_seconds(spec), 3)
     mw, mh = frame_size(spec.master_ratio, spec.scale)
     master = work / "master_scenes.mp4"
     build_master(spec, timeline, (mw, mh), master)

@@ -54,7 +54,16 @@ _AWARDS = re.compile(
     r"\bbest[- ]?sell(?:ing|er)|\baward[- ]winning|#1\b|\bnumber one\b|\bno\. ?1\b|\bclinically (?:proven|tested)"
 )
 
+# Superlatives and promises a brief rarely states (the owner's real test, 26 Nov 2026: "unbeatable
+# traction", "traction that never quits" from a brief that said "maximum grip").
+_SUPERLATIVES = re.compile(
+    r"\b(?:unbeatable|unmatched|unrivall?ed|unbeaten|unstoppable grip|best[- ]in[- ]class|world'?s best|"
+    r"the best \w+ (?:ever|in the world|on the market)|guaranteed|indestructible|lasts? forever|"
+    r"never (?:quits|fails|slips|wears out|breaks|lets you down))\b|\b100 ?%"
+)
+
 RULES: list[tuple[re.Pattern[str], str]] = [
+    (_SUPERLATIVES, "A superlative or promise the brief does not make. Keep it only if the brief states it."),
     (_FIRST_PERSON_USE, "First-person claim of use. Keep it only if the brief states it."),
     (_FIRST_PERSON_EXPERIENCE, "First-person claim of experience or results. Keep it only if the brief states it."),
     (_RESULTS_OVER_TIME, "Claim of results over time. Keep it only if the brief states it."),
