@@ -76,6 +76,14 @@ class ProductAnalysis(BaseModel):
     )
     key_features: list[str] = Field(default_factory=list, max_length=6)
     people_in_photo: bool = Field(description="True if a person or a face is visible in the photo")
+    # Strategy plan A4: a person whose face shows is the character reference for every picture of them.
+    face_visible: bool = Field(default=False, description="True if a person's face is clearly visible in the photo")
+    person_look: str = Field(
+        default="",
+        max_length=300,
+        description="When a face is visible: how that person looks (face, hair, skin tone, age range, build), "
+        "else empty",
+    )
 
 
 class SceneDraft(BaseModel):

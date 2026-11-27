@@ -77,6 +77,12 @@ class SheetOut(BaseModel):
     look: SlotOut = Field(default_factory=SlotOut, description="Style, lens, colour grade")
     camera_style: SlotOut = Field(default_factory=SlotOut, description="How the whole ad is filmed")
     never: SlotOut = Field(default_factory=SlotOut, description="Things to avoid in every scene")
+    photo_person: str = Field(
+        default="",
+        max_length=4,
+        description="Only when the analysis says a face is visible: the id of the person in the ad who is the "
+        'person in the photo (usually P1), or "none" when the story clearly describes someone else',
+    )
 
 
 class CardOut(BaseModel):
@@ -124,6 +130,9 @@ Read the user's brief, the photo analysis and the user's story into the structur
   do not describe it. product_unseen: only visible details the photo or the user's text cannot show
   (the back, the inside, the other side), never facts the user did not give (sizes, capacity,
   materials, features, claims); empty when there are none.
+- When the <analysis> says a face is visible (face_visible), that person is in the ad: set photo_person
+  to their id (usually P1, the main person) and give them an entry; leave their look to the photo.
+  Set "none" only when the story clearly describes someone else (another gender, age or a named person).
 - scenes: exactly the number of scene cards asked for, in order. For each: who (cast ids and
   "product" when it is in frame), action (one main action, plain verbs), camera (shot size and one
   move, a few words, no times: the writer adds the timeline), product_moment
@@ -289,6 +298,20 @@ FALLBACK = {
 }
 
 
+def mark_photo_person(people: list[Person], analysis: ProductAnalysis | None, chosen: str = "") -> None:
+    """Strategy plan A4: when the product photo shows a face, one person in the ad is that person
+    (the AI's pick, else P1, the main person; "none" when the story describes someone else). Their
+    look comes from the photo unless the user gave it, and the photo is their reference picture."""
+    if analysis is None or not analysis.face_visible or not people or chosen.strip().casefold() == "none":
+        return
+    ids = [p.id for p in people]
+    pid = chosen.strip().upper() if chosen.strip().upper() in ids else ("P1" if "P1" in ids else ids[0])
+    person = next(p for p in people if p.id == pid)
+    person.in_photo = True
+    if analysis.person_look.strip() and person.look.source == GUESS:
+        person.look = Slot(value=analysis.person_look.strip()[:VALUE_MAX], source="photo")
+
+
 def build_structure(
     draft: SlotDraft,
     brief: Brief,
@@ -318,6 +341,7 @@ def build_structure(
         )
         for p in {p.id: p for p in s.people}.values()  # one entry per id
     ]
+    mark_photo_person(people, analysis, s.photo_person)
     sheet = CastSheet(
         product=product,
         product_unseen=_slot(s.product_unseen, text, words),

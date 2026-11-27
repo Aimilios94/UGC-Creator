@@ -53,6 +53,7 @@ def plan_scene_image(
     keep_same: str | None = None,
     cast: str = "",
     people: list[tuple[str, InputImage, str]] = (),
+    in_photo: list[str] = (),
 ) -> PlannedRender:
     """`keep_same` is set in a continuous shot (D30): then the picture is also the scene's first moment
     as the continuity check wrote it, with what stays the same in every scene. A shot after a cut
@@ -60,10 +61,17 @@ def plan_scene_image(
 
     `cast` is how the people in this shot look, from the cast sheet; `people` is (name, picture,
     sha256) of each one's first picture, sent as more reference photos so the same person comes back
-    in every shot (strategy plan A4; the owner's hoodie test, 27 Nov 2026: a new face in every shot)."""
+    in every shot (strategy plan A4; the owner's hoodie test, 27 Nov 2026: a new face in every shot).
+    `in_photo` names the people who are the person in the product photo: that photo is their
+    reference, so no other picture of them is sent (A4)."""
     prompt = scene.image_prompt.strip() or scene.description.strip()
     if cast.strip():
         prompt += " People in this shot: " + cast.strip()
+    for name in in_photo:
+        prompt += (
+            f" Reference photo 1 also shows {name}: keep exactly the same person (face, skin tone, hair, age and"
+            " build), in this shot's own place, pose and light."
+        )
     for n, (name, _, _) in enumerate(people, start=2):
         prompt += (
             f" Reference photo {n} shows {name}: keep exactly the same person (face, skin tone, hair, age and build)."
@@ -100,6 +108,12 @@ def plan_scene_image(
         cache_key=key,
         usage=Usage(images=1),
     )
+
+
+def character_reference(person) -> str:
+    """Where a person's look comes from in the pictures (strategy plan A4): the product photo when
+    they are the person in it, else their first picture alone, made in the ad (no extra picture)."""
+    return "product_photo" if getattr(person, "in_photo", False) else "first_picture"
 
 
 def cast_line(card, sheet) -> str:

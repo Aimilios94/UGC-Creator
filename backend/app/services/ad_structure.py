@@ -60,6 +60,7 @@ class Person(BaseModel):
     look: Slot = Field(default_factory=guess)  # face, hair, skin, age range
     clothes: Slot = Field(default_factory=guess)
     unseen: Slot = Field(default_factory=guess)  # details off camera or on the hidden side (a back print)
+    in_photo: bool = False  # the person in the product photo: that photo is their reference (plan A4)
 
 
 class CastSheet(BaseModel):

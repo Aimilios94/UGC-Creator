@@ -383,3 +383,31 @@ def test_the_continuity_check_is_told_which_shots_open_on_a_cut():
     board.scenes[2].join = "cut"
     prompt = build_prompt(board, Brief(**BRIEF))
     assert prompt.count('"opens": "cut"') == 1 and prompt.count('"opens": "flows on"') == 2
+
+
+def test_a_face_in_the_product_photo_is_the_reference_and_no_other_picture_is_sent(
+    client, ctx, session_id, photo_bytes, monkeypatch
+):
+    # Strategy plan A4: the photo shows a woman wearing the hoodie, face visible.
+    from app.services.providers import llm as mock_llm
+
+    def with_face(brief: dict) -> dict:
+        return {**mock_llm.mock_analysis(brief), "people_in_photo": True, "face_visible": True,
+                "person_look": "woman in her late 20s, long dark hair"}  # fmt: skip
+
+    monkeypatch.setitem(mock_llm.MOCK_TASKS, "analyze", with_face)
+    story = "She walks out of a café onto a cobbled street. She stops at a corner. She points at the print."
+    job = create_job(client, session_id, photo_bytes, brief={**BRIEF, "story": story}).json()
+    asked = [q["slot"] for q in job.get("questions") or []]
+    assert "who" not in asked, asked  # the photo already shows who is in the ad
+    if job["storyboard"] is None:
+        job = client.post(f"/jobs/{job['id']}/answers", json={"skip": True}, headers=_h(session_id)).json()
+    p1 = AdStructure.model_validate(job["storyboard"]["structure"]).sheet.people[0]
+    assert p1.in_photo and p1.look.source == "photo" and "long dark hair" in p1.look.value
+    to_video(client, ctx, session_id, job["id"])
+    worker.run_once(ctx)
+    done = client.get(f"/jobs/{job['id']}", headers=_h(session_id)).json()
+    assert done["status"] == "done", done.get("last_error")
+    pictures = [r for r in ctx.media.submits if r.kind == "image"]
+    assert pictures and all(not r.extra_images for r in pictures)  # the photo itself is her reference
+    assert all("Reference photo 1 also shows P1" in r.arguments["prompt"] for r in pictures)

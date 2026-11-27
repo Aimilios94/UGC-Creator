@@ -950,6 +950,7 @@ def run_job(ctx: Context, job: dict) -> None:
     sheet, cards = board_structure(board)
     faces: dict[str, dict] = {}  # person id -> the first picture showing them alone (strategy plan A4)
     labels = {p.id: p.label or "the person" for p in (sheet.people if sheet else [])}
+    in_photo = {p.id for p in (sheet.people if sheet else []) if p.in_photo}  # the photo is their reference
 
     def as_ref(asset: dict) -> InputImage:
         return InputImage(
@@ -971,8 +972,9 @@ def run_job(ctx: Context, job: dict) -> None:
             image = use_own_image(ctx, job, idx, scene, brief.aspect_ratio)
         else:
             people = [(f"{p} ({labels[p]})", as_ref(faces[p]), faces[p]["sha256"]) for p in who if p in faces][:2]
+            shown = [f"{p} ({labels[p]})" for p in who if p in in_photo]
 
-            def plan_image(scene=scene, card=card, people=people):
+            def plan_image(scene=scene, card=card, people=people, shown=shown):
                 return plan_scene_image(
                     model=s.image_model,
                     scene=scene,
@@ -985,10 +987,11 @@ def run_job(ctx: Context, job: dict) -> None:
                     keep_same=board.keep_same if board.continuity == "continuous" else None,
                     cast=cast_line(card, sheet),
                     people=people,
+                    in_photo=shown,
                 )
 
             image = run_media_stage(ctx, job, "image", idx, plan_image)
-        if len(who) == 1 and who[0] not in faces:
+        if len(who) == 1 and who[0] not in faces and who[0] not in in_photo:
             faces[who[0]] = image  # one person alone: their face for every later shot
         repo.set_scene_asset(ctx.db, job_id, idx, "image", str(image["id"]))
         images[idx] = image

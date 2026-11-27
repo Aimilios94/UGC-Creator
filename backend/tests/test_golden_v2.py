@@ -19,9 +19,11 @@ from app.models import Brief, Hook, JobView, ProductAnalysis, QuestionView, Scen
 from app.services import compose as compose_module
 from app.services.ad_structure import AdStructure, key_gaps
 from app.services.continuity import check_continuity
+from app.services.image_gen import character_reference, plan_scene_image
 from app.services.llm_trace import usd_to_eur
 from app.services.pipeline import clip_texts, estimate_board_usd
 from app.services.providers.llm import build_llm, mock_analysis
+from app.services.providers.media import InputImage
 from app.services.scene_plan import length_line, real_length
 from app.services.scene_splitter import split_story
 from app.services.slot_filler import LET_AI_DECIDE, fill_slots, open_questions
@@ -301,6 +303,55 @@ def test_phase_5_checks(path):
         assert QuestionView(slot="who", text="t", options=["a", "b"]).let_ai_decide == LET_AI_DECIDE
 
 
+# In CI a photo's reader flags come from its name (the repo is public, the owner's photos stay local);
+# a live run reads the real photo.
+PHOTO_FLAGS = {
+    "hoodie_person_face.jpg": {"people_in_photo": True, "face_visible": True,
+                               "person_look": "woman in her late 20s, long dark hair, warm brown skin"},
+    "mug_hand_no_face.jpg": {"people_in_photo": True, "face_visible": False},
+}  # fmt: skip
+A4_KEYS = {"photo_person_visible", "photo_face_visible", "character_reference", "extra_reference_pictures"}
+
+
+def photo_analysis(brief: Brief, photo: str | None) -> ProductAnalysis | None:
+    if not photo:
+        return None
+    return ProductAnalysis.model_validate({**mock_analysis(brief.model_dump()), **PHOTO_FLAGS.get(photo, {})})
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
+def test_phase_6_character_reference(path):
+    """A4: a person whose face shows in the photo is the reference for every picture of them, and
+    no extra reference picture is made (the mock slot filler; the image prompts as the pipeline plans them)."""
+    fx = _load(path)
+    expect = fx["expect"]
+    if "ci" not in fx["runs_in"] or not A4_KEYS & set(expect):
+        pytest.skip("no character reference checks in CI for this fixture")
+    inp = fx["input"]
+    brief = brief_from_fixture(inp)
+    analysis = photo_analysis(brief, inp["photo"])
+    if "photo_person_visible" in expect:
+        assert analysis.people_in_photo is expect["photo_person_visible"]
+    if "photo_face_visible" in expect:
+        assert analysis.face_visible is expect["photo_face_visible"]
+    (ad, _), _ = fill_slots(build_llm(make_settings(), "slots"), brief, analysis, split_story(brief.story))
+    main = ad.sheet.people[0]
+    if want := expect.get("character_reference"):
+        assert character_reference(main) == want
+        assert main.look.source == "photo" and "long dark hair" in main.look.value
+    if "extra_reference_pictures" in expect:
+        photo = InputImage(data=b"x", content_type="image/jpeg")
+        extra = 0
+        for card in ad.scenes:
+            shown = [p.id for p in ad.sheet.people if p.in_photo and p.id in card.who.ids]
+            sc = Scene(role="demo", description=card.action.value or "d", image_prompt="i", motion_prompt="m")
+            req = plan_scene_image(model="m", scene=sc, aspect_ratio="9:16", seed=1, product=photo,
+                                   product_sha256="a", in_photo=shown).request  # fmt: skip
+            extra += len(req.extra_images)
+            assert all(f"Reference photo 1 also shows {p}" in req.arguments["prompt"] for p in shown)
+        assert extra == expect["extra_reference_pictures"]
+
+
 def mock_photo_analysis(brief):
     """The writer still needs an analysis today; with no photo it reads only the brief (phase 6)."""
     return ProductAnalysis.model_validate(mock_analysis(brief.model_dump()))
@@ -309,7 +360,7 @@ def mock_photo_analysis(brief):
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
 def test_later_phases_are_listed_not_dropped(path):
     fx = _load(path)
-    pending = sorted({(PHASE[k], k) for k in _keys(fx["expect"]) if PHASE[k] > CHECKED_NOW})
+    pending = sorted({(PHASE[k], k) for k in _keys(fx["expect"]) if PHASE[k] > CHECKED_NOW and k not in A4_KEYS})
     if fx["runs_in"] == ["live"]:
         pytest.skip("live fixture: run by hand with the real writer (owner's go)")
     if pending:
