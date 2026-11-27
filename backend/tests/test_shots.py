@@ -16,7 +16,7 @@ from app.services.scene_plan import scenes_for_length
 from app.services.scene_splitter import fast_story, split_story
 from app.services.shots import plan_joins, split_end_card, voice_rooms
 from app.services.slot_filler import SlotOut, _slot, code_questions, content_words, named_in_story, open_questions
-from app.services.storyboard import fill_placeholders
+from app.services.storyboard import fill_placeholders, packed_scenes
 from app.services.storyboard_checks import flag_testimonials
 from app.services.video_gen import _clause_cut, _with_subject, film_only, negative_prompt
 from conftest import BRIEF, make_settings
@@ -86,19 +86,42 @@ HOODIE = (
 )
 
 
-def test_a_logo_reveal_ending_a_written_scene_becomes_the_end_card():
+def test_a_logo_reveal_on_the_product_stays_filmed_and_the_end_card_follows():
     board = _with_cards(_board(3), [["P1"]] * 3, ["", "", ""])
     board.scenes[2].description = "Wearing your art as armor. " + HOODIE.split(". ")[-1]
+    board.scenes[2].motion_prompt = "0-2 s: push in; focus tightens on the brand logo."
     assert split_end_card(board, 2.0)
     last, card = board.scenes[-2], board.scenes[-1]
-    assert len(board.scenes) == 4 and card.kind == "card" and card.duration_s == 2 and "logo" in card.description
-    assert "logo" not in last.description and last.kind == "clip"
+    assert len(board.scenes) == 4 and card.kind == "card" and card.duration_s == 2
+    # No shot is lost: the reveal stays filmed, its logo words made "the print" (D31, D32).
+    assert last.kind == "clip" and "armor" in last.description and "reveal of the print" in last.description
+    assert "logo" not in last.description.casefold() and "logo" not in last.motion_prompt.casefold()
     assert len(board.structure["scenes"]) == 4 and board.structure["scenes"][-1]["uid"] == card.uid
     assert "end card" in board.split_note
     Storyboard.model_validate(board.model_dump())  # still a valid storyboard
     # Already a card, or no logo: nothing changes.
     assert not split_end_card(board, 2.0)
     assert not split_end_card(_board(3), 2.0)
+
+
+def test_a_logo_graphic_on_screen_becomes_the_end_card():
+    board = _board(3)
+    board.scenes[2].description = "She smiles at the camera. Cut to black as a white logo slams onto the screen."
+    assert split_end_card(board, 2.0)
+    assert [s.kind for s in board.scenes] == ["clip", "clip", "clip", "card"]
+    assert "logo" not in board.scenes[2].description and "slams" in board.scenes[3].description
+    whole = _board(3)  # the whole shot is the graphic: it is the card
+    whole.scenes[2].description = "A white logo slams onto a black screen."
+    assert split_end_card(whole, 2.0) and [s.kind for s in whole.scenes] == ["clip", "clip", "card"]
+
+
+def test_a_montage_packed_into_one_written_scene_is_found():
+    board = _board(3)
+    board.scenes[1].description = "A fast-paced creation montage: paint on hands, quick brush strokes."
+    board.scenes[2].motion_prompt = "0-1 s: rapid cuts between the alley and the bridge."
+    assert packed_scenes(board) == [2, 3]
+    assert packed_scenes(board, beats=[object()]) == []  # the user's own beats are theirs
+    assert packed_scenes(_board(3)) == []
 
 
 def test_a_fast_paced_story_gets_more_shots_and_clean_cuts():

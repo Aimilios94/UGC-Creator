@@ -63,7 +63,8 @@ editing.
 Other rules:
 - title: the product name only (no words like "ad" or "UGC").
 - description: one or two plain sentences saying what the viewer sees; with a <story>, the story's own
-  text for this scene, word for word.
+  text for this scene, word for word. A scene is one continuous take: never a montage, quick cuts or a
+  list of moments in one scene; when the story asks for a fast edit, make each moment its own scene.
 - voiceover: only words the user's <story> gives to be spoken in this scene (quoted, or marked as said
   or narrated), word for word; otherwise empty. voiceover_ideas: 2-3 short spoken lines that fit the scene
   and its duration_s (about 2.5 words per second), for the user to pick from.
@@ -204,6 +205,21 @@ def flagged(card) -> str:
     return weak_spot(card.text.value if card.text.locked else card.action.value)
 
 
+_PACKED = re.compile(
+    r"\b(?:montage|(?:rapid|quick|fast|jump|hard)[- ]cuts?"
+    r"|series\s+of\s+(?:quick\s+|rapid\s+|short\s+)?(?:shots|cuts|moments))\b",
+    re.I,
+)
+
+
+def packed_scenes(draft, beats=()) -> list[int]:
+    """Scenes the writer wrote as several cuts in one clip (a montage in one take), by number. A
+    scene from the user's own beats is theirs, word for word (the splitter already cut it)."""
+    if beats:
+        return []
+    return [i for i, sc in enumerate(draft.scenes, start=1) if _PACKED.search(f"{sc.description} {sc.motion_prompt}")]
+
+
 def missing_swaps(structure: AdStructure | None, draft) -> list[tuple[int, str]]:
     """Scenes whose user action names a weak spot but came back with no swap: (number, weak spot)."""
     if structure is None:
@@ -339,6 +355,24 @@ def write_storyboard(
             output_tokens=usage.output_tokens + more.output_tokens,
         )
         if len(retry.output.scenes) == len(draft.scenes):
+            draft = retry.output
+    # D32: one clip is one take. A montage the writer packed into one scene is sent back once.
+    packed = packed_scenes(draft, beats)
+    if packed:
+        names = ", ".join(str(n) for n in packed)
+        retry = _run(
+            llm,
+            prompt + f"\nYour last storyboard packed several cuts into one clip in scene(s) {names} (a montage, quick "
+            "cuts or a list of moments). Write each of those scenes as ONE continuous action the camera films in its "
+            "duration_s, keeping the same number of scenes; never write montage or cuts inside a scene.",
+        )
+        more = tokens_from_run_usage(retry.usage)
+        usage = Usage(
+            input_tokens=usage.input_tokens + more.input_tokens,
+            cached_input_tokens=usage.cached_input_tokens + more.cached_input_tokens,
+            output_tokens=usage.output_tokens + more.output_tokens,
+        )
+        if len(retry.output.scenes) == len(draft.scenes) and len(packed_scenes(retry.output)) < len(packed):
             draft = retry.output
     call = LlmCall(
         kind="llm",

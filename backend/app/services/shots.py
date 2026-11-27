@@ -16,19 +16,68 @@ The story's own end card (a logo on screen) is drawn by us, never filmed (`kind 
 from __future__ import annotations
 
 import copy
+import re
 import uuid
 
 from ..models import MAX_SCENES, MIN_SHOT_S, SPLIT_NOTE_MAX, Brief, Scene, Storyboard
 from .scene_splitter import card_sentence, fast_story
 
 CARD_NOTE = "Your story's logo line becomes the ad's end card, made by us: the video AI writes letters badly."
+KEPT_NOTE = (
+    "Your story ends on the logo: the last shot shows the print on the product (the video AI never writes a logo), "
+    "then the end card, made by us, shows your product name."
+)
+CARD_TEXT = "Your end card: the product name, your offer and your button, made by us."
+# The logo as a graphic on the screen (drawn by us), not on the product someone wears or holds.
+_ON_SCREEN = re.compile(
+    r"\b(?:black|screen|slams?|appears?|pops?|fades?\s+in|title\s+card|end\s+card|end\s+screen|on\s+white)\b", re.I
+)
+_LOGO = re.compile(r"\b(?:the\s+)?(?:brand(?:'s)?\s+)?logo\b", re.I)
+
+
+def _end_card_after(board: Storyboard, last: Scene, end_card_s: float, description: str) -> Scene:
+    card = last.model_copy(
+        deep=True,
+        update={
+            "uid": uuid.uuid4().hex[:8],
+            "description": description,
+            "kind": "card",
+            "join": "cut",
+            "voiceover": "",
+            "voiceover_ideas": [],
+            "on_screen_text": "",
+            "image_prompt": "",
+            "motion_prompt": "",
+            "starts": "",
+            "ends": "",
+            "ai_added": False,
+            "duration_s": max(MIN_SHOT_S, round(end_card_s)),
+        },
+    )
+    last.role = "demo"
+    board.scenes.append(card)
+    return card
+
+
+def _twin_card(board: Storyboard, card: Scene, before_text: str, card_text: str, said: str) -> None:
+    if not board.structure or len(board.structure.get("scenes", [])) != len(board.scenes) - 1:
+        return
+    before = board.structure["scenes"][-1]
+    twin = copy.deepcopy(before)
+    twin["uid"] = card.uid
+    for card_dict, text in ((before, before_text), (twin, card_text)):
+        slot = card_dict.get("text")
+        if isinstance(slot, dict) and said in (slot.get("value") or ""):
+            slot["value"] = text
+    board.structure["scenes"].append(twin)
 
 
 def split_end_card(board: Storyboard, end_card_s: float) -> bool:
-    """The last shot ending on a logo or brand reveal: that sentence becomes the ad's own end card
-    (drawn by us, free), and the shot keeps the rest of its text, so the video AI never films a
-    logo. Works whatever made the scenes (the splitter, the slot filler or the writer). True when
-    a card was made."""
+    """The last shot ending on a logo or brand reveal gets the ad's own end card (drawn by us, free),
+    so the video AI never writes a logo. A logo as a graphic on screen ("slams onto black") is the
+    card itself; a reveal on the product (someone turns to show the print) stays a filmed shot, its
+    logo words made "the print", and the card follows: no shot is lost (D31). Works whatever made
+    the scenes (the splitter, the slot filler or the writer). True when a card was made."""
     if not board.scenes or board.scenes[-1].kind == "card":
         return False
     last = board.scenes[-1]
@@ -36,6 +85,15 @@ def split_end_card(board: Storyboard, end_card_s: float) -> bool:
     if not found:
         return False
     rest, said = found
+    if not _ON_SCREEN.search(said):
+        if len(board.scenes) >= MAX_SCENES:
+            return False
+        last.description = _LOGO.sub("the print", last.description)
+        last.motion_prompt = _LOGO.sub("the print", last.motion_prompt)
+        card = _end_card_after(board, last, end_card_s, CARD_TEXT)
+        _twin_card(board, card, last.description, CARD_TEXT, said)
+        board.split_note = " ".join(x for x in (board.split_note, KEPT_NOTE) if x)[:SPLIT_NOTE_MAX]
+        return True
     if len(rest.split()) < 3:  # the whole shot is the reveal
         if len(board.scenes) < 2:
             return False
@@ -44,35 +102,8 @@ def split_end_card(board: Storyboard, end_card_s: float) -> bool:
         return False
     else:
         last.description = rest
-        card = last.model_copy(
-            deep=True,
-            update={
-                "uid": uuid.uuid4().hex[:8],
-                "description": said,
-                "kind": "card",
-                "join": "cut",
-                "voiceover": "",
-                "voiceover_ideas": [],
-                "on_screen_text": "",
-                "image_prompt": "",
-                "motion_prompt": "",
-                "starts": "",
-                "ends": "",
-                "ai_added": False,
-                "duration_s": max(MIN_SHOT_S, round(end_card_s)),
-            },
-        )
-        last.role = "demo" if len(board.scenes) > 1 else last.role
-        board.scenes.append(card)
-        if board.structure and len(board.structure.get("scenes", [])) == len(board.scenes) - 1:
-            before = board.structure["scenes"][-1]
-            twin = copy.deepcopy(before)
-            twin["uid"] = card.uid
-            for card_dict, text in ((before, rest), (twin, said)):
-                slot = card_dict.get("text")
-                if isinstance(slot, dict) and said in (slot.get("value") or ""):
-                    slot["value"] = text
-            board.structure["scenes"].append(twin)
+        card = _end_card_after(board, last, end_card_s, said)
+        _twin_card(board, card, rest, said, said)
     board.split_note = " ".join(x for x in (board.split_note, CARD_NOTE) if x)[:SPLIT_NOTE_MAX]
     return True
 
