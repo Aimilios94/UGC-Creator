@@ -200,3 +200,7 @@ alter table jobs add constraint jobs_phase_check check (phase in ('images', 'vid
 -- slot filler's structure waits here with up to 3 questions until the user answers or skips them;
 -- then the storyboard is written and this is cleared. {"structure": AdStructure, "split": Split}
 alter table jobs add column if not exists pending jsonb;
+
+-- No product photo (D31 strategy phase 6, plan A6): the pictures are made from the brief's words.
+alter table jobs alter column upload_key drop not null;
+alter table jobs alter column upload_sha256 drop not null;

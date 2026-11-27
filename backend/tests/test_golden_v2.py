@@ -15,13 +15,23 @@ from pathlib import Path
 
 import pytest
 
-from app.models import Brief, Hook, JobView, ProductAnalysis, QuestionView, Scene, Storyboard, render_seconds
+from app.models import (
+    NO_PHOTO_NOTE,
+    Brief,
+    Hook,
+    JobView,
+    ProductAnalysis,
+    QuestionView,
+    Scene,
+    Storyboard,
+    render_seconds,
+)
 from app.services import compose as compose_module
 from app.services.ad_structure import AdStructure, key_gaps
 from app.services.continuity import check_continuity
 from app.services.image_gen import character_reference, plan_scene_image
 from app.services.llm_trace import usd_to_eur
-from app.services.pipeline import clip_texts, estimate_board_usd
+from app.services.pipeline import clip_texts, estimate_board_usd, picture_sources
 from app.services.providers.llm import build_llm, mock_analysis
 from app.services.providers.media import InputImage
 from app.services.scene_plan import length_line, real_length
@@ -33,7 +43,7 @@ from conftest import make_settings
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden_v2"
 FIXTURES = sorted(GOLDEN.glob("*.json"))
-CHECKED_NOW = 5
+CHECKED_NOW = 6
 
 # The phase of the plan that can check each expected result.
 PHASE = {
@@ -195,9 +205,7 @@ def test_phase_3_checks(path):
     analysis = ProductAnalysis.model_validate(mock_analysis(brief.model_dump())) if inp["photo"] else None
     s = make_settings()
     (ad, split), _ = fill_slots(build_llm(s, "slots"), brief, analysis, split_story(brief.story))
-    board, _ = write_storyboard(
-        build_llm(s, "storyboard"), brief, analysis or mock_photo_analysis(brief), split=split, structure=ad
-    )
+    board, _ = write_storyboard(build_llm(s, "storyboard"), brief, analysis, split=split, structure=ad)
     structure = AdStructure.model_validate(board.structure)
     durations = [sc.duration_s for sc in board.scenes]
     line = length_line(durations, brief.video_length_s, s.end_card_s)
@@ -241,9 +249,7 @@ def built_ad(fx: dict):
     analysis = ProductAnalysis.model_validate(mock_analysis(brief.model_dump())) if inp["photo"] else None
     s = make_settings()
     (ad, split), _ = fill_slots(build_llm(s, "slots"), brief, analysis, split_story(brief.story))
-    board, _ = write_storyboard(
-        build_llm(s, "storyboard"), brief, analysis or mock_photo_analysis(brief), split=split, structure=ad
-    )
+    board, _ = write_storyboard(build_llm(s, "storyboard"), brief, analysis, split=split, structure=ad)
     board, _ = check_continuity(build_llm(s, "continuity"), board, brief)
     return brief, board, clip_texts(s, board, brief)
 
@@ -352,15 +358,38 @@ def test_phase_6_character_reference(path):
         assert extra == expect["extra_reference_pictures"]
 
 
-def mock_photo_analysis(brief):
-    """The writer still needs an analysis today; with no photo it reads only the brief (phase 6)."""
-    return ProductAnalysis.model_validate(mock_analysis(brief.model_dump()))
+NO_PHOTO_KEYS = {"route", "picture_source_per_scene", "no_photo_note_shown"}
+# "text_to_image_or_continue": the first picture is made from words, a later one from that first
+# picture (so the product stays the same, plan A6), or a shot continues the clip before it.
+PICTURE_SOURCES = {"text_to_image_or_continue": {"text_to_image", "first_picture", "continue", "card"}}
+
+
+@pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
+def test_phase_6_no_photo(path):
+    """No product photo (A6): the route, where each starting picture comes from, the plain note."""
+    fx = _load(path)
+    expect = fx["expect"]
+    if "ci" not in fx["runs_in"] or not NO_PHOTO_KEYS & set(expect):
+        pytest.skip("no no-photo checks in CI for this fixture")
+    brief, board, _ = built_ad(fx)
+    structure = AdStructure.model_validate(board.structure)
+    if want := expect.get("route"):
+        assert structure.route == want
+    if want := expect.get("picture_source_per_scene"):
+        sources = picture_sources(board, has_photo=structure.has_photo)
+        assert set(sources) <= PICTURE_SOURCES[want] and sources[0] == "text_to_image", sources
+        # Every shot its own picture: one made from words, the rest from it.
+        apart = picture_sources(board.model_copy(update={"continuity": "separate"}), has_photo=False)
+        assert apart.count("text_to_image") == 1 and set(apart) <= PICTURE_SOURCES[want], apart
+    if want := expect.get("no_photo_note_shown"):
+        assert NO_PHOTO_NOTE == want
+        assert "photo_note" in JobView.model_fields
 
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
 def test_later_phases_are_listed_not_dropped(path):
     fx = _load(path)
-    pending = sorted({(PHASE[k], k) for k in _keys(fx["expect"]) if PHASE[k] > CHECKED_NOW and k not in A4_KEYS})
+    pending = sorted({(PHASE[k], k) for k in _keys(fx["expect"]) if PHASE[k] > CHECKED_NOW})
     if fx["runs_in"] == ["live"]:
         pytest.skip("live fixture: run by hand with the real writer (owner's go)")
     if pending:

@@ -129,6 +129,12 @@ class AdStructure(BaseModel):
     kind: Literal["video", "image"] = "video"
     has_photo: bool = True
     split: SplitShape = "none"  # how the prompt was split into scenes
+
+    @property
+    def route(self) -> str:
+        """The path an ad takes (strategy plan, router): its kind, with or without a product photo."""
+        return f"{self.kind}_{'photo' if self.has_photo else 'no_photo'}"
+
     sheet: CastSheet = Field(default_factory=CastSheet)
     scenes: list[SceneCard] = Field(min_length=MIN_SCENES, max_length=MAX_SCENES)
     notes: str = Field(default="", max_length=STORY_MAX)  # the prompt's text that is not a scene, kept whole

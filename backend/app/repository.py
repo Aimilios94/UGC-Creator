@@ -92,8 +92,8 @@ def create_job(
     job_id: str,
     session_hash: str,
     brief: dict,
-    upload_key: str,
-    upload_sha256: str,
+    upload_key: str | None,  # None: no product photo (strategy plan A6)
+    upload_sha256: str | None,
     campaign_id: str | None = None,
     brand: dict | None = None,
 ) -> dict:

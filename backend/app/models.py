@@ -423,6 +423,9 @@ class LengthIn(BaseModel):
     video_length_s: int = Field(ge=4, le=52)
 
 
+NO_PHOTO_NOTE = "Add a photo so your product looks exactly right."  # strategy plan A6
+
+
 class JobView(BaseModel):
     id: str
     status: str
@@ -438,6 +441,8 @@ class JobView(BaseModel):
     questions: list[QuestionView] = []  # quick questions waiting before the storyboard (D31 phase 5)
     clips: list[ClipView] = []  # what each scene's clip gets (D30)
     analysis: ProductAnalysis | None = None
+    has_photo: bool = True  # False: no product photo, the pictures are made from the brief (plan A6)
+    photo_note: str = ""  # with no photo, the one plain note the storyboard shows (NO_PHOTO_NOTE)
     storyboard: Storyboard | None = None
     attempts: int
     last_error: str | None = None

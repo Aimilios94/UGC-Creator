@@ -101,7 +101,7 @@ export const api = {
   createJob: (brief, photo, options = {}) => {
     const form = new FormData();
     form.append('brief', JSON.stringify(brief));
-    form.append('photo', photo);
+    if (photo) form.append('photo', photo); // optional: with none, the AI makes the product from the brief
     if (options.campaignId) form.append('campaign_id', options.campaignId);
     if (options.campaignName) form.append('campaign_name', options.campaignName);
     form.append('use_brand_kit', options.useBrandKit ? 'true' : 'false');

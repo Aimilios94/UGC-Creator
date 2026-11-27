@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Circle, Clapperboard, Film, Loader2, Pencil, RotateCcw, Sparkles, Undo2, Upload, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Clapperboard, Film, ImageUp, Loader2, Pencil, RotateCcw, Sparkles, Undo2, Upload, XCircle } from 'lucide-react';
 import { api, rememberJob } from '../lib/api';
 import { navigate, useCurrency } from '../lib/hooks';
 import { formatMoney } from '../lib/money';
@@ -231,13 +231,13 @@ function Chip({ name, value, checked, onChange, children, disabled }) {
 }
 
 // What each scene's clip starts from, said plainly (the video AI animates one picture per scene).
-function pictureNote(scenes, board, extend = new Set()) {
+function pictureNote(scenes, board, extend = new Set(), hasPhoto = true) {
   const chained = scenes.filter((s, i) => isChained(board, i, s)).length;
   const count = (src) => scenes.filter((s, i) => s.kind !== 'card' && s.image_source === src && !isChained(board, i, s)).length;
   const [gen, product, own] = [count('generate'), count('product'), count('upload')];
   const word = (k) => (k === 1 ? 'scene' : 'scenes');
   const parts = [];
-  if (gen) parts.push(`${gen === scenes.length ? 'Every scene' : `${gen} ${word(gen)}`} ${gen === 1 && gen !== scenes.length ? 'gets' : 'get'} a new picture made from your product photo, showing your product in that scene's setting`);
+  if (gen) parts.push(`${gen === scenes.length ? 'Every scene' : `${gen} ${word(gen)}`} ${gen === 1 && gen !== scenes.length ? 'gets' : 'get'} ${hasPhoto ? "a new picture made from your product photo, showing your product in that scene's setting" : `a new picture made from your product description${gen > 1 ? ' (the first one; the others keep the product as it looks there)' : ''}`}`);
   if (product)
     parts.push(
       product === scenes.length
@@ -1035,6 +1035,12 @@ function StoryboardStep({ job, onChange, readOnly }) {
               With {n} {n === 1 ? 'scene' : 'scenes'} you can choose {minVideo} to {maxVideo} s (each scene 2–10 s).
             </p>
             {board.split_note && <p className="flow-note small">{board.split_note}</p>}
+            {job.photo_note && (
+              <p className="notice small" role="note">
+                <ImageUp size={16} aria-hidden="true" />
+                <span>{job.photo_note} Without one, your product is the AI&rsquo;s version of it.</span>
+              </p>
+            )}
             {lengthNote && (
               <p className="notice small" role="status">
                 <AlertTriangle size={14} aria-hidden="true" /> <span>{lengthNote}</span>
@@ -1216,7 +1222,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                     Starting picture <Help text={HELP.image_source} />
                   </span>
                   <div className="choice-row stack" role="radiogroup" aria-label={`Starting picture for scene ${i + 1}`}>
-                    {['generate', 'product', 'upload'].map((src) => (
+                    {(job.has_photo === false ? ['generate', 'upload'] : ['generate', 'product', 'upload']).map((src) => (
                       <Chip key={src} name={`src${i}`} value={src} checked={s.image_source === src} disabled={disabled || (src === 'upload' && !own)} onChange={() => editScene(i, 'image_source', src)}>
                         {src === 'generate' && isChained(board, i, { image_source: 'generate' }) ? 'Continue from the shot before' : SOURCE_LABEL[src]}
                         {config && (
@@ -1262,7 +1268,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 <div className="ai-pair">
                   <div className="ai-field">
                     <FieldLabel htmlFor={`ip${i}`} text="1. Starting picture (for the picture AI)" help={HELP.image_prompt} />
-                    <p className="muted small hint">One frozen moment: the first frame, made from your product photo.</p>
+                    <p className="muted small hint">One frozen moment: the first frame, made from your {job.has_photo === false ? 'product description' : 'product photo'}.</p>
                     {isChained(board, i, s) ? (
                       <p className="muted small">Not needed: this scene starts from the last frame of scene {i}.</p>
                     ) : s.image_source === 'generate' ? (
@@ -1402,7 +1408,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                 [`Video: ${filmed} ${filmed === 1 ? 'clip' : 'clips'}${hasCard ? ', your end card (free)' : ''}${sound.voice !== 'none' ? ' and voiceover' : ''}${mode === 'images' && newImages > 0 ? ' (later, only if you choose it)' : ''}`, estimate.video],
               ]}
               total={mode === 'video' || newImages === 0 ? estimate.total : null}
-              note={pictureNote(board.scenes.slice(0, n), board, extend)}
+              note={pictureNote(board.scenes.slice(0, n), board, extend, job.has_photo !== false)}
               spend={job.spend}
               cap={job.cost_cap}
               currency={currency}

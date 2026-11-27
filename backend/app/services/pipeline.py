@@ -163,7 +163,7 @@ def write_board(
     ctx: Context,
     job_id: str,
     brief: Brief,
-    analysis: ProductAnalysis,
+    analysis: ProductAnalysis | None,
     brand: BrandKit | None,
     attempt: int = 1,
     *,
@@ -264,7 +264,7 @@ def answer_questions(ctx: Context, job: dict, answers: dict[str, str], *, skip: 
     if not skip:
         structure = slot_filler.apply_answers(structure, answers)
     brief = Brief.model_validate(job["brief"])
-    analysis = ProductAnalysis.model_validate(job["analysis"])
+    analysis = ProductAnalysis.model_validate(job["analysis"]) if job.get("analysis") else None
     brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
     sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
     board = write_board(
@@ -344,12 +344,15 @@ def check_scene_flow(ctx: Context, job_id: str, board: Storyboard, brief: Brief,
 
 
 def prepare_storyboard(
-    ctx: Context, job: dict, photo: bytes, content_type: str
-) -> tuple[ProductAnalysis, Storyboard | None]:
-    """Analyze the photo and write the storyboard. Cheap LLM calls only; nothing renders."""
+    ctx: Context, job: dict, photo: bytes | None, content_type: str | None
+) -> tuple[ProductAnalysis | None, Storyboard | None]:
+    """Analyze the photo and write the storyboard. Cheap LLM calls only; nothing renders.
+    With no photo (strategy plan A6) nothing is read: the writer works from the brief."""
     job_id = str(job["id"])
     brief = Brief.model_validate(job["brief"])
     brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
+    if photo is None:
+        return None, write_board(ctx, job_id, brief, None, brand)
     llm = ctx.llm_factory("analyze")
     analysis = _run_llm_stage(
         ctx, job_id, "analyze", llm, lambda: analyze.analyze_product(llm, brief, photo, content_type)
@@ -363,7 +366,7 @@ def storyboard_from_story(ctx: Context, job: dict, story: str) -> Storyboard | N
     job_id = str(job["id"])
     brief = Brief.model_validate({**job["brief"], "story": story})
     repo.set_brief(ctx.db, job_id, brief.model_dump(mode="json"))
-    analysis = ProductAnalysis.model_validate(job["analysis"])
+    analysis = ProductAnalysis.model_validate(job["analysis"]) if job.get("analysis") else None
     brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
     sr = repo.get_stage_run(ctx.db, job_id, "storyboard")
     return write_board(ctx, job_id, brief, analysis, brand, attempt=(sr["attempt"] + 1) if sr else 1)
@@ -789,6 +792,27 @@ def use_own_image(ctx: Context, job: dict, idx: int, scene: Scene, ratio: str) -
     return asset
 
 
+def picture_sources(board: Storyboard, *, has_photo: bool) -> list[str]:
+    """Where each shot's starting picture comes from, as `run_job` makes them: "card" (drawn by us),
+    "continue" (the previous clip's last frame), "own" (the user's picture or the product photo),
+    "photo" (made from the product photo), and with no photo (plan A6) "text_to_image" for the first
+    one made and "first_picture" for the later ones (made from that first picture)."""
+    out, made = [], False
+    for i, sc in enumerate(board.scenes):
+        if sc.kind == "card":
+            out.append("card")
+        elif is_chained(board, i, sc):
+            out.append("continue")
+        elif sc.image_source != "generate":
+            out.append("own")
+        elif has_photo:
+            out.append("photo")
+        else:
+            out.append("first_picture" if made else "text_to_image")
+            made = True
+    return out
+
+
 def is_chained(board: Storyboard, idx: int, scene: Scene) -> bool:
     """Continuous mode: a shot after the first that flows on (D32), without a picture of its own,
     starts from the frame where the previous shot is cut (D29). A shot after a cut gets its own picture."""
@@ -870,6 +894,7 @@ def clip_texts(s: Settings, board: Storyboard, brief: Brief) -> list[ClipText]:
     scenes = board.scenes[: s.render_scenes]
     n = len(scenes)
     sheet, cards = board_structure(board)
+    has_photo = AdStructure.model_validate(board.structure).has_photo if board.structure else True
     return [
         ClipText(text="", chars=0, notes="none", negative="")  # the end card: drawn by us, never filmed (D32)
         if sc.kind == "card"
@@ -885,6 +910,7 @@ def clip_texts(s: Settings, board: Storyboard, brief: Brief) -> list[ClipText]:
             keep_same=board.keep_same,
             sheet=sheet,
             card=cards.get(sc.uid),
+            has_photo=has_photo,
         )
         for i, sc in enumerate(scenes)
     ]
@@ -938,12 +964,19 @@ def run_job(ctx: Context, job: dict) -> None:
     brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
     tone = brand.tone if brand else None
     rows = repo.list_scenes(ctx.db, job_id)[: s.render_scenes]
-    photo = ctx.storage.get(job["upload_key"])
-    product = InputImage(
-        data=photo,
-        content_type=content_type_for(job["upload_key"]),
-        url=ctx.storage.provider_url(job["upload_key"], 3600),
-    )
+    # No product photo (strategy plan A6): the first picture is made from the brief's words, and it is
+    # the product's reference for every later picture (as the photo would be).
+    product: InputImage | None = None
+    product_sha = job.get("upload_sha256") or ""
+    product_from = "text"
+    if job.get("upload_key"):
+        product = InputImage(
+            data=ctx.storage.get(job["upload_key"]),
+            content_type=content_type_for(job["upload_key"]),
+            url=ctx.storage.provider_url(job["upload_key"], 3600),
+        )
+        product_from = "photo"
+    product_text = f"{brief.product_name}: {brief.description}".strip(": ")
     seed = job_seed(job_id)
     images: dict[int, dict] = {}
     count = len(rows)
@@ -971,17 +1004,28 @@ def run_job(ctx: Context, job: dict) -> None:
         if scene.image_source != "generate":
             image = use_own_image(ctx, job, idx, scene, brief.aspect_ratio)
         else:
-            people = [(f"{p} ({labels[p]})", as_ref(faces[p]), faces[p]["sha256"]) for p in who if p in faces][:2]
-            shown = [f"{p} ({labels[p]})" for p in who if p in in_photo]
+            # A face already in reference photo 1 (the product photo, or with no photo the ad's first
+            # picture) is named there; only other people's first pictures are sent as more photos.
+            first = {p for p in who if p in faces and faces[p]["sha256"] == product_sha}
+            people = [
+                (f"{p} ({labels[p]})", as_ref(faces[p]), faces[p]["sha256"])
+                for p in who
+                if p in faces and p not in first
+            ][:2]
+            shown = [f"{p} ({labels[p]})" for p in who if p in in_photo or p in first]
 
-            def plan_image(scene=scene, card=card, people=people, shown=shown):
+            def plan_image(scene=scene, card=card, people=people, shown=shown, ref=product, sha=product_sha,
+                           source=product_from):  # fmt: skip
                 return plan_scene_image(
                     model=s.image_model,
                     scene=scene,
                     aspect_ratio=brief.aspect_ratio,
                     seed=seed,
-                    product=product,
-                    product_sha256=job["upload_sha256"],
+                    product=ref,
+                    product_sha256=sha,
+                    product_from=source,
+                    product_text=product_text,
+                    text_model=s.text_image_model,
                     style=brief.visual_style,
                     notes=board.notes,
                     keep_same=board.keep_same if board.continuity == "continuous" else None,
@@ -991,6 +1035,8 @@ def run_job(ctx: Context, job: dict) -> None:
                 )
 
             image = run_media_stage(ctx, job, "image", idx, plan_image)
+            if product is None:  # no photo: this first picture is the product's reference from now on
+                product, product_sha, product_from = as_ref(image), image["sha256"], "picture"
         if len(who) == 1 and who[0] not in faces and who[0] not in in_photo:
             faces[who[0]] = image  # one person alone: their face for every later shot
         repo.set_scene_asset(ctx.db, job_id, idx, "image", str(image["id"]))
@@ -1045,6 +1091,7 @@ def run_job(ctx: Context, job: dict) -> None:
                 keep_same=board.keep_same,
                 sheet=sheet,
                 card=cards.get(scene.uid),
+                has_photo=bool(job.get("upload_key")),
             )
 
         video = run_media_stage(ctx, job, "video", idx, plan_video, meta={"ends_on_next": True} if end else None)

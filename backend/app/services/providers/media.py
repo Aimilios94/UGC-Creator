@@ -40,8 +40,8 @@ class MediaRequest:
     kind: Literal["image", "video"]
     model: str
     arguments: dict
-    input_image: InputImage
-    image_field: str  # "image_urls" (list) or "image_url"
+    input_image: InputImage | None  # None: a picture made from text only (no product photo, plan A6)
+    image_field: str  # "image_urls" (list) or "image_url"; unused when there is no input picture
     # The picture the clip must end on (Kling `tail_image_url`, D30): the next scene's own picture.
     tail_image: InputImage | None = None
     tail_field: str = "tail_image_url"
@@ -124,9 +124,11 @@ class FalMedia:
         return self._client.upload(image.data, image.content_type, lifecycle=StorageSettings(expires_in=self._expiry))
 
     def submit(self, req: MediaRequest) -> str:
-        url = self._input_url(req.input_image)
         args = dict(req.arguments)
-        if req.image_field == "image_urls":
+        url = self._input_url(req.input_image) if req.input_image is not None else None
+        if url is None:
+            pass  # text to image: no picture goes in
+        elif req.image_field == "image_urls":
             args[req.image_field] = [url, *(self._input_url(x) for x in req.extra_images)]
         else:
             args[req.image_field] = url
@@ -193,14 +195,14 @@ class MockMedia:
     def result(self, model: str, prediction_id: str, kind: str) -> MediaResult:
         req = self._request(prediction_id) if self.preview else None
         if kind == "video":
-            if req is not None and req.input_image.data:
+            if req is not None and req.input_image is not None and req.input_image.data:
                 seconds = int(req.arguments.get("duration", "5"))
                 tail = req.tail_image.data if req.tail_image is not None else None
                 return MediaResult(content_type="video/mp4", data=_mock_clip(req.input_image.data, seconds, tail))
             return MediaResult(content_type="video/mp4", data=MOCK_CLIP.read_bytes())
         ratio = prediction_id_ratio(self.submits, prediction_id)
         w, h = _RATIO_SIZES.get(ratio, (540, 960))
-        if req is not None and req.input_image.data:
+        if req is not None and req.input_image is not None and req.input_image.data:
             data = _mock_picture(req.input_image.data, w, h)
         else:
             data = _mock_image(w, h, prediction_id)

@@ -18,6 +18,15 @@ FIDELITY = (
     " Keep the product from the reference photo exactly the same: same shape, proportions, colours, logo"
     " and packaging text. Add no other text, letters, signs or captions anywhere in the image."
 )
+# No product photo (strategy plan A6): the first picture is made from the product as the user
+# described it, and that picture is the product's reference for every later one.
+NO_TEXT = " Add no text, letters, signs or captions anywhere in the image."
+FROM_TEXT = " The product, exactly as described: {product}." + NO_TEXT
+FROM_FIRST = (
+    " Reference photo 1 is this ad's first picture: keep the product exactly as it is there (same shape,"
+    " proportions, colours and details); take only the product from it, never its place, pose, light or"
+    " framing. The product: {product}." + NO_TEXT
+)
 
 
 # An own picture whose shape is too far from the ad's (a crop would cut more than a quarter) is
@@ -46,9 +55,12 @@ def plan_scene_image(
     scene: Scene,
     aspect_ratio: str,
     seed: int,
-    product: InputImage,
+    product: InputImage | None,
     product_sha256: str,
     style: str = "realistic",
+    product_from: str = "photo",
+    product_text: str = "",
+    text_model: str = "",
     notes: str = "",
     keep_same: str | None = None,
     cast: str = "",
@@ -63,7 +75,13 @@ def plan_scene_image(
     sha256) of each one's first picture, sent as more reference photos so the same person comes back
     in every shot (strategy plan A4; the owner's hoodie test, 27 Nov 2026: a new face in every shot).
     `in_photo` names the people who are the person in the product photo: that photo is their
-    reference, so no other picture of them is sent (A4)."""
+    reference, so no other picture of them is sent (A4).
+
+    `product_from` is "photo" (the user's product photo is reference photo 1), "picture" (no photo:
+    this ad's first picture is) or "text" (no photo and no picture yet: made from `product_text`
+    by `text_model`, with no input picture)."""
+    if product is None:
+        product_from, model, people, in_photo = "text", text_model or model, [], []  # made from words only
     prompt = scene.image_prompt.strip() or scene.description.strip()
     if cast.strip():
         prompt += " People in this shot: " + cast.strip()
@@ -84,7 +102,9 @@ def plan_scene_image(
             prompt += " Same in every scene: " + keep_same.strip()
     if notes.strip():
         prompt += " Style and world for the whole ad: " + notes.strip()
-    prompt += FIDELITY + " " + IMAGE_STYLE.get(style, IMAGE_STYLE["realistic"])
+    line = {"photo": FIDELITY, "picture": FROM_FIRST, "text": FROM_TEXT}[product_from]
+    prompt += line.format(product=product_text.strip().rstrip(".") or "as in the brief")
+    prompt += " " + IMAGE_STYLE.get(style, IMAGE_STYLE["realistic"])
     arguments = {
         "prompt": prompt,
         "num_images": 1,

@@ -19,6 +19,7 @@ from .. import repository as repo
 from ..deps import get_ctx, require_access_code, session_hash
 from ..errors import BudgetExceeded, ProviderNotConfigured, UploadRejected
 from ..models import (
+    NO_PHOTO_NOTE,
     STORY_MAX,
     AnswersIn,
     ApproveIn,
@@ -141,6 +142,8 @@ def job_view(ctx: Context, job: dict) -> JobView:
             for v in repo.list_variants(ctx.db, job_id)
         ],
         analysis=ProductAnalysis.model_validate(job["analysis"]) if job.get("analysis") else None,
+        has_photo=bool(job.get("upload_key")),
+        photo_note="" if job.get("upload_key") else NO_PHOTO_NOTE,
         storyboard=public_board(board) if board is not None else None,
         attempts=job["attempts"],
         last_error=job.get("last_error"),
@@ -195,7 +198,7 @@ def _to_extend(ctx: Context, board: Storyboard, job: dict) -> set[int]:
     return own_to_extend(board, job["brief"].get("aspect_ratio", "9:16"), job.get("upload_key"), sizes)
 
 
-def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool) -> Storyboard:
+def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool, has_photo: bool = True) -> Storyboard:
     """Apply the user's edits, but never from the browser: storage keys (set only by the upload
     route) and, once the images exist, everything that made them, including how many scenes
     there are. Before approval scenes may be added or removed (1-5); a scene keeps its uploaded
@@ -217,6 +220,8 @@ def merge_board(new: Storyboard, old: Storyboard, *, lock_images: bool) -> Story
             raise HTTPException(
                 status_code=422, detail="Upload an image for that scene first, or choose another source."
             )
+        if sc.image_source == "product" and not has_photo:
+            raise HTTPException(status_code=422, detail="This ad has no product photo: choose another picture.")
         scenes.append(sc)
     return with_structure(new.model_copy(update={"scenes": scenes}), old)
 
@@ -307,7 +312,7 @@ def _brand_snapshot(ctx: Context, sess: str) -> dict | None:
 @router.post("", status_code=201, dependencies=[Depends(require_access_code)])
 def create_job(
     brief: str = Form(..., description="Brief as JSON"),
-    photo: UploadFile = File(...),
+    photo: UploadFile | None = File(default=None, description="The product photo; optional (strategy plan A6)"),
     campaign_id: str | None = Form(default=None, description="An existing campaign of this session"),
     campaign_name: str = Form(default="", max_length=80, description="Name for a new campaign"),
     use_brand_kit: bool = Form(default=False, description="Apply this session's brand kit"),
@@ -319,40 +324,46 @@ def create_job(
         parsed = Brief.model_validate(json.loads(brief))
     except (json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(status_code=422, detail=f"Invalid brief: {e}") from None
-    raw = photo.file.read(s.max_upload_bytes + 1)
-    try:
-        clean = sanitise_image(raw, max_bytes=s.max_upload_bytes, max_side=s.max_image_side_px)
-    except UploadRejected as e:
-        raise HTTPException(status_code=422, detail=str(e)) from None
+    clean = None
+    if photo is not None:
+        raw = photo.file.read(s.max_upload_bytes + 1)
+        try:
+            clean = sanitise_image(raw, max_bytes=s.max_upload_bytes, max_side=s.max_image_side_px)
+        except UploadRejected as e:
+            raise HTTPException(status_code=422, detail=str(e)) from None
+    elif not parsed.description.strip():
+        raise HTTPException(status_code=422, detail="With no photo, describe your product so the AI can show it.")
 
     campaign = _campaign_for(ctx, sess, parsed, campaign_id, campaign_name)
     brand = _brand_snapshot(ctx, sess) if use_brand_kit else None
     job_id = str(uuid.uuid4())
-    key = f"jobs/{job_id}/upload.{clean.ext}"
-    ctx.storage.put(key, clean.data, clean.content_type)
+    key = f"jobs/{job_id}/upload.{clean.ext}" if clean else None
+    if clean:
+        ctx.storage.put(key, clean.data, clean.content_type)
     job = repo.create_job(
         ctx.db,
         job_id=job_id,
         session_hash=sess,
         brief=parsed.model_dump(mode="json"),
         upload_key=key,
-        upload_sha256=clean.sha256,
+        upload_sha256=clean.sha256 if clean else None,
         campaign_id=campaign,
         brand=brand,
     )
-    repo.add_asset(
-        ctx.db,
-        job_id=job_id,
-        kind="upload",
-        storage_key=key,
-        content_type=clean.content_type,
-        size=len(clean.data),
-        sha256=clean.sha256,
-        width=clean.width,
-        height=clean.height,
-    )
+    if clean:
+        repo.add_asset(
+            ctx.db,
+            job_id=job_id,
+            kind="upload",
+            storage_key=key,
+            content_type=clean.content_type,
+            size=len(clean.data),
+            sha256=clean.sha256,
+            width=clean.width,
+            height=clean.height,
+        )
     try:
-        prepare_storyboard(ctx, job, clean.data, clean.content_type)
+        prepare_storyboard(ctx, job, clean.data if clean else None, clean.content_type if clean else None)
     except BudgetExceeded as e:
         repo.set_job_error(ctx.db, job_id, e.message)
     except ProviderNotConfigured as e:
@@ -376,7 +387,9 @@ def edit_storyboard(
     job = _own_job(ctx, job_id, sess)
     if job["status"] != "draft" or not job.get("storyboard"):
         raise HTTPException(status_code=409, detail="The storyboard is locked once approved.")
-    merged = merge_board(board, Storyboard.model_validate(job["storyboard"]), lock_images=False)
+    merged = merge_board(
+        board, Storyboard.model_validate(job["storyboard"]), lock_images=False, has_photo=bool(job.get("upload_key"))
+    )
     if not repo.set_storyboard(ctx.db, str(job["id"]), merged.model_dump(mode="json")):
         raise HTTPException(status_code=409, detail="The storyboard is locked once approved.")
     return job_view(ctx, repo.get_job(ctx.db, job_id))
@@ -604,7 +617,9 @@ def make_video(
     if job["status"] != "done":
         raise HTTPException(status_code=409, detail="Make the images first.")
     old = Storyboard.model_validate(job["storyboard"])
-    merged = merge_board(board, old, lock_images=True) if board is not None else old
+    merged = (
+        merge_board(board, old, lock_images=True, has_photo=bool(job.get("upload_key"))) if board is not None else old
+    )
     _check_ready(ctx, job, merged, phase="video")
     job, changed = repo.start_video(ctx.db, job_id, sess, merged.model_dump(mode="json"))
     if changed or job["status"] == "queued":

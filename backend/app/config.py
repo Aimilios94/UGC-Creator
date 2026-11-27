@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-5-mini-2025-08-07"
     anthropic_model: str = ""
     image_model: str = "fal-ai/nano-banana/edit"
+    text_image_model: str = "fal-ai/nano-banana"  # no product photo and no earlier picture to start from (A6)
     video_model: str = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
     llm_max_output_tokens: int = 8000
     video_duration_s: int = 5  # Kling accepts "5" or "10"

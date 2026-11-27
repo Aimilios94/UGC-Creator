@@ -10,7 +10,7 @@ from conftest import BRIEF
 def create_job(
     client,
     session_id: str,
-    photo: bytes,
+    photo: bytes | None,  # None: an ad with no product photo (strategy plan A6)
     brief: dict | None = None,
     code: str | None = None,
     extra: dict | None = None,
@@ -21,7 +21,7 @@ def create_job(
     return client.post(
         "/jobs",
         data={"brief": json.dumps(brief or BRIEF), **(extra or {})},
-        files={"photo": ("product.jpg", photo, "image/jpeg")},
+        files={"photo": ("product.jpg", photo, "image/jpeg")} if photo is not None else None,
         headers=headers,
     )
 

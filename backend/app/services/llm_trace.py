@@ -82,6 +82,8 @@ class Usage:
 # Prefix-matched, longest prefix first, so a dated snapshot resolves to its family.
 PRICES: dict[str, Price] = {
     "fal-ai/nano-banana/edit": Price(unit="image", usd=0.0398, source="fal pricing API", checked="2026-11-18"),
+    # Text to image, for an ad with no product photo (strategy plan A6).
+    "fal-ai/nano-banana": Price(unit="image", usd=0.0398, source="fal pricing API", checked="2026-11-27"),
     "fal-ai/kling-video/v2.5-turbo/pro/image-to-video": Price(
         unit="second", usd=0.07, source="fal pricing API", checked="2026-11-18"
     ),

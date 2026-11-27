@@ -18,7 +18,13 @@ Test prompts from the prompt-to-ad strategy plan (`docs/plan/prompt-to-ad-strate
 - Every key in `expect` is an assertion. The test maps each key to the phase that can check it;
   keys the code cannot check yet are reported as skipped with their phase, never deleted. A new
   key with no phase fails the test, so nothing is dropped silently.
-- Checked now (phase 5): the fixed rules and the projected cost (phase 1); the scene count and
+- Phase 6 (27 Nov 2026), every key now checked: 02 with no photo (the route `video_no_photo`; the
+  first starting picture made from the brief's words and each later one made from that first
+  picture or continuing the clip before, so `text_to_image_or_continue` allows `text_to_image`,
+  `first_picture`, `continue` and `card`; the plain note "Add a photo…"), and 07's character
+  reference (in CI the photo reader's flags come from the photo's name; the face in the photo is
+  the reference, no extra picture). A live read of the real photos is still to do.
+- Checked before phase 6: the fixed rules and the projected cost (phase 1); the scene count and
   lengths of every fixture through the mock writer, and each scene's text as the splitter read it
   (phase 2); through the mock slot filler, every key slot filled or marked as the AI's guess, the
   user's words kept, the product slot's source and words, the cost shown, and the real-length line

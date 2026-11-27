@@ -341,10 +341,6 @@ export default function Brief() {
   async function submit(e) {
     e.preventDefault();
     if (locked) return;
-    if (!photo) {
-      setError('Add a product photo first.');
-      return;
-    }
     setBusy(true);
     setError('');
     const length = Number(form.video_length_s);
@@ -376,7 +372,7 @@ export default function Brief() {
       <header className="create-head">
         <h1>Start creating</h1>
         <p className="muted">
-          One product photo and a short brief. You approve the storyboard before anything is rendered.
+          A product photo and a short brief. You approve the storyboard before anything is rendered.
         </p>
       </header>
 
@@ -392,6 +388,20 @@ export default function Brief() {
             </span>
           </label>
           <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={pickPhoto} hidden />
+          {photo ? (
+            <button type="button" className="link-btn small" onClick={() => {
+                setPhoto(null);
+                document.getElementById('photo').value = ''; // the same file can be picked again
+              }}
+            >
+              Remove the photo
+            </button>
+          ) : (
+            <p className="small muted">
+              Optional. With no photo, the AI makes your product from your description, so it may not look exactly
+              like yours.
+            </p>
+          )}
           <p className="notice">
             <AlertTriangle size={16} aria-hidden="true" />
             <span>
@@ -597,14 +607,15 @@ export default function Brief() {
               </p>
             )}
             <p className="muted small">
-              Options marked Soon are previews and are not used yet. Next, AI reads the photo and writes a storyboard
+              Options marked Soon are previews and are not used yet. Next, AI reads your photo and writes a storyboard
               (a few cents); nothing is rendered until you approve it.
               {config && <> Rendering then costs about {formatMoney(config.job_estimate, currency)}.</>}
             </p>
             <button className="btn btn-primary btn-wide" disabled={busy || locked || form.story.length > STORY_MAX}>
               {busy ? (
                 <>
-                  <Loader2 className="spin" size={18} aria-hidden="true" /> Reading the photo and writing the storyboard…
+                  <Loader2 className="spin" size={18} aria-hidden="true" />{' '}
+                  {photo ? 'Reading the photo and writing the storyboard…' : 'Writing the storyboard…'}
                 </>
               ) : locked ? (
                 <>
