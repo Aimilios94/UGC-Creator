@@ -51,12 +51,26 @@ def plan_scene_image(
     style: str = "realistic",
     notes: str = "",
     keep_same: str | None = None,
+    cast: str = "",
+    people: list[tuple[str, InputImage, str]] = (),
 ) -> PlannedRender:
     """`keep_same` is set in a continuous shot (D30): then the picture is also the scene's first moment
-    as the continuity check wrote it, with what stays the same in every scene."""
+    as the continuity check wrote it, with what stays the same in every scene. A shot after a cut
+    (D32) opens on its own picture, so it never gets the shot before's moment (that made collages).
+
+    `cast` is how the people in this shot look, from the cast sheet; `people` is (name, picture,
+    sha256) of each one's first picture, sent as more reference photos so the same person comes back
+    in every shot (strategy plan A4; the owner's hoodie test, 27 Nov 2026: a new face in every shot)."""
     prompt = scene.image_prompt.strip() or scene.description.strip()
+    if cast.strip():
+        prompt += " People in this shot: " + cast.strip()
+    for n, (name, _, _) in enumerate(people, start=2):
+        prompt += (
+            f" Reference photo {n} shows {name}: keep exactly the same person (face, skin tone, hair, age and build)."
+            " Take only the person from it, never its place, pose, light or framing."
+        )
     if keep_same is not None:
-        if scene.starts.strip():
+        if scene.starts.strip() and scene.join == "flow":
             prompt += " First moment of the shot: " + scene.starts.strip()
         if keep_same.strip():
             prompt += " Same in every scene: " + keep_same.strip()
@@ -70,20 +84,43 @@ def plan_scene_image(
         "output_format": "jpeg",
         "seed": seed,
     }
-    key = cache_key(
-        model=model,
-        prompt=prompt,
-        seed=seed,
-        input_sha256=product_sha256,
-        settings={"aspect_ratio": aspect_ratio, "output_format": "jpeg", "num_images": 1},
-    )
+    settings = {"aspect_ratio": aspect_ratio, "output_format": "jpeg", "num_images": 1}
+    if people:
+        settings["people"] = [sha for _, _, sha in people]
+    key = cache_key(model=model, prompt=prompt, seed=seed, input_sha256=product_sha256, settings=settings)
     return PlannedRender(
         request=MediaRequest(
-            kind="image", model=model, arguments=arguments, input_image=product, image_field="image_urls"
+            kind="image",
+            model=model,
+            arguments=arguments,
+            input_image=product,
+            image_field="image_urls",
+            extra_images=[img for _, img, _ in people],
         ),
         cache_key=key,
         usage=Usage(images=1),
     )
+
+
+def cast_line(card, sheet) -> str:
+    """How the people in a shot look, from the cast sheet: "P1 (the creator): <look>; wears <clothes>"."""
+    if card is None or sheet is None:
+        return ""
+    by_id = {p.id: p for p in sheet.people}
+    lines = []
+    for pid in card.who.ids:
+        p = by_id.get(pid)
+        if p is None:
+            continue
+        bits = [
+            x
+            for x in (p.look.value.strip(), f"wears {p.clothes.value.strip()}" if p.clothes.value.strip() else "")
+            if x
+        ]
+        lines.append(
+            f"{pid} ({p.label or 'a person'}): " + "; ".join(bits) if bits else f"{pid} ({p.label or 'a person'})"
+        )
+    return ". ".join(lines)
 
 
 def plan_extend_image(

@@ -280,3 +280,58 @@ def test_a_story_with_quick_cuts_and_a_logo_ending_renders_one_clip_per_shot_and
     kinds = [r.kind for r in ctx.media.submits]
     assert kinds.count("video") == 5  # six shots, the end card is drawn by us
     assert done["variants"][0]["duration_s"] == pytest.approx(16, abs=0.5)
+    # The runner's first picture goes with each later picture of her (strategy plan A4).
+    pictures = [r for r in ctx.media.submits if r.kind == "image"]
+    assert not pictures[0].extra_images and any(len(r.extra_images) == 1 for r in pictures[1:])
+    assert all("Reference photo 2 shows P1" in r.arguments["prompt"] for r in pictures if r.extra_images)
+
+
+# --- the same person in every shot, and no collage after a cut (owner's hoodie test, 27 Nov 2026) ----
+def test_a_picture_after_a_cut_never_gets_the_shot_befores_moment():
+    from app.services.image_gen import plan_scene_image
+    from app.services.providers.media import InputImage
+
+    photo = InputImage(data=b"x", content_type="image/jpeg")
+    sc = Scene(role="demo", description="On a bridge at dawn", image_prompt="P1 on a bridge", motion_prompt="",
+               starts="a hand brushes the sleeve in the alley")  # fmt: skip
+    kw = dict(model="m", aspect_ratio="9:16", seed=1, product=photo, product_sha256="a", keep_same="same jacket")
+    flowing = plan_scene_image(scene=sc, **kw).request.arguments["prompt"]
+    cut = plan_scene_image(scene=sc.model_copy(update={"join": "cut"}), **kw).request.arguments["prompt"]
+    assert "First moment of the shot: a hand brushes" in flowing
+    assert "First moment" not in cut and "Same in every scene: same jacket" in cut
+
+
+def test_the_first_picture_of_a_person_is_sent_with_their_later_shots():
+    from app.services.image_gen import cast_line, plan_scene_image
+    from app.services.providers.media import InputImage
+
+    photo, face = InputImage(data=b"x", content_type="image/jpeg"), InputImage(data=b"f", content_type="image/jpeg")
+    sc = Scene(role="demo", description="P1 paints", image_prompt="P1 paints in the studio", motion_prompt="")
+    kw = dict(model="m", aspect_ratio="9:16", seed=1, product=photo, product_sha256="a")
+    alone = plan_scene_image(scene=sc, **kw)
+    plan = plan_scene_image(
+        scene=sc, cast="P1 (the creator): short dark hair", people=[("P1 (the creator)", face, "f1")], **kw
+    )
+    prompt = plan.request.arguments["prompt"]
+    assert plan.request.extra_images == [face] and alone.request.extra_images == []
+    assert "People in this shot: P1 (the creator): short dark hair" in prompt
+    assert "Reference photo 2 shows P1 (the creator): keep exactly the same person" in prompt
+    assert plan.cache_key != plan_scene_image(scene=sc, cast="P1 (the creator): short dark hair", **kw).cache_key
+
+    people = [Person(id="P1", label="the creator", look=Slot(value="short dark hair, light stubble"),
+                     clothes=Slot(value="the hoodie, black jeans"))]  # fmt: skip
+    ad = AdStructure(sheet={"people": people}, scenes=[SceneCard(who=CastRefs(ids=["P1", "product"]))])
+    assert (
+        cast_line(ad.scenes[0], ad.sheet)
+        == "P1 (the creator): short dark hair, light stubble; wears the hoodie, black jeans"
+    )
+    assert cast_line(None, ad.sheet) == ""
+
+
+def test_the_continuity_check_is_told_which_shots_open_on_a_cut():
+    from app.services.continuity import build_prompt
+
+    board = _board(3)
+    board.scenes[2].join = "cut"
+    prompt = build_prompt(board, Brief(**BRIEF))
+    assert prompt.count('"opens": "cut"') == 1 and prompt.count('"opens": "flows on"') == 2

@@ -62,7 +62,10 @@ For every scene write:
 For each cut, scene N's ends and scene N+1's starts describe the same moment, in the same words where
 you can: same camera position, same direction and speed of movement, same pose, same light. A move
 in progress carries on through the cut; it never stops and restarts.
-If the story jumps between two scenes (a new place, a time cut, another subject), add a bridging
+A scene whose "opens" is "cut" starts on its own new picture after a clean cut: its starts is only
+its own first moment (its own place, people and light), never the previous scene's, and the previous
+scene's ends needs no bridge into it.
+For the other scenes: if the story jumps between two scenes (a new place, a time cut, another subject), add a bridging
 movement: scene N ends on it and scene N+1 starts from it (for example the camera pushes into a dark
 surface and pulls out of one in the new place, a whip pan, the subject walks out of frame, a match on
 the same action).
@@ -92,6 +95,7 @@ def build_prompt(board: Storyboard, brief: Brief) -> str:
         {
             "scene": i + 1,
             "seconds": sc.duration_s,
+            "opens": "cut" if i and sc.join == "cut" else "flows on",  # D32: a cut opens on its own picture
             "what_we_see": sc.description[:1200],
             "picture": sc.image_prompt[:800],
             "movement": sc.motion_prompt[:1200],

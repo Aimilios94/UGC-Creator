@@ -33,7 +33,7 @@ from ..repository import Database
 from . import add_scenes, analyze, continuity, shorten, slot_filler, storyboard
 from .ad_structure import AdStructure
 from .compose import Branding, ComposeSpec, SceneInput, compose, fit_into, frame_at, probe_duration
-from .image_gen import PlannedRender, plan_extend_image, plan_scene_image
+from .image_gen import PlannedRender, cast_line, plan_extend_image, plan_scene_image
 from .llm_trace import Usage, cost_usd, usd_to_eur
 from .music import music_for
 from .output_checks import check_compose
@@ -942,6 +942,17 @@ def run_job(ctx: Context, job: dict) -> None:
     seed = job_seed(job_id)
     images: dict[int, dict] = {}
     count = len(rows)
+    sheet, cards = board_structure(board)
+    faces: dict[str, dict] = {}  # person id -> the first picture showing them alone (strategy plan A4)
+    labels = {p.id: p.label or "the person" for p in (sheet.people if sheet else [])}
+
+    def as_ref(asset: dict) -> InputImage:
+        return InputImage(
+            data=ctx.storage.get(asset["storage_key"]),
+            content_type=asset["content_type"],
+            url=ctx.storage.provider_url(asset["storage_key"], 3600),
+        )
+
     for row in rows:
         idx = row["idx"]
         scene = Scene.model_validate(row["data"])
@@ -949,11 +960,14 @@ def run_job(ctx: Context, job: dict) -> None:
             continue  # the story's own end card: drawn by us in compose (D32), no picture
         if is_chained(board, idx, scene):
             continue  # its starting picture is the previous clip's last frame, made in the video phase
+        card = cards.get(scene.uid)
+        who = [p for p in (card.who.ids if card else []) if p in labels]
         if scene.image_source != "generate":
             image = use_own_image(ctx, job, idx, scene, brief.aspect_ratio)
         else:
+            people = [(f"{p} ({labels[p]})", as_ref(faces[p]), faces[p]["sha256"]) for p in who if p in faces][:2]
 
-            def plan_image(scene=scene):
+            def plan_image(scene=scene, card=card, people=people):
                 return plan_scene_image(
                     model=s.image_model,
                     scene=scene,
@@ -964,9 +978,13 @@ def run_job(ctx: Context, job: dict) -> None:
                     style=brief.visual_style,
                     notes=board.notes,
                     keep_same=board.keep_same if board.continuity == "continuous" else None,
+                    cast=cast_line(card, sheet),
+                    people=people,
                 )
 
             image = run_media_stage(ctx, job, "image", idx, plan_image)
+        if len(who) == 1 and who[0] not in faces:
+            faces[who[0]] = image  # one person alone: their face for every later shot
         repo.set_scene_asset(ctx.db, job_id, idx, "image", str(image["id"]))
         images[idx] = image
     if job.get("phase", "video") == "images":

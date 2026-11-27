@@ -45,6 +45,9 @@ class MediaRequest:
     # The picture the clip must end on (Kling `tail_image_url`, D30): the next scene's own picture.
     tail_image: InputImage | None = None
     tail_field: str = "tail_image_url"
+    # More reference pictures after the product photo ("image_urls" only): the first picture of
+    # each person in the shot, so the same face comes back in every shot (strategy plan A4).
+    extra_images: list[InputImage] = field(default_factory=list)
 
 
 @dataclass
@@ -123,7 +126,10 @@ class FalMedia:
     def submit(self, req: MediaRequest) -> str:
         url = self._input_url(req.input_image)
         args = dict(req.arguments)
-        args[req.image_field] = [url] if req.image_field == "image_urls" else url
+        if req.image_field == "image_urls":
+            args[req.image_field] = [url, *(self._input_url(x) for x in req.extra_images)]
+        else:
+            args[req.image_field] = url
         if req.tail_image is not None:
             args[req.tail_field] = self._input_url(req.tail_image)
         handle = self._client.submit(req.model, args, headers=self.headers)
