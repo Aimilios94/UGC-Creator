@@ -13,10 +13,10 @@ from app.services.pipeline import ends_on_next_picture, estimate_board_usd, is_c
 from app.services.providers.media import MOCK_CLIP
 from app.services.providers.voice import MockVoice, VoiceRequest
 from app.services.scene_plan import scenes_for_length
-from app.services.scene_splitter import fast_story, split_story
+from app.services.scene_splitter import card_sentence, fast_story, split_story, story_length_s
 from app.services.shots import plan_joins, split_end_card, voice_rooms
 from app.services.slot_filler import SlotOut, _slot, code_questions, content_words, named_in_story, open_questions
-from app.services.storyboard import fill_placeholders, packed_scenes
+from app.services.storyboard import fill_placeholders, packed_scenes, target_scenes
 from app.services.storyboard_checks import flag_testimonials
 from app.services.video_gen import _clause_cut, _with_subject, film_only, negative_prompt
 from conftest import BRIEF, make_settings
@@ -113,6 +113,44 @@ def test_a_logo_graphic_on_screen_becomes_the_end_card():
     whole = _board(3)  # the whole shot is the graphic: it is the card
     whole.scenes[2].description = "A white logo slams onto a black screen."
     assert split_end_card(whole, 2.0) and [s.kind for s in whole.scenes] == ["clip", "clip", "card"]
+
+
+def test_a_one_sentence_shot_keeps_its_filmed_moment_and_only_the_logo_becomes_the_card():
+    # The owner's hoodie remake (27 Nov 2026): the nod was lost because the whole sentence became the card.
+    board = _board(3)
+    last = board.scenes[2]
+    last.description = (
+        "The creator faces the camera in the studio doorway, gives a quiet confident nod with the hood down; "
+        "the frame then goes to black for a sharp minimalist brand logo reveal in edit."
+    )
+    last.motion_prompt = (
+        "0-2 s: push-in as the creator nods. 2-4 s: the frame tightens on the chest artwork; final frame "
+        "centers on the hoodie chest before the screen goes dark for the brand logo reveal in edit."
+    )
+    assert split_end_card(board, 2.0)
+    assert [s.kind for s in board.scenes] == ["clip", "clip", "clip", "card"]
+    kept, card = board.scenes[2], board.scenes[3]
+    assert kept.description.endswith("with the hood down.") and "logo" not in kept.description
+    assert kept.motion_prompt.endswith("centers on the hoodie chest.") and "dark" not in kept.motion_prompt
+    assert card.description.startswith("The frame then goes to black") and card.duration_s == 2
+    assert card_sentence("The logo slams onto black.") == ("", "The logo slams onto black.")
+    assert card_sentence("A slow walk; she waves before the sun sets.") is None
+
+
+def test_the_length_a_story_names_is_used_when_none_is_chosen():
+    assert story_length_s("A stylish, 20-second lifestyle commercial celebrating artists") == 20
+    assert story_length_s("a 30s ad for my mug") == 30 and story_length_s("A 12 sec TikTok") == 12
+    for no in ("0-5s: she walks. 5-10s: she sits.", "after 10 seconds she smiles", "she waits 20 seconds",
+               "a 90-second film", "A 2 s shot of the logo"):  # fmt: skip
+        assert story_length_s(no) is None, no
+
+
+def test_a_fast_story_with_its_length_in_the_text_gets_the_fast_number_of_shots(client, session_id, photo_bytes):
+    brief = {**BRIEF, "story": HOODIE}
+    brief.pop("video_length_s", None)
+    job = create_job(client, session_id, photo_bytes, brief=brief).json()
+    assert job["brief"]["video_length_s"] == 20  # from "a stylish, 20-second ... commercial"
+    assert target_scenes(Brief(**job["brief"]), 2.0) == 7
 
 
 def test_a_montage_packed_into_one_written_scene_is_found():

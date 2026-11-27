@@ -102,6 +102,9 @@ def split_end_card(board: Storyboard, end_card_s: float) -> bool:
         return False
     else:
         last.description = rest
+        moved = card_sentence(last.motion_prompt)  # the movement no longer goes to black for a logo
+        if moved and moved[0] and _ON_SCREEN.search(moved[1]):
+            last.motion_prompt = moved[0]
         card = _end_card_after(board, last, end_card_s, said)
         _twin_card(board, card, rest, said, said)
     board.split_note = " ".join(x for x in (board.split_note, CARD_NOTE) if x)[:SPLIT_NOTE_MAX]

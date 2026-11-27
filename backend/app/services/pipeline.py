@@ -43,7 +43,7 @@ from .providers.media import InputImage, MediaFailed, MediaProvider, wait_for
 from .providers.storage import Storage
 from .providers.voice import VoiceProvider, build_voice
 from .scene_plan import end_card_for
-from .scene_splitter import Beat, Split, split_story
+from .scene_splitter import Beat, Split, split_story, story_length_s
 from .shots import voice_rooms
 from .storyboard_checks import drop_flagged_ideas, fix_instructions, flag_testimonials
 from .video_gen import ClipText, clip_prompt, plan_scene_video
@@ -180,6 +180,11 @@ def write_board(
     with those lines as feedback. Lines still flagged after that are left for the user to
     edit on the Storyboard step (Approve is refused while any remain).
     """
+    if not brief.video_length_s and (asked := story_length_s(brief.story)):
+        # No length chosen but the story names one ("a 20-second commercial"): that is the ad's
+        # length, so the number of shots and their lengths follow it (the owner's hoodie test, 27 Nov 2026).
+        brief = brief.model_copy(update={"video_length_s": asked})
+        repo.set_brief(ctx.db, job_id, brief.model_dump(mode="json"))
     structure, split = filled or fill_slots(ctx, job_id, brief, analysis, attempt=attempt)
     # A vague idea (code asks when the AI did not, D32): a short story with no scenes and no spoken
     # lines, like "guy wearing my hoodie in the rain" or a one-paragraph concept.

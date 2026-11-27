@@ -338,12 +338,43 @@ def fast_story(story: str) -> bool:
     return bool(_FAST.search(story or ""))
 
 
+# Where a sentence turns to its last part: "…nods; the frame goes black for the logo",
+# "…holds, then the logo slams in", "…on the chest before the screen goes dark for the logo".
+_CLAUSE = re.compile(r"\s*;\s*|\s+[—–]\s+|,\s+(?:and\s+)?then\s+|\s+before\s+", re.I)
+_LENGTH = re.compile(
+    r"(?<![\d.:–—-])\b(\d{1,2})\s*(?:-\s*|\s)?(?:s|secs?|seconds?)\b(?!\s*[-–—]\s*\d)"
+    r"(?=(?:[\s,-]+[\w'-]+){0,3}?[\s,-]+(?:ad|advert|video|commercial|spot|clip|reel|tiktok|promo|film|story)s?\b)",
+    re.I,
+)
+
+
+def _is_card(text: str) -> bool:
+    return bool(_CARD_WHAT.search(text) and _CARD_HOW.search(text))
+
+
 def card_sentence(text: str) -> tuple[str, str] | None:
-    """(the text before, the last sentence) when a scene's last sentence is a logo or brand reveal
-    on screen, else None. That sentence is the ad's end card, drawn by us (D32)."""
+    """(the text before, the reveal) when a scene ends on a logo or brand reveal on screen, else
+    None. The reveal is the end card, drawn by us (D32). Within the last sentence only its last
+    part is the reveal ("…gives a nod; the frame goes to black for the logo"), so a filmed moment
+    before it is never lost (the owner's hoodie test, 27 Nov 2026)."""
     sentences = [s for s in re.split(r"(?<=[.!?])\s+", (text or "").strip()) if s]
-    if sentences and _CARD_WHAT.search(sentences[-1]) and _CARD_HOW.search(sentences[-1]):
-        return " ".join(sentences[:-1]).strip(), sentences[-1]
+    if not sentences or not _is_card(sentences[-1]):
+        return None
+    last = sentences[-1]
+    for m in reversed(list(_CLAUSE.finditer(last))):
+        head, tail = last[: m.start()].rstrip(" ,"), last[m.end() :].strip()
+        if _is_card(tail) and len(head.split()) >= 3 and not _is_card(head):
+            before = " ".join([*sentences[:-1], head.rstrip(".!?") + "."]).strip()
+            return before, tail[:1].upper() + tail[1:]
+    return " ".join(sentences[:-1]).strip(), last
+
+
+def story_length_s(story: str) -> int | None:
+    """The ad length the story itself asks for ("a stylish, 20-second commercial", "30 s ad"),
+    used when no length is chosen; None when it names none or a time range of a scene."""
+    m = _LENGTH.search(story or "")
+    if m and 4 <= int(m.group(1)) <= 52:
+        return int(m.group(1))
     return None
 
 
