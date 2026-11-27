@@ -135,6 +135,16 @@ def test_a_one_sentence_shot_keeps_its_filmed_moment_and_only_the_logo_becomes_t
     assert card.description.startswith("The frame then goes to black") and card.duration_s == 2
     assert card_sentence("The logo slams onto black.") == ("", "The logo slams onto black.")
     assert card_sentence("A slow walk; she waves before the sun sets.") is None
+    # The reveal is not the last sentence: a sentence after it still about the logo goes with it.
+    real = (
+        "A sharp minimalist brand reveal: cut to black, then the Nomad Atelier logo and a close linger on hoodie "
+        "fabric texture and art as the brand emblem appears. The ad ends on the logo."
+    )
+    assert card_sentence(real) == ("", real)
+    whole = _board(3)
+    whole.scenes[2].description = real
+    assert split_end_card(whole, 2.0) and [s.kind for s in whole.scenes] == ["clip", "clip", "card"]
+    assert card_sentence("She waves. The logo slams onto black. She laughs.") is None  # a filmed moment after it
 
 
 def test_the_length_a_story_names_is_used_when_none_is_chosen():

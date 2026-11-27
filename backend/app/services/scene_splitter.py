@@ -358,15 +358,20 @@ def card_sentence(text: str) -> tuple[str, str] | None:
     part is the reveal ("…gives a nod; the frame goes to black for the logo"), so a filmed moment
     before it is never lost (the owner's hoodie test, 27 Nov 2026)."""
     sentences = [s for s in re.split(r"(?<=[.!?])\s+", (text or "").strip()) if s]
-    if not sentences or not _is_card(sentences[-1]):
+    # The reveal sentence, then only sentences still about the logo ("… the logo appears. The ad ends
+    # on the logo.": the owner's hoodie test, 27 Nov 2026).
+    k = len(sentences) - 1
+    while k >= 0 and not _is_card(sentences[k]) and _CARD_WHAT.search(sentences[k]):
+        k -= 1
+    if k < 0 or not _is_card(sentences[k]):
         return None
-    last = sentences[-1]
-    for m in reversed(list(_CLAUSE.finditer(last))):
-        head, tail = last[: m.start()].rstrip(" ,"), last[m.end() :].strip()
+    first, after = sentences[k], " ".join(sentences[k + 1 :])
+    for m in reversed(list(_CLAUSE.finditer(first))):
+        head, tail = first[: m.start()].rstrip(" ,"), first[m.end() :].strip()
         if _is_card(tail) and len(head.split()) >= 3 and not _is_card(head):
-            before = " ".join([*sentences[:-1], head.rstrip(".!?") + "."]).strip()
-            return before, tail[:1].upper() + tail[1:]
-    return " ".join(sentences[:-1]).strip(), last
+            before = " ".join([*sentences[:k], head.rstrip(".!?") + "."]).strip()
+            return before, " ".join(x for x in (tail[:1].upper() + tail[1:], after) if x)
+    return " ".join(sentences[:k]).strip(), " ".join(sentences[k:])
 
 
 def story_length_s(story: str) -> int | None:
