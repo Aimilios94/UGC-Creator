@@ -32,4 +32,5 @@ jobs:
             exit 0
           fi
           curl --fail-with-body --silent --show-error --max-time 240 --retry 2 --retry-all-errors \
-            -X POST -H "X-Admin-Token: $ADMIN_TOKEN" "$API_URL/admin/cleanup"
+            -X POST -d '' -H "X-Admin-Token: $ADMIN_TOKEN" "$API_URL/admin/cleanup"
+          # -d '': Cloud Run refuses a POST with no body (411 Length Required).
