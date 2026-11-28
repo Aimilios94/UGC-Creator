@@ -530,6 +530,34 @@ def job_costs(db: Database, job_id: str) -> list[dict]:
         )
 
 
+def job_costs_by_stage(db: Database, job_id: str) -> list[dict]:
+    """Spend per stage (writer, pictures, clips, voice...) for History (M2 item 4), in the order the
+    stages first ran. A call with no stage (none today) is grouped as "other"."""
+    with db.tx() as c:
+        return _all(
+            c,
+            """select coalesce(s.stage, 'other') as stage, count(*) as calls,
+                       coalesce(sum(coalesce(l.cost_usd, l.est_cost_usd)), 0) as usd
+                from llm_calls l left join stage_runs s on s.id = l.stage_run_id
+                where l.status in ('reserved', 'billed') and l.job_id = %s
+                group by 1 order by min(l.created_at)""",
+            (job_id,),
+        )
+
+
+def list_session_jobs(db: Database, session_hash: str, limit: int = 50) -> list[dict]:
+    """This browser's ads for History, newest first, each with what it has cost so far."""
+    with db.tx() as c:
+        return _all(
+            c,
+            f"""select j.id, j.status, j.phase, j.brief, j.created_at, j.finished_at,
+                       (select {_SPENT} from llm_calls where {_LIVE} and job_id = j.id) as usd
+                from jobs j where j.session_hash = %s
+                order by j.created_at desc limit %s""",
+            (session_hash, limit),
+        )
+
+
 def job_spend_usd(db: Database, job_id: str) -> float:
     with db.tx() as c:
         return float(_one(c, f"select {_SPENT} as s from llm_calls where {_LIVE} and job_id = %s", (job_id,))["s"])

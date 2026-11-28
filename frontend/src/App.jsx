@@ -6,6 +6,7 @@ import Landing from './pages/Landing';
 import Brief from './pages/Brief';
 import Job from './pages/Job';
 import Privacy from './pages/Privacy';
+import History from './pages/History';
 
 const V1_URL = 'https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app';
 
@@ -20,6 +21,7 @@ function Nav({ route }) {
       <nav className="nav-links" aria-label="Main">
         <a href="#/" className={active('/')}>Home</a>
         <a href="#/create" className={active('/create')}>Create ad</a>
+        <a href="#/history" className={active('/history')}>History</a>
         <a href="#/privacy" className={active('/privacy')}>Privacy</a>
       </nav>
     </header>
@@ -70,6 +72,7 @@ export default function App() {
   }
   else if (route === '/create') page = <Brief />;
   else if (route === '/privacy') page = <Privacy />;
+  else if (route === '/history') page = <History />;
   else page = <Landing />;
   return (
     <div className="app">

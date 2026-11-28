@@ -115,6 +115,7 @@ export const api = {
     form.append('logo', file);
     return request('/brand-kit/logo', { method: 'POST', form });
   },
+  history: () => request('/jobs'), // this browser's ads (M2 item 4)
   getJob: (id) => request(`/jobs/${encodeURIComponent(id)}`),
   saveStoryboard: (id, storyboard) =>
     request(`/jobs/${encodeURIComponent(id)}/storyboard`, { method: 'PUT', json: storyboard }),

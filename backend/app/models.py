@@ -436,6 +436,30 @@ class LengthIn(BaseModel):
 NO_PHOTO_NOTE = "Add a photo so your product looks exactly right."  # strategy plan A6
 
 
+class StageCost(BaseModel):
+    """What one step of the ad cost (History, M2 item 4)."""
+
+    stage: str  # analyze | slots | storyboard | add_scenes | continuity | shorten | image | video | voice | other
+    label: str
+    calls: int
+    cost: Money
+
+
+class HistoryItem(BaseModel):
+    """One of this browser's ads on the History page."""
+
+    id: str
+    status: str
+    phase: str
+    product_name: str
+    theme: str | None = None
+    platform: str
+    created_at: str
+    finished_at: str | None = None
+    picture_url: str | None = None  # the ad's cover, else its first picture, else the product photo
+    cost: Money
+
+
 class JobView(BaseModel):
     id: str
     status: str
@@ -444,6 +468,7 @@ class JobView(BaseModel):
     brand: BrandKit | None = None
     phase: str = "video"  # images (step 1) | video (step 2)
     costs: list[CostLine] = []  # what each AI cost so far
+    stage_costs: list[StageCost] = []  # the same spend, per step
     flags: list[StoryboardFlag] = []
     variants: list[VariantView] = []
     estimate: Estimate | None = None

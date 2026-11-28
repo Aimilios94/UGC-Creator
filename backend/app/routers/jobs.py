@@ -30,6 +30,7 @@ from ..models import (
     ClipView,
     CostLine,
     Estimate,
+    HistoryItem,
     JobView,
     LengthIn,
     LengthLine,
@@ -38,6 +39,7 @@ from ..models import (
     QuestionView,
     ShortenOut,
     SoundIn,
+    StageCost,
     StageView,
     Storyboard,
     VariantView,
@@ -72,6 +74,58 @@ def _questions(job: dict) -> list[QuestionView]:
         return []
     qs = (job["pending"].get("structure") or {}).get("questions") or []
     return [QuestionView(slot=q["slot"], text=q["text"], options=q["options"]) for q in qs]
+
+
+STAGE_LABELS = {
+    "analyze": "Reading your photo",
+    "slots": "Reading your story",
+    "storyboard": "Writing the storyboard",
+    "add_scenes": "Adding scenes",
+    "continuity": "Continuity check",
+    "shorten": "Shortening a scene",
+    "image": "Starting pictures",
+    "video": "Video clips",
+    "voice": "Voiceover",
+    "compose": "Editing the ad",
+    "other": "Other",
+}
+
+
+def stage_costs(ctx: Context, job_id: str) -> list[StageCost]:
+    rate = ctx.settings.usd_to_eur_rate
+    return [
+        StageCost(
+            stage=r["stage"],
+            label=STAGE_LABELS.get(r["stage"], r["stage"]),
+            calls=int(r["calls"]),
+            cost=Money(**money(float(r["usd"]), rate)),
+        )
+        for r in repo.job_costs_by_stage(ctx.db, job_id)
+    ]
+
+
+def history_item(ctx: Context, job: dict) -> HistoryItem:
+    """A History row: the cover (else the first picture, else the product photo) as a signed URL."""
+    pick = {"cover": 0, "image": 1, "upload": 2}
+    assets = sorted(
+        (a for a in repo.list_assets(ctx.db, str(job["id"])) if a["kind"] in pick),
+        key=lambda a: (pick[a["kind"]], a["created_at"]),
+    )
+    brief = job["brief"]
+    return HistoryItem(
+        id=str(job["id"]),
+        status=job["status"],
+        phase=job.get("phase") or "video",
+        product_name=brief.get("product_name", ""),
+        theme=brief.get("theme"),
+        platform=brief.get("platform", "tiktok"),
+        created_at=job["created_at"].isoformat(),
+        finished_at=job["finished_at"].isoformat() if job.get("finished_at") else None,
+        picture_url=ctx.storage.signed_url(assets[0]["storage_key"], ctx.settings.signed_url_ttl_seconds)
+        if assets
+        else None,
+        cost=Money(**money(float(job["usd"]), ctx.settings.usd_to_eur_rate)),
+    )
 
 
 def job_view(ctx: Context, job: dict) -> JobView:
@@ -129,6 +183,7 @@ def job_view(ctx: Context, job: dict) -> JobView:
             )
             for r in repo.job_costs(ctx.db, job_id)
         ],
+        stage_costs=stage_costs(ctx, job_id),
         estimate=_estimate(ctx, board, spent, job) if board is not None else None,
         length_line=_length_line(s, board, brief) if board is not None and job["status"] == "draft" else None,
         questions=_questions(job),
@@ -381,6 +436,12 @@ def create_job(
         log.exception("storyboard failed for job %s", job_id)
         repo.set_job_error(ctx.db, job_id, "Writing the storyboard failed. Please try again.")
     return job_view(ctx, repo.get_job(ctx.db, job_id))
+
+
+@router.get("")
+def list_jobs(sess: str = Depends(session_hash), ctx: Context = Depends(get_ctx)) -> list[HistoryItem]:
+    """History (M2 item 4): this browser's ads only, newest first (plan §15: no one else's)."""
+    return [history_item(ctx, j) for j in repo.list_session_jobs(ctx.db, sess)]
 
 
 @router.get("/{job_id}")

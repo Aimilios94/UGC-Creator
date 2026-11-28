@@ -112,3 +112,14 @@ def test_job_estimate_matches_table_and_fits_the_cap():
     voice = estimate_job_usd(s) - media
     assert 0 < voice < 0.01  # three voiceover lines cost well under a cent together
     assert estimate_job_usd(s) * s.usd_to_eur_rate < s.job_cost_cap_eur
+
+
+def test_every_model_the_app_can_call_has_a_price():
+    """M2 item 4: no AI call goes unrecorded. Every model in the settings (a model is a config value)
+    must be in the price table, so a new model cannot be used before its price is added."""
+    s = Settings()
+    models = {name: getattr(s, name) for name in Settings.model_fields if name.endswith("_model")}
+    assert {"llm_model", "image_model", "text_image_model", "video_model", "tts_model"} <= set(models)
+    for name, model in models.items():
+        if model:  # an empty value means the provider is off (Anthropic before M4)
+            assert price_for(model).unit, name
