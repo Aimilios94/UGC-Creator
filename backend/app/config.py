@@ -104,9 +104,12 @@ class Settings(BaseSettings):
     max_image_side_px: int = 2048
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
-    # --- Later milestones (read now so .env stays one file) ---
+    # --- Cleanup and sweep (M2 item 6, D6, D34) ---
     retention_days: int = 30
-    admin_token: str = ""
+    admin_token: str = ""  # POST /admin/cleanup; empty = the endpoint is off
+    stale_job_minutes: int = 55  # the worker's 45-minute task timeout plus a margin
+
+    # --- Later milestones (read now so .env stays one file) ---
     batch_token: str = ""
     sentry_dsn: str = ""
     ip_hash_secret: str = ""

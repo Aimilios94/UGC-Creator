@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
+import shutil
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -21,6 +22,14 @@ from ...config import BACKEND_DIR, Settings
 from ...errors import ProviderNotConfigured
 
 _KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9/_.-]{0,300}$")
+
+
+def _folder(prefix: str) -> str:
+    """A folder prefix ends with "/" and has at least two parts, so `jobs/` alone can never be emptied."""
+    if not prefix.endswith("/") or prefix.strip("/").count("/") < 1:
+        raise ValueError(f"invalid storage folder: {prefix!r}")
+    check_key(prefix.rstrip("/"))
+    return prefix
 
 
 def check_key(key: str) -> str:
@@ -35,6 +44,10 @@ class Storage(Protocol):
     def put(self, key: str, data: bytes, content_type: str) -> None: ...
     def get(self, key: str) -> bytes: ...
     def delete(self, key: str) -> None: ...
+    def delete_prefix(self, prefix: str) -> int:
+        """Delete every file under a folder such as `jobs/<id>/`; returns how many."""
+        ...
+
     def signed_url(self, key: str, ttl_s: int) -> str: ...
     def provider_url(self, key: str, ttl_s: int) -> str | None:
         """A URL an outside provider can fetch, or None when the file is not reachable from outside."""
@@ -73,6 +86,15 @@ class LocalStorage:
     def delete(self, key: str) -> None:
         self._path(key).unlink(missing_ok=True)
 
+    def delete_prefix(self, prefix: str) -> int:
+        folder = self._path(_folder(prefix))
+        files = [f for f in folder.rglob("*") if f.is_file()] if folder.is_dir() else []
+        for f in files:
+            f.unlink(missing_ok=True)
+        if folder.is_dir():
+            shutil.rmtree(folder, ignore_errors=True)
+        return len(files)
+
     def sign(self, key: str, exp: int) -> str:
         return hmac.new(self._secret, f"{key}|{exp}".encode(), hashlib.sha256).hexdigest()
 
@@ -110,6 +132,13 @@ class GcsStorage:
         blob = self._bucket.blob(check_key(key))
         if blob.exists():
             blob.delete()
+
+    def delete_prefix(self, prefix: str) -> int:
+        n = 0
+        for blob in self._client.list_blobs(self._bucket, prefix=_folder(prefix)):
+            blob.delete()
+            n += 1
+        return n
 
     def signed_url(self, key: str, ttl_s: int) -> str:
         import google.auth

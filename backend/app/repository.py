@@ -647,3 +647,162 @@ def record_cache_hit(db: Database, *, job_id: str, stage_run_id: str, kind: str,
                values (%s, %s, %s, %s, %s, 'billed', 0, 0, true)""",
             (job_id, stage_run_id, kind, provider, model),
         )
+
+
+# --- sweep, retention and "delete my data" (M2 item 6, plan §8) ------------------------
+SWEEP_RETRY_NOTE = "The worker stopped before this ad was finished; it was started again."
+SWEEP_FAIL_NOTE = "The worker stopped twice before this ad was finished. Try again, or change the brief."
+
+
+def _settle_reservations(c: psycopg.Connection, job_ids: list[str]) -> None:
+    """A job that is over for good keeps no open estimate. A render that was already sent to the
+    provider may have been charged, so it counts at its estimate; anything never sent is released."""
+    if not job_ids:
+        return
+    c.execute(
+        """update llm_calls l set status = 'billed', cost_usd = l.est_cost_usd,
+                  error = 'stopped after the render was sent; counted at its estimate'
+             from stage_runs s
+            where l.stage_run_id = s.id and s.prediction_id is not null
+              and l.status = 'reserved' and l.job_id = any(%s::uuid[])""",
+        (job_ids,),
+    )
+    c.execute(
+        """update llm_calls set status = 'released', cost_usd = 0, error = 'released: the job stopped'
+            where status = 'reserved' and job_id = any(%s::uuid[])""",
+        (job_ids,),
+    )
+
+
+def sweep_stale_jobs(db: Database, *, stale_minutes: int, max_attempts: int) -> dict[str, list[str]]:
+    """The safety net for a worker killed mid-run (plan §8): a job still `running` long after its
+    claim is queued again while tries remain, otherwise failed. A queued job that has used every
+    try is failed too (a bug-catcher). A fresh `running` job on its last try is the normal second
+    try and is left alone."""
+    with db.tx() as c:
+        stale = "status = 'running' and claimed_at < now() - make_interval(mins => %(m)s)"
+        requeued = _all(
+            c,
+            f"""update jobs set status = 'queued', claimed_at = null, last_error = %(note)s, updated_at = now()
+                 where {stale} and attempts < %(max)s returning id""",
+            {"m": stale_minutes, "max": max_attempts, "note": SWEEP_RETRY_NOTE},
+        )
+        failed = _all(
+            c,
+            f"""update jobs set status = 'failed', finished_at = now(), last_error = %(note)s, updated_at = now()
+                 where ({stale} and attempts >= %(max)s) or (status = 'queued' and attempts >= %(max)s)
+                 returning id""",
+            {"m": stale_minutes, "max": max_attempts, "note": SWEEP_FAIL_NOTE},
+        )
+        failed_ids = [str(r["id"]) for r in failed]
+        for job_id in failed_ids:
+            _set_variants(c, job_id, "failed")
+        _settle_reservations(c, failed_ids)
+        return {"requeued": [str(r["id"]) for r in requeued], "failed": failed_ids}
+
+
+def expired_job_ids(db: Database, days: int) -> list[str]:
+    """Ads not being made whose last change is older than the retention period (drafts included)."""
+    with db.tx() as c:
+        rows = _all(
+            c,
+            """select id from jobs where status in ('draft', 'done', 'failed')
+                 and coalesce(finished_at, updated_at) < now() - make_interval(days => %s)""",
+            (days,),
+        )
+        return [str(r["id"]) for r in rows]
+
+
+def delete_jobs(db: Database, job_ids: list[str]) -> list[str]:
+    """Delete the jobs' rows (scenes, stage runs, assets and variants go with them). Cost rows stay,
+    with the job link set to null, so the daily limit still counts them. Cache rows that point at
+    the jobs' files go too: those files are deleted."""
+    if not job_ids:
+        return []
+    with db.tx() as c:
+        rows = _all(
+            c,
+            """delete from jobs where id = any(%s::uuid[]) and status in ('draft', 'done', 'failed')
+               returning id""",
+            (job_ids,),
+        )
+        gone = [str(r["id"]) for r in rows]
+        _drop_cache_rows(c, gone)
+        return gone
+
+
+def unused_brand_data(db: Database, days: int) -> tuple[list[dict], list[str]]:
+    """Brand kits and campaigns with no change and no new ad for `days` days.
+    Returns (brand kits as {session_hash}, campaign ids)."""
+    with db.tx() as c:
+        kits = _all(
+            c,
+            """select session_hash from brand_kits k
+                where k.updated_at < now() - make_interval(days => %(d)s)
+                  and not exists (select 1 from jobs j where j.session_hash = k.session_hash
+                                   and j.created_at >= now() - make_interval(days => %(d)s))""",
+            {"d": days},
+        )
+        campaigns = _all(
+            c,
+            """select id from campaigns m
+                where m.updated_at < now() - make_interval(days => %(d)s)
+                  and not exists (select 1 from jobs j where j.campaign_id = m.id
+                                   and j.created_at >= now() - make_interval(days => %(d)s))""",
+            {"d": days},
+        )
+        return kits, [str(r["id"]) for r in campaigns]
+
+
+def delete_brand_kits(db: Database, session_hashes: list[str]) -> int:
+    if not session_hashes:
+        return 0
+    with db.tx() as c:
+        return len(_all(c, "delete from brand_kits where session_hash = any(%s) returning id", (session_hashes,)))
+
+
+def delete_campaigns(db: Database, campaign_ids: list[str]) -> int:
+    if not campaign_ids:
+        return 0
+    with db.tx() as c:
+        return len(_all(c, "delete from campaigns where id = any(%s::uuid[]) returning id", (campaign_ids,)))
+
+
+def session_busy(db: Database, session_hash: str) -> bool:
+    """True while one of the session's ads is queued or being made."""
+    with db.tx() as c:
+        row = _one(
+            c,
+            "select 1 as x from jobs where session_hash = %s and status in ('queued', 'running') limit 1",
+            (session_hash,),
+        )
+        return row is not None
+
+
+def delete_session_brand(db: Database, session_hash: str) -> tuple[int, int]:
+    """The session's brand kit and campaigns; returns (kits, campaigns) deleted."""
+    with db.tx() as c:
+        kits = _all(c, "delete from brand_kits where session_hash = %s returning id", (session_hash,))
+        camps = _all(c, "delete from campaigns where session_hash = %s returning id", (session_hash,))
+        return len(kits), len(camps)
+
+
+def delete_session_jobs(db: Database, session_hash: str) -> list[str]:
+    """Delete every job of the session that is not queued or being made; returns their ids.
+    The rows go first and the files after, so a job approved meanwhile keeps its files."""
+    with db.tx() as c:
+        rows = _all(
+            c,
+            """delete from jobs where session_hash = %s and status not in ('queued', 'running')
+               returning id""",
+            (session_hash,),
+        )
+        gone = [str(r["id"]) for r in rows]
+        _drop_cache_rows(c, gone)
+        return gone
+
+
+def _drop_cache_rows(c: psycopg.Connection, job_ids: list[str]) -> None:
+    """Cache rows that point at deleted jobs' files go with them."""
+    if job_ids:
+        c.execute("delete from media_cache where storage_key like any(%s)", ([f"jobs/{j}/%" for j in job_ids],))

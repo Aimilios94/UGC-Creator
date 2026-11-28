@@ -319,6 +319,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-primary);
 .prose a { text-decoration: underline; }
 .providers { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 12px 0; }
 .providers p { font-size: 0.9rem; }
+.delete-data { margin: 16px 0; }
+.delete-data .row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn-primary.danger { background: #b91c1c; }
+.btn-primary.danger:hover:not(:disabled) { background: #991b1b; }
 
 /* Footer */
 .footer {

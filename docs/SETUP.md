@@ -151,7 +151,8 @@ Every site that calls the API must be listed in `CORS_ORIGINS` in `deploy/gcp/ap
 2. The worker now makes the voiceover, so it needs the OpenAI key: grant `ugc-worker` `roles/secretmanager.secretAccessor` on `openai-api-key` and add `OPENAI_API_KEY=openai-api-key:latest` to the job's `--set-secrets` ([D26](../DECISIONS.md)).
 3. Set `RENDER_SCENES: "5"` in both `deploy/gcp/*.env.yaml` (the most scenes rendered, D28; pinned to 1 until then, [D25](../DECISIONS.md)), build the image (it now installs ffmpeg) and update the job and the service. The new API changes what the live site talks to (pictures, then video), so the M2 frontend goes live with it.
 4. Sentry ([details below](#error-reports-sentry)): put the `ugc-api` DSN in Secret Manager as `sentry-dsn` and add `SENTRY_DSN=sentry-dsn:latest` to the `--set-secrets` of the service and the job; set `VITE_SENTRY_DSN` (the `ugc-web` DSN) in Vercel for Production and the `v2` Preview, then redeploy without build cache.
-5. One paid smoke run of a full 3-scene ad (about 1.05 EUR), with the owner's go and limit.
+5. Cleanup ([D34](../DECISIONS.md)): generate the cleanup token (never printed), add it to Secret Manager as `admin-token` (accessor `ugc-api` only) and `ADMIN_TOKEN=admin-token:latest` to the service's `--set-secrets`, and set the same value as the GitHub Actions secret `ADMIN_TOKEN` (`gh secret set ADMIN_TOKEN < file`, then delete the file). After the merge, run the `cleanup` workflow once by hand (Actions tab) and check it answers 200.
+6. One paid smoke run of a full 3-scene ad (about 1.05 EUR), with the owner's go and limit.
 
 ### Error reports (Sentry)
 Sentry organization `aimilios-kamtsis` in the EU region (Frankfurt, `de.sentry.io`), projects `ugc-api` (FastAPI: the API and the worker, tagged `component`) and `ugc-web` (React). Errors only: no tracing, replay or logs, so the free plan is enough.
@@ -187,4 +188,4 @@ where `ruleset.json` holds `name`, `target: branch`, `enforcement: active`, `con
 
 ## Scheduled jobs (from M2)
 
-The cleanup and stale-job sweep run from a GitHub Actions cron every 15 minutes at an odd minute ([D6](../DECISIONS.md)). GitHub disables scheduled workflows in public repositories after 60 days without repository activity; re-enable it in the Actions tab if that happens.
+The cleanup and stale-job sweep run from a GitHub Actions cron every 15 minutes at an odd minute (minutes 7, 22, 37, 52; [D6](../DECISIONS.md), [D34](../DECISIONS.md)): `.github/workflows/cleanup.yml` calls `POST /admin/cleanup` with the `ADMIN_TOKEN` secret. It sweeps stale jobs (`STALE_JOB_MINUTES`, default 55), deletes ads 30 days after their last change (`RETENTION_DAYS`) with their files, and brand kits, logos and campaigns after 30 days without use. Scheduled runs start only from `main`; without the secret the run skips. Locally: `curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" localhost:8000/admin/cleanup` (the token is in `backend/.env`; read it into the variable, never print it). GitHub disables scheduled workflows in public repositories after 60 days without repository activity; re-enable it in the Actions tab if that happens.

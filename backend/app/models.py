@@ -486,3 +486,24 @@ class JobView(BaseModel):
     spend: Money
     cost_cap: Money
     created_at: str
+
+
+class DeletedData(BaseModel):
+    """What "delete my data" removed (D34)."""
+
+    jobs_deleted: int
+    brand_kits_deleted: int
+    campaigns_deleted: int
+    files_deleted: int
+    kept_busy: bool = False  # an ad approved while the delete ran was kept; delete again when it is done
+
+
+class CleanupResult(BaseModel):
+    """One run of the scheduled cleanup and sweep."""
+
+    requeued: int
+    failed: int
+    jobs_deleted: int
+    brand_kits_deleted: int
+    campaigns_deleted: int
+    files_deleted: int

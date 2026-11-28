@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
 from .config import get_settings
-from .routers import assets, brand_kit, campaigns, health, jobs, library
+from .routers import admin, assets, brand_kit, campaigns, health, jobs, library, privacy
 from .services.monitoring import init_monitoring
 
 settings = get_settings()
@@ -40,7 +40,9 @@ app = FastAPI(
         {"name": "brand kit", "description": "Logo, colours, font and tone, kept per browser session."},
         {"name": "library", "description": "Themes, voices and music to choose from."},
         {"name": "assets", "description": "Signed links to the pictures, clips and finished videos."},
+        {"name": "privacy", "description": "Delete everything this browser session made, at once."},
         {"name": "health", "description": "Is the API up, and can it reach its database."},
+        {"name": "admin", "description": "The scheduled cleanup and stale-job sweep (secret token only)."},
     ],
 )
 
@@ -48,7 +50,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "X-Session-Id", "X-Access-Code"],
 )
 
@@ -58,6 +60,8 @@ app.include_router(campaigns.router)
 app.include_router(brand_kit.router)
 app.include_router(library.router)
 app.include_router(assets.router)
+app.include_router(privacy.router)
+app.include_router(admin.router)
 
 
 @app.get("/", tags=["health"])

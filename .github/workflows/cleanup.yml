@@ -1,0 +1,35 @@
+# The scheduled cleanup and stale-job sweep (plan §8, M2 item 6, D6, D34).
+# Every 15 minutes at an odd minute, it calls the API's token-protected endpoint, which sweeps
+# stale jobs, deletes ads past the retention period and unused brand data. Scheduled runs start
+# only from the default branch (`main`), so this runs from the M2 merge on. Without the
+# ADMIN_TOKEN secret the run skips quietly. GitHub turns scheduled workflows off after 60 days
+# without repository activity in a public repo: turn it back on in the Actions tab (SETUP.md).
+name: cleanup
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+      API_URL: https://ugc-api-1002867777166.europe-west4.run.app
+    steps:
+      - name: Call the cleanup endpoint
+        run: |
+          if [ -z "$ADMIN_TOKEN" ]; then
+            echo "ADMIN_TOKEN is not set; skipping."
+            exit 0
+          fi
+          curl --fail-with-body --silent --show-error --max-time 240 --retry 2 --retry-all-errors \
+            -X POST -H "X-Admin-Token: $ADMIN_TOKEN" "$API_URL/admin/cleanup"
