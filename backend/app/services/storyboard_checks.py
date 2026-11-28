@@ -13,9 +13,12 @@ the line adds no number the brief does not have.
 
 from __future__ import annotations
 
+import logging
 import re
 
 from ..models import Brief, Storyboard, StoryboardFlag
+
+log = logging.getLogger(__name__)
 
 _QUOTES = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"'})
 # "I" only: a brand speaking as "we" ("we use organic cotton") is not a testimonial.
@@ -201,6 +204,7 @@ def drop_flagged_ideas(board: Storyboard, brief: Brief) -> Storyboard:
     bad = {f.field for f in flag_testimonials(board, brief) if "_ideas." in f.field}
     if not bad:
         return board
+    log.info("dropped %d suggested lines that broke the testimonial rule: %s", len(bad), sorted(bad))
     scenes = []
     for i, sc in enumerate(board.scenes):
         keep = {

@@ -41,6 +41,7 @@ lens. Describe only the cast in the shot.
 | --- | --- |
 | Crowds doing complex actions | The crowd still or staring; the action on the main subject |
 | Throws, catches, pouring, liquids | Before and after, or start the clip after the moment (the cup is already full, steam rising) |
+| Ball control and kicks (dribbling, juggling, shots) | A foot resting on the ball, a walk or jog onto the pitch, a still pose |
 | Hands handling small parts | A simple hold or a slow turn of the product |
 | Things changing shape | Two scenes: closed in one, open in the next |
 | Text, logos, screens with words | A blank screen glow; words are added later in editing |

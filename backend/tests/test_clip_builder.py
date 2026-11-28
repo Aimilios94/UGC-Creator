@@ -236,6 +236,39 @@ def test_weak_spots_are_found_in_the_users_words():
     assert weak_spot("he walks out of a concert, hood up") == ""
 
 
+def test_ball_moves_are_a_weak_spot():
+    """The real Sport theme check (28 Nov 2026): the writer added "a quick dribble stop" on its own."""
+    for text in ("a quick dribble stop", "he kicks the ball", "juggling the ball in the garden", "shoots at goal"):
+        assert weak_spot(text) == "ball control and kicks", text
+    assert weak_spot("a player stands with one foot on the ball") == ""
+
+
+def test_the_writers_own_weak_spot_is_rewritten_once_without_a_mark():
+    brief = Brief(product_name="Pitch Grip Socks", description="Grip socks for football players.", theme="sport")
+    calls = []
+
+    def respond(messages, info):
+        draft = mock_storyboard(_brief_from(messages))
+        if not calls:  # the first answer invents a ball move, as the real writer did
+            draft["scenes"][0]["description"] = "On the pitch the player does a quick dribble stop."
+        calls.append(messages)
+        return ModelResponse(parts=[ToolCallPart(tool_name=info.output_tools[0].name, args=draft)])
+
+    llm = LlmHandle(model=FunctionModel(respond, model_name="w"), provider="mock", model_name="mock", settings={})
+    board, call = write_storyboard(llm, brief, None)
+    assert len(calls) == 2 and "scene 1 (ball control and kicks)" in str(calls[1])
+    assert "dribble" not in board.scenes[0].description
+    assert call.usage.input_tokens > 0  # both answers are counted in the cost
+
+
+def test_with_no_photo_the_writer_may_not_add_product_details():
+    from app.services.storyboard import build_prompt
+
+    prompt = build_prompt(Brief(product_name="Pitch Grip Socks", description="Grip socks for football players."), None)
+    assert "never add a detail the brief does not state" in prompt
+    assert "the brief's own product words separately" in prompt
+
+
 def test_a_writer_that_keeps_a_weak_spot_is_asked_once_more():
     brief = _brief(THROW)
     analysis = ProductAnalysis.model_validate(mock_analysis(brief.model_dump()))

@@ -22,6 +22,11 @@ WEAK_SPOTS: list[tuple[str, re.Pattern[str]]] = [
                                          r"melts?|melting|inflates?|inflating|shatters?|explodes?)\b", re.I)),
     ("text, logos or screens with words", re.compile(r"\b(types?|typing|texting|scrolls? (?:through|on)|"
                                                      r"reads? (?:the )?(?:screen|label|sign))\b", re.I)),
+    # The real Sport theme check (28 Nov 2026): the writer added "a quick dribble stop" on its own.
+    ("ball control and kicks", re.compile(r"\b(dribbl\w*|kicks?|kicked|kicking|juggl\w*|keepy[- ]?upp?ys?|"
+                                          r"volley(?:s|ed|ing)?|heads? the ball|headers?|"
+                                          r"shoots? (?:the ball|at goal)|scores? (?:a|the) goal|"
+                                          r"bounc\w* (?:a|the) ball|pass(?:es)? the ball)\b", re.I)),
     ("hands handling small parts", re.compile(r"\b(screws?|unscrews?|threads? (?:a|the)|ties? (?:a|the|his|her) "
                                               r"(?:lace|laces|knot)|assembles?|clips? (?:in|on))\b", re.I)),
 ]  # fmt: skip

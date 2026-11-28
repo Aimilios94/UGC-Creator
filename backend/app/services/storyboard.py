@@ -57,7 +57,8 @@ and at the speed the previous scene ended with, and end it so the next scene can
 camera movement (static, slow push-in, pull-out, pan, tilt, orbit, handheld sway), its speed, what the
 subject and the product do, any change in light or focus, and finish with the final frame, which should
 lead naturally into the next scene. Keep the product fully visible and unchanged. Avoid beats that depend
-on object physics (a ball going in, a throw being caught, liquid poured precisely): they render badly.
+on object physics (a ball going in, dribbling or kicking a ball, a throw being caught, liquid poured
+precisely): they render badly; in a scene of your own, choose an action that films well instead.
 Never write "cut", "jump cut", "montage" or "fast cuts" inside a scene: describe camera moves only. Never
 write a logo, brand reveal, title or text appearing: the end card (product name and button) is added in
 editing.
@@ -113,8 +114,8 @@ Other rules:
     reword or replace the user's action or spoken words; never name another person or place. Leave
     motion_prompt empty when the scene's own text already gives its times.
   - swaps: only for a scene whose action is the user's ("action_is_users": true) and that the video AI
-    renders badly: throws, catches, pouring or liquids in motion; hands handling small parts; things
-    changing shape; text, logos or screens with words; fast spins or big jumps; crowds doing complex
+    renders badly: throws, catches, pouring or liquids in motion; ball control and kicks; hands handling
+    small parts; things changing shape; text, logos or screens with words; fast spins or big jumps; crowds doing complex
     actions; several people interacting. Or when it has no filmable action at all (no subject and visible
     action a camera could film). A scene with "weak_spot" names one in code: swap it unless that word is
     plainly not what the camera films (for example "catches the bus"). Then write the scene's text again
@@ -132,9 +133,11 @@ agent = Agent(output_type=StoryboardDraft, instructions=INSTRUCTIONS, name="stor
 
 # No product photo (strategy plan A6): the product is what the brief says, never "as in the photo".
 NO_PHOTO = (
-    "There is no product photo: the pictures are made from words. Describe the product in every"
-    " image_prompt exactly as the brief describes it (its name, colours, material, shape), never as"
-    " in a photo, and invent nothing the brief does not say about it."
+    "There is no product photo: the pictures are made from words, and the picture AI is given the"
+    " brief's own product words separately. In every image_prompt, name the product and use only the"
+    " brief's own words about it; never add a detail the brief does not state (no colours, materials,"
+    " patterns, textures, features, parts, sizes or packaging of your own), and never write 'the product"
+    " is described as'. Describe the scene, the people and the light instead."
 )
 log = logging.getLogger(__name__)
 
@@ -239,6 +242,21 @@ def missing_swaps(structure: AdStructure | None, draft) -> list[tuple[int, str]]
     return [
         (i, spot) for i, card in enumerate(structure.scenes, start=1) if (spot := flagged(card)) and i not in swapped
     ]
+
+
+def own_weak_spots(structure: AdStructure | None, draft) -> list[tuple[int, str]]:
+    """Scenes whose action is the writer's own idea (not the user's) and names a Kling weak spot:
+    (number, weak spot). The user's actions are swapped with a mark and Undo (`missing_swaps`); the
+    writer's own ideas are simply rewritten, as nobody chose them."""
+    cards = structure.scenes if structure is not None and len(structure.scenes) == len(draft.scenes) else None
+    out = []
+    for i, sc in enumerate(draft.scenes, start=1):
+        card = cards[i - 1] if cards else None
+        if card is not None and (card.text.locked or card.action.locked):
+            continue
+        if spot := weak_spot(f"{sc.description} {sc.motion_prompt}"):
+            out.append((i, spot))
+    return out
 
 
 def sheet_block(structure: AdStructure) -> str:
@@ -379,6 +397,28 @@ def write_storyboard(
         )
         if len(retry.output.scenes) == len(draft.scenes):
             draft = retry.output
+    # The same weak spots in the writer's own ideas (no story, or a scene the story leaves open): asked
+    # once to pick an action that films well; kept as written if the rewrite still names one.
+    own = own_weak_spots(structure, draft)
+    if own:
+        names = ", ".join(f"scene {n} ({spot})" for n, spot in own)
+        retry = _run(
+            llm,
+            prompt + f"\nYour last storyboard used actions of your own that the video AI renders badly: {names}. "
+            "These are your ideas, not the user's: rewrite those scenes (description, image_prompt and motion_prompt) "
+            "with an action that films well (the product worn, held or used calmly, a walk, a still pose, a slow "
+            "turn), keeping the same number of scenes; no swaps for them.",
+        )
+        more = tokens_from_run_usage(retry.usage)
+        usage = Usage(
+            input_tokens=usage.input_tokens + more.input_tokens,
+            cached_input_tokens=usage.cached_input_tokens + more.cached_input_tokens,
+            output_tokens=usage.output_tokens + more.output_tokens,
+        )
+        if len(retry.output.scenes) == len(draft.scenes):
+            draft = retry.output
+            if still := own_weak_spots(structure, draft):
+                log.warning("writer kept weak spots of its own after one retry: %s", still)
     # D32: one clip is one take. A montage the writer packed into one scene is sent back once.
     packed = packed_scenes(draft, beats)
     if packed:
@@ -413,6 +453,12 @@ def write_storyboard(
         data["split_note"] = split.summary()[:SPLIT_NOTE_MAX]
     data["continuity"] = "continuous"  # every scene flows into the next (D30); "separate" is the user's choice
     scenes = data["scenes"]
+    # Counts only, never the text: the 28 Nov real run came back with no on-screen text ideas at all.
+    log.info(
+        "writer ideas per scene: voiceover %s, on-screen text %s",
+        [len(sc.get("voiceover_ideas") or []) for sc in scenes],
+        [len(sc.get("text_ideas") or []) for sc in scenes],
+    )
     keep_users_lines(scenes, brief.story)
     if fill_placeholders(scenes, brief.product_name) and data.get("split_note"):
         note = f'{data["split_note"]} Your product name is used where your story says "[Brand Name]".'
