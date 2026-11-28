@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Circle, Clapperboard, Film, ImageUp, Loader2, Pencil, RotateCcw, Sparkles, Undo2, Upload, XCircle } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Circle, Clapperboard, Film, ImageUp, Loader2, Merge, Pencil, RotateCcw, Sparkles, Undo2, Upload, XCircle } from 'lucide-react';
 import { api, rememberJob } from '../lib/api';
 import { navigate, useCurrency } from '../lib/hooks';
 import { formatMoney } from '../lib/money';
@@ -106,15 +106,17 @@ const needsExtend = (asset, ratio) => {
   const b = RATIO_VALUE[ratio] ?? 9 / 16;
   return Math.min(a, b) / Math.max(a, b) < 0.75;
 };
+// A scene's own upload is matched by the scene's id, so it follows the scene when scenes are moved,
+// joined or removed (the server says which scene uses each upload).
+const sceneUpload = (job, s, i) =>
+  job.assets.filter((a) => a.kind === 'upload' && a.scene_idx != null && (s?.uid ? a.scene_uid === s.uid : a.scene_idx === i)).at(-1);
 // The picture each scene would start from when it is not generated: the product photo or its upload.
-const ownPicture = (job, i, source) =>
-  source === 'product'
-    ? job.assets.find((a) => a.kind === 'upload' && a.scene_idx == null)
-    : job.assets.filter((a) => a.kind === 'upload' && a.scene_idx === i).at(-1);
+const ownPicture = (job, s, i, source) =>
+  source === 'product' ? job.assets.find((a) => a.kind === 'upload' && a.scene_idx == null) : sceneUpload(job, s, i);
 const extendedScenes = (job, board) =>
   new Set(
     (board?.scenes ?? [])
-      .map((s, i) => (s.image_source !== 'generate' && needsExtend(ownPicture(job, i, s.image_source), job.brief.aspect_ratio) ? i : -1))
+      .map((s, i) => (s.image_source !== 'generate' && needsExtend(ownPicture(job, s, i, s.image_source), job.brief.aspect_ratio) ? i : -1))
       .filter((i) => i >= 0),
   );
 
@@ -850,12 +852,26 @@ function StoryboardStep({ job, onChange, readOnly }) {
     setUndoBoard(board);
     change({ ...board, scenes });
   };
-  const removeScene = (i) => {
-    const scenes = board.scenes.filter((_, k) => k !== i);
+  // Per-scene undo of "Shorten it for me" is kept by position, so it is dropped when scenes move.
+  const reorder = (scenes) => {
     const roles = rolesFor(scenes.length);
+    setShortened({});
     change({ ...board, scenes: scenes.map((x, k) => ({ ...x, role: roles[k] })) });
   };
-  const uploads = (i) => job.assets.filter((a) => a.kind === 'upload' && a.scene_idx === i);
+  const removeScene = (i) => reorder(board.scenes.filter((_, k) => k !== i));
+  // Move and join (the plan's scene split line): the end card always stays last.
+  const isCard = (k) => board.scenes[k]?.kind === 'card';
+  const canMove = (i, by) => !isCard(i) && i + by >= 0 && i + by < n && !isCard(i + by);
+  const moveScene = (i, by) => {
+    const scenes = [...board.scenes];
+    [scenes[i], scenes[i + by]] = [scenes[i + by], scenes[i]];
+    reorder(scenes);
+  };
+  const joinWithNext = (i) => {
+    setUndoBoard(board);
+    setShortened({});
+    change({ ...board, scenes: joinScenes(board.scenes, i) });
+  };
   const disabled = readOnly || Boolean(busy);
   const tooLong = clips.filter((c) => c.too_long_by > 0).length;
   const textOver = (board.notes || '').length > STORY_MAX;
@@ -1145,7 +1161,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
         </summary>
       <div className="scenes scenes-list">
         {board.scenes.slice(0, n).map((s, i) => {
-          const own = uploads(i).at(-1);
+          const own = sceneUpload(job, s, i);
           return (
             <article key={i} className="card scene scene-wide">
               <div className="scene-head">
@@ -1155,9 +1171,26 @@ function StoryboardStep({ job, onChange, readOnly }) {
                   {cardFor(board.structure, s)?.swap && <span className="mark changed">AI changed</span>}
                 </h2>
                 {!readOnly && n > 1 && (
-                  <button type="button" className="btn btn-ghost btn-small" onClick={() => removeScene(i)} disabled={disabled} aria-label={`Remove scene ${i + 1}`}>
-                    Remove
-                  </button>
+                  <div className="row-actions scene-tools">
+                    {canMove(i, -1) && (
+                      <button type="button" className="btn btn-ghost btn-small" onClick={() => moveScene(i, -1)} disabled={disabled} aria-label={`Move scene ${i + 1} up`} title="Move up">
+                        <ArrowUp size={14} aria-hidden="true" />
+                      </button>
+                    )}
+                    {canMove(i, 1) && (
+                      <button type="button" className="btn btn-ghost btn-small" onClick={() => moveScene(i, 1)} disabled={disabled} aria-label={`Move scene ${i + 1} down`} title="Move down">
+                        <ArrowDown size={14} aria-hidden="true" />
+                      </button>
+                    )}
+                    {i < n - 1 && !isCard(i) && !isCard(i + 1) && s.duration_s + board.scenes[i + 1].duration_s <= MAX_SCENE_S && (
+                      <button type="button" className="btn btn-ghost btn-small" onClick={() => joinWithNext(i)} disabled={disabled} aria-label={`Join scene ${i + 1} with scene ${i + 2}`} title="One continuous shot; nothing is cut">
+                        <Merge size={14} aria-hidden="true" /> Join with next
+                      </button>
+                    )}
+                    <button type="button" className="btn btn-ghost btn-small" onClick={() => removeScene(i)} disabled={disabled} aria-label={`Remove scene ${i + 1}`}>
+                      Remove
+                    </button>
+                  </div>
                 )}
               </div>
               <ClipTooLong
@@ -1227,7 +1260,7 @@ function StoryboardStep({ job, onChange, readOnly }) {
                         {src === 'generate' && isChained(board, i, { image_source: 'generate' }) ? 'Continue from the shot before' : SOURCE_LABEL[src]}
                         {config && (
                           <span className="muted small">
-                            {(src === 'generate' && !isChained(board, i, { image_source: 'generate' })) || (src !== 'generate' && needsExtend(ownPicture(job, i, src), job.brief.aspect_ratio))
+                            {(src === 'generate' && !isChained(board, i, { image_source: 'generate' })) || (src !== 'generate' && needsExtend(ownPicture(job, s, i, src), job.brief.aspect_ratio))
                               ? formatMoney(config.prices.image, currency)
                               : 'free'}
                           </span>

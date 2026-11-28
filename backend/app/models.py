@@ -302,6 +302,7 @@ class StageView(BaseModel):
 class AssetView(BaseModel):
     kind: str
     scene_idx: int | None = None
+    scene_uid: str | None = None  # own pictures: the scene that uses it now (scenes can be moved)
     ratio: str | None = None  # composed ads: "9:16", "1:1", ...
     name: str | None = None  # file name, e.g. "ad_9x16.mp4", "still_1.jpg"
     url: str

@@ -191,6 +191,36 @@ def test_joining_scenes_keeps_each_uploaded_picture_with_its_scene(client, sessi
     approve(client, session_id, job["id"])  # the upload key followed scene 3 to its new position
 
 
+def test_moving_a_scene_moves_its_own_picture_and_the_page_can_find_it(client, session_id, photo_bytes):
+    """Move up / down on the storyboard: the upload follows the scene's id, and the job view says
+    which scene uses each upload (scene_uid), so the page never shows it on the wrong scene."""
+    import io
+
+    from PIL import Image
+
+    job = create_job(client, session_id, photo_bytes).json()
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 700), (30, 30, 200)).save(buf, "PNG")
+    h = {"X-Session-Id": session_id}
+    view = client.post(
+        f"/jobs/{job['id']}/scenes/0/image", files={"image": ("mine.png", buf.getvalue(), "image/png")}, headers=h
+    ).json()
+    a, b, c = view["storyboard"]["scenes"]
+    upload = next(x for x in view["assets"] if x["kind"] == "upload" and x["scene_idx"] == 0)
+    assert upload["scene_uid"] == a["uid"]
+    r = client.put(f"/jobs/{job['id']}/storyboard", json={**view["storyboard"], "scenes": [b, a, c]}, headers=h)
+    assert r.status_code == 200, r.text
+    moved = r.json()
+    scenes = moved["storyboard"]["scenes"]
+    assert [s["uid"] for s in scenes] == [b["uid"], a["uid"], c["uid"]]
+    assert scenes[1]["image_source"] == "upload"
+    upload = next(x for x in moved["assets"] if x["kind"] == "upload" and x["scene_idx"] == 0)
+    assert upload["scene_uid"] == scenes[1]["uid"]  # stored under scene-0, used by the scene now second
+    product = next(x for x in moved["assets"] if x["kind"] == "upload" and x["scene_idx"] is None)
+    assert product["scene_uid"] is None
+    approve(client, session_id, job["id"])
+
+
 def test_a_joined_scene_with_long_text_can_be_saved(client, session_id, photo_bytes):
     """Joining two story beats once made the text longer than the old 800-character limit (D28)."""
     job = create_job(client, session_id, photo_bytes).json()

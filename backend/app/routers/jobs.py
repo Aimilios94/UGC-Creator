@@ -83,6 +83,13 @@ def job_view(ctx: Context, job: dict) -> JobView:
         for r in repo.list_stage_runs(ctx.db, job_id)
     ]
     assets: list[AssetView] = []
+    # An own picture follows its scene when scenes are moved, joined or removed: the page matches it
+    # by the scene's id, never by the position it was uploaded at.
+    owner = {
+        sc.get("image_upload_key"): sc.get("uid")
+        for sc in (job.get("storyboard") or {}).get("scenes", [])
+        if sc.get("image_upload_key")
+    }
     for a in repo.list_assets(ctx.db, job_id):
         idx = None
         if "/scene-" in a["storage_key"]:
@@ -96,6 +103,7 @@ def job_view(ctx: Context, job: dict) -> JobView:
             AssetView(
                 kind=a["kind"],
                 scene_idx=idx,
+                scene_uid=owner.get(a["storage_key"]) if a["kind"] == "upload" else None,
                 ratio=ratio,
                 name=name,
                 url=ctx.storage.signed_url(a["storage_key"], ttl),
