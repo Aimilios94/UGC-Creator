@@ -12,3 +12,4 @@ pydantic-ai-slim[openai,anthropic]>=2.70,<3
 fal-client>=1.0.3,<2
 google-cloud-storage>=3.17
 google-auth>=2.62
+sentry-sdk>=3.0.1,<4

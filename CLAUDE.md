@@ -46,7 +46,8 @@ At the end of every session, before telling the user you are done:
 - Neon project `ugc-ad-builder`, AWS Europe Central 1 (Frankfurt), database `neondb`, Postgres 18, pgvector available.
 - Google Cloud project `ugc-ad-builder`, region `europe-west4`, budget alert 10 EUR. No service-account key files, ever: `gcloud` login locally, service accounts on Cloud Run.
 - Python 3.12 via `uv`; Node for the frontend (`cd frontend && npm install`).
-- Still to come: Anthropic key (before M4), Sentry (M2, EU org), Resend (M3), LangSmith (M4).
+- Sentry: EU org `aimilios-kamtsis`, projects `ugc-api` and `ugc-web`; DSNs in `backend/.env` and `frontend/.env` locally (production at the M2 deploy). Sentry CLI logged in (`~/.local/bin/sentry`).
+- Still to come: Anthropic key (before M4), Resend (M3), LangSmith (M4).
 
 ## Decisions
 

@@ -20,6 +20,7 @@ from .config import Settings, get_settings
 from .errors import BudgetExceeded
 from .repository import Database
 from .services.archive import archive_job
+from .services.monitoring import init_monitoring
 from .services.pipeline import Context, run_job
 from .services.providers.media import build_media
 from .services.providers.storage import build_storage
@@ -76,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     settings = get_settings()
     logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    init_monitoring(settings, "worker")
     ctx = build_context(settings)
     if not args.loop:
         n = drain(ctx)

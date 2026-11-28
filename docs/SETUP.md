@@ -150,7 +150,15 @@ Every site that calls the API must be listed in `CORS_ORIGINS` in `deploy/gcp/ap
 1. Apply the schema to Neon (`scripts/apply_schema.py`): new tables `campaigns`, `brand_kits`, `variants`; new stage, asset and cache kinds (including the `continuity` and `shorten` stages, D30, and the `slots` and `add_scenes` stages, D31); `jobs.phase` (D27); `jobs.pending` (the quick questions waiting for answers, D31). Scene ids, notes, continuity, the start/end notes and the slot filler's structure live in the storyboard JSON (no schema change).
 2. The worker now makes the voiceover, so it needs the OpenAI key: grant `ugc-worker` `roles/secretmanager.secretAccessor` on `openai-api-key` and add `OPENAI_API_KEY=openai-api-key:latest` to the job's `--set-secrets` ([D26](../DECISIONS.md)).
 3. Set `RENDER_SCENES: "5"` in both `deploy/gcp/*.env.yaml` (the most scenes rendered, D28; pinned to 1 until then, [D25](../DECISIONS.md)), build the image (it now installs ffmpeg) and update the job and the service. The new API changes what the live site talks to (pictures, then video), so the M2 frontend goes live with it.
-4. One paid smoke run of a full 3-scene ad (about 1.05 EUR), with the owner's go and limit.
+4. Sentry ([details below](#error-reports-sentry)): put the `ugc-api` DSN in Secret Manager as `sentry-dsn` and add `SENTRY_DSN=sentry-dsn:latest` to the `--set-secrets` of the service and the job; set `VITE_SENTRY_DSN` (the `ugc-web` DSN) in Vercel for Production and the `v2` Preview, then redeploy without build cache.
+5. One paid smoke run of a full 3-scene ad (about 1.05 EUR), with the owner's go and limit.
+
+### Error reports (Sentry)
+Sentry organization `aimilios-kamtsis` in the EU region (Frankfurt, `de.sentry.io`), projects `ugc-api` (FastAPI: the API and the worker, tagged `component`) and `ugc-web` (React). Errors only: no tracing, replay or logs, so the free plan is enough.
+- Locally: `SENTRY_DSN` in `backend/.env` and `VITE_SENTRY_DSN` in `frontend/.env` (both git-ignored); then `docker compose up -d --build api worker` and `docker compose restart frontend`. The API and worker log `error monitoring on`. Empty = off; tests and CI never set them.
+- Privacy: see PRIVACY.md "Error reports". Both projects have `scrubIPAddresses` and `dataScrubber` on and an advanced scrubbing rule that removes `$user.geo.**`; set with the Sentry CLI (`sentry api projects/aimilios-kamtsis/<project>/ -X PUT ...`). A new project needs the same.
+- Check it end to end: raise a test error through the app (for example a temporary route called with FastAPI's `TestClient` inside the `api` container, or `setTimeout(() => { throw new Error('Sentry test error') })` in the browser console), then `sentry issue list aimilios-kamtsis/ugc-api --query "Sentry test error" --period 1h`, and resolve the test issue afterwards.
+- Still open: readable production stack traces for `ugc-web` need source maps uploaded at build time with a Sentry auth token (a secret: Vercel only, never in the repo).
 
 ### Rotate the access code
 Never print or commit the code.
