@@ -300,7 +300,7 @@ Evidence tags: `[user]` agreed with the project owner before M1 (18 Nov 2026); `
 - **Engineering `[eng]`:** `services/shots.py` (`plan_joins`, `voice_rooms`), `Scene.part`, `.join`, `.kind`, `models.MAX_SCENES = 20`, `MAX_PLANNED_SCENES = 5`, `RENDER_SCENES` 20 in code and `.env.example` (Cloud Run stays pinned to 1 until the M2 deploy); `is_chained` and `ends_on_next_picture` follow the joins; a card shot gets no picture or clip stage, and compose turns it into the end card (`end_card_voice`, `end_card_headline`); only the last shot can be a card.
 - **Result:** 310 tests pass, 13 skip (`tests/test_shots.py`, 20 new; tests that pinned the 5-scene limit updated to 20). Checked on the mock stack in a browser: a timed story with quick cuts and a logo ending became 6 shots in 4 scenes (3 cuts, one flowing shot, the end card), 4 pictures and 5 clips were made, and the finished ad is exactly the 20 s picked, in all four shapes, ending on our end card.
 
-## D33 — Phase 6: the character reference and ads with no photo `[eng]` (owner to confirm the A4 change)
+## D33 — Phase 6: the character reference and ads with no photo `[eng]` (the A4 change confirmed by the owner, 28 Nov 2026)
 
 - **Problem:** The owner's hoodie video (27 Nov 2026, job `0a471dc1`) had a new face in almost every shot: the picture AI got only "P1" and the product photo. The strategy plan's phase 6 also promises ads with no product photo (A6).
 - **Decision (built 27 Nov 2026):**
