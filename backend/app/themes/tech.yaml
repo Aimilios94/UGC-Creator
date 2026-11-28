@@ -1,0 +1,32 @@
+# Tech theme (plan §9). Loaded by app/services/themes.py; the brief's own words always win.
+id: tech
+title: Tech
+summary: Clean and confident, the device on a desk in cool light, bold captions.
+tone: premium
+writing: Clear, confident lines that name one feature at a time and what it does for you; no specs or numbers the brief does not state.
+setting: A tidy desk, a bright flat or a commute; cool, clean light with soft reflections; smooth slides and slow orbits around the device; minimal props.
+captions: bold
+font: Montserrat
+palette:
+  primary: "#3b82f6"
+  secondary: "#22d3ee"
+  background: "#0a0f1c"
+music: tech
+end_card:
+  button: square
+  uppercase: false
+scene_ideas:
+  - The device on a clean desk in cool morning light, a slow orbit around it.
+  - A hand picks the device up from the desk and turns it towards the camera.
+  - The device in use on a train or in a café, the city soft behind it.
+  - A close-up of the device's edges and finish, a slow slide past.
+  - The device set down beside a laptop and a coffee at the end of the day.
+hook_ideas:
+  - formula: pov
+    idea: "POV: the desk set-up, sorted."
+  - formula: problem_first
+    idea: "Still fighting with the gadget you bought last year?"
+  - formula: three_reasons
+    idea: "Three reasons to keep this on the desk."
+  - formula: unboxing_tease
+    idea: "Unboxing day: here's what's inside."

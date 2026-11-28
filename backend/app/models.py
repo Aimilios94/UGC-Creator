@@ -12,7 +12,7 @@ AspectRatio = Literal["9:16", "1:1", "4:5", "16:9"]
 SceneRole = Literal["hook", "demo", "cta"]
 HookFormula = Literal["pov", "problem_first", "three_reasons", "unboxing_tease"]
 Goal = Literal["sales", "awareness", "traffic"]
-Theme = Literal["sport", "beauty", "tech", "food", "fashion"]  # one YAML each in app/themes/ (M2 item 3)
+THEME_ID = r"^[a-z][a-z0-9_]{1,30}$"  # a theme is any YAML file in app/themes/ (M2 item 3): no code per theme
 AdType = Literal["testimonial", "product_demo", "unboxing", "problem_solution"]
 Tone = Literal["energetic", "calm", "playful", "premium"]
 Font = Literal["Inter", "Montserrat", "Bebas Neue", "Playfair Display"]  # bundled by compose (OFL)
@@ -45,7 +45,7 @@ class Brief(BaseModel):
     platform: Platform = "tiktok"
     aspect_ratio: AspectRatio = "9:16"
     goal: Goal | None = None
-    theme: Theme | None = None
+    theme: str | None = Field(default=None, pattern=THEME_ID)
     ad_type: AdType | None = None
     voice: Voice = "marin"
     music: Music = "theme"
@@ -62,6 +62,15 @@ class Brief(BaseModel):
     @classmethod
     def _strip(cls, v):
         return v.strip() if isinstance(v, str) else v
+
+    @field_validator("theme")
+    @classmethod
+    def _known_theme(cls, v):
+        from .services.themes import load_themes  # the theme files, read once
+
+        if v is not None and v not in load_themes():
+            raise ValueError(f"unknown theme: {v}")
+        return v
 
 
 class ProductAnalysis(BaseModel):

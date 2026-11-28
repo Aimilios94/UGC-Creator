@@ -20,6 +20,7 @@ const BEST_RATIO = { tiktok: '9:16', instagram_reels: '9:16', youtube_shorts: '9
 
 // Brief options sent to the API (values match backend/app/models.py).
 const GOALS = { sales: 'Sales', awareness: 'Awareness', traffic: 'Website visits' };
+// The theme list comes from the server (GET /themes, one file per theme); this is the fallback.
 const THEMES = { '': 'No theme', sport: 'Sport', beauty: 'Beauty', tech: 'Tech', food: 'Food', fashion: 'Fashion' };
 const AD_TYPES = {
   product_demo: 'Product demo',
@@ -280,9 +281,12 @@ export default function Brief() {
   const [useKit, setUseKit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [themes, setThemes] = useState([]);
+  const [captionsSet, setCaptionsSet] = useState(false); // the user picked captions: a theme no longer changes them
 
   useEffect(() => {
     api.config().then(setConfig, (err) => setError(err.message));
+    api.themes().then(setThemes, () => {});
     api.campaigns().then(setCampaigns, () => {});
     api.getBrandKit().then(
       (k) => {
@@ -321,6 +325,17 @@ export default function Brief() {
   useEffect(() => () => preview && URL.revokeObjectURL(preview), [preview]);
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+  const themeOptions = themes.length ? { '': 'No theme', ...Object.fromEntries(themes.map((t) => [t.id, t.title])) } : THEMES;
+  const theme = themes.find((t) => t.id === form.theme);
+  // A theme preselects its caption style until the user picks one themselves.
+  const pickTheme = (e) => {
+    const next = themes.find((t) => t.id === e.target.value);
+    setForm({ ...form, theme: e.target.value, ...(next && !captionsSet ? { captions: next.captions } : {}) });
+  };
+  const pickCaptions = (e) => {
+    setCaptionsSet(true);
+    set('captions')(e);
+  };
   const locked = Boolean(config?.access_code_required && !unlocked);
 
   function pickPhoto(e) {
@@ -497,7 +512,24 @@ export default function Brief() {
               <p className="muted small">The other shapes are made too, when your text fits them.</p>
             </div>
             <Select id="goal" label="Goal" value={form.goal} onChange={set('goal')} options={GOALS} help={HELP.goal} />
-            <Select id="theme" label="Theme" value={form.theme} onChange={set('theme')} options={THEMES} help={HELP.theme} />
+            <div>
+              <Select id="theme" label="Theme" value={form.theme} onChange={pickTheme} options={themeOptions} help={HELP.theme} />
+              {theme && (
+                <div className="theme-preview muted small" aria-live="polite">
+                  <span className="swatches" aria-hidden="true">
+                    {['primary', 'secondary', 'background'].map((k) => (
+                      <span key={k} className="swatch" style={{ background: theme.palette[k] }} />
+                    ))}
+                  </span>
+                  <span>
+                    {theme.summary} Font {theme.font}
+                    {theme.music_title ? `, music “${theme.music_title}”` : ''}.
+                    {theme.packs.length > 0 && ` Includes the ${theme.packs.join(', ')}.`}
+                    {useKit && hasKit && ' Your brand kit wins where it is set.'}
+                  </span>
+                </div>
+              )}
+            </div>
             <Select id="adtype" label="Ad type" value={form.ad_type} onChange={set('ad_type')} options={AD_TYPES} help={HELP.ad_type} />
             <Select id="style" label="Visual style" value={form.visual_style} onChange={set('visual_style')} options={STYLES} help={HELP.visual_style} />
             <Select id="cutting" label="How it's cut" value={form.cutting} onChange={set('cutting')} options={CUTTING} help={HELP.cutting} />
@@ -590,7 +622,7 @@ export default function Brief() {
               </div>
               <Select id="voice" label="Voiceover (AI voice)" value={form.voice} onChange={set('voice')} options={VOICES} help={HELP.voice} />
               <Select id="music" label="Music" value={form.music} onChange={set('music')} options={MUSIC} help={HELP.music} />
-              <Select id="captions" label="Captions" value={form.captions} onChange={set('captions')} options={CAPTIONS} help={HELP.captions} />
+              <Select id="captions" label="Captions" value={form.captions} onChange={pickCaptions} options={CAPTIONS} help={HELP.captions} />
               <div className="span-2">
                 <label htmlFor="email">
                   Email me when it is ready <Soon />

@@ -20,7 +20,10 @@ def music_for(brief, default_theme: str) -> Path | None:
     if brief.music == "none":
         return None
     if brief.music == "theme":
-        return bed_for(brief.theme, default_theme)
+        from .themes import theme_for  # the theme file names its bed
+
+        theme = theme_for(brief.theme)
+        return bed_for(theme.music if theme else None, default_theme)
     return bed_for(brief.music, default_theme)
 
 

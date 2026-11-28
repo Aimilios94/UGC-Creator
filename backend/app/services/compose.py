@@ -79,6 +79,8 @@ class Branding:
     secondary: str = "#f0abfc"
     background: str = "#0f172a"
     logo: Path | None = None
+    button: str = "pill"  # the end card's button: "pill" or "square" (the theme's look)
+    uppercase: bool = False  # the button's words in capitals
 
 
 @dataclass
@@ -576,8 +578,9 @@ def render_end_card(spec: ComposeSpec, w: int, h: int, zone: SafeZone) -> tuple[
         offer_fit = fit_text(spec.offer, b.font, round(short * 0.06), round(aw * 0.9), 3, round(short * 0.03))
         if offer_fit is None:
             return card, False, "the offer does not fit the end card"
+    cta = spec.cta_text or "Shop now"
     cta_fit = fit_text(
-        spec.cta_text or "Shop now", b.font, round(short * 0.065), round(aw * 0.8), 1, round(short * 0.03)
+        cta.upper() if b.uppercase else cta, b.font, round(short * 0.065), round(aw * 0.8), 1, round(short * 0.03)
     )
     if cta_fit is None:
         return card, False, "the call to action does not fit the end card"
@@ -615,7 +618,8 @@ def render_end_card(spec: ComposeSpec, w: int, h: int, zone: SafeZone) -> tuple[
     btn = (cx - bw // 2, y, cx + bw // 2, y + btn_h)
     if not inside(btn, area):
         return card, False, "the end card does not fit the safe zone"
-    draw.rounded_rectangle(btn, radius=btn_h // 2, fill=hex_rgb(b.primary))
+    radius = btn_h // 2 if b.button == "pill" else max(2, btn_h // 10)
+    draw.rounded_rectangle(btn, radius=radius, fill=hex_rgb(b.primary))
     draw.text((cx, y + btn_h // 2), lines[0], font=font, fill=text_on(b.primary), anchor="mm")
     return card, True, ""
 

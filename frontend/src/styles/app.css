@@ -493,6 +493,9 @@ details.fold-plain > summary { cursor: pointer; font-weight: 600; }
 
 .notice.recommend { border-color: rgba(99, 102, 241, 0.6); background: rgba(99, 102, 241, 0.1); color: var(--text-primary); margin: 12px 0; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.theme-preview { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; }
+.theme-preview .swatches { display: inline-flex; gap: 3px; padding-top: 3px; flex-shrink: 0; }
+.theme-preview .swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.25); }
 .row-actions.scene-tools { margin-top: 0; gap: 4px; justify-content: flex-end; }
 .link-btn { all: unset; color: var(--accent-primary); text-decoration: underline; cursor: pointer; }
 .length-custom { margin-top: 6px; max-width: 120px; }

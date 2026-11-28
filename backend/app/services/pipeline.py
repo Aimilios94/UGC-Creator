@@ -46,6 +46,7 @@ from .scene_plan import end_card_for
 from .scene_splitter import Beat, Split, split_story, story_length_s
 from .shots import voice_rooms
 from .storyboard_checks import drop_flagged_ideas, fix_instructions, flag_testimonials
+from .themes import theme_for
 from .video_gen import ClipText, clip_prompt, plan_scene_video
 from .voice import plan_voice, usage_for
 
@@ -61,7 +62,7 @@ EXT_TYPES = {
     "wav": "audio/wav",
 }
 TYPE_EXTS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "audio/wav": "wav"}
-DEFAULT_BRANDING = Branding()  # theme palettes and fonts arrive with the theme YAMLs (M2 item 3)
+DEFAULT_BRANDING = Branding()  # no theme and no brand kit (themes: app/themes/, `theme_branding`)
 
 
 @dataclass
@@ -584,9 +585,27 @@ def run_voice_stage(ctx: Context, job: dict, idx: int, text: str, voice: str, to
     return asset
 
 
-def _branding(ctx: Context, job: dict, work: Path) -> Branding:
-    if not job.get("brand"):
+def theme_branding(theme_id: str | None) -> Branding:
+    """The theme's colours, font and end-card look (plan §9), or the plain defaults with no theme."""
+    theme = theme_for(theme_id)
+    if theme is None:
         return DEFAULT_BRANDING
+    p = theme.palette
+    return Branding(
+        font=theme.font,
+        primary=p.primary,
+        secondary=p.secondary,
+        background=p.background,
+        button=theme.end_card.button,
+        uppercase=theme.end_card.uppercase,
+    )
+
+
+def _branding(ctx: Context, job: dict, work: Path) -> Branding:
+    """The theme's look, with every value the brand kit sets on top (the brand kit wins)."""
+    d = theme_branding(job["brief"].get("theme"))
+    if not job.get("brand"):
+        return d
     kit = BrandSnapshot.model_validate(job["brand"])
     logo = None
     if kit.logo_key:
@@ -596,13 +615,14 @@ def _branding(ctx: Context, job: dict, work: Path) -> Branding:
         except Exception:  # noqa: BLE001 - a missing logo must not stop the ad
             log.warning("logo %s not found for job %s", kit.logo_key, job["id"])
             logo = None
-    d = DEFAULT_BRANDING
     return Branding(
         font=kit.font or d.font,
         primary=kit.colors.primary or d.primary,
         secondary=kit.colors.secondary or d.secondary,
         background=kit.colors.background or d.background,
         logo=logo,
+        button=d.button,
+        uppercase=d.uppercase,
     )
 
 
@@ -962,7 +982,8 @@ def run_job(ctx: Context, job: dict) -> None:
     brief = Brief.model_validate(job["brief"])
     board = Storyboard.model_validate(job["storyboard"])
     brand = BrandKit.model_validate(job["brand"]) if job.get("brand") else None
-    tone = brand.tone if brand else None
+    theme = theme_for(brief.theme)
+    tone = (brand.tone if brand else None) or (theme.tone if theme else None)  # the brand kit wins
     rows = repo.list_scenes(ctx.db, job_id)[: s.render_scenes]
     # No product photo (strategy plan A6): the first picture is made from the brief's words, and it is
     # the product's reference for every later picture (as the photo would be).

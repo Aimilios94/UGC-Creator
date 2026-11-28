@@ -1,0 +1,32 @@
+# Food theme (plan §9). Loaded by app/services/themes.py; the brief's own words always win.
+id: food
+title: Food
+summary: Warm and playful, cosy kitchens and close-ups of food, bold captions.
+tone: playful
+writing: Playful, appetising lines about taste, smell and the moment; no health or diet claims the brief does not state.
+setting: A warm home kitchen or a sunny table; steam rising, crumbs and close-ups of texture; cosy light; easy, relaxed pace (no pouring or splashing).
+captions: bold
+font: Montserrat
+palette:
+  primary: "#ea580c"
+  secondary: "#fde047"
+  background: "#1c1410"
+music: food
+end_card:
+  button: pill
+  uppercase: false
+scene_ideas:
+  - The product on a wooden kitchen counter in warm light, steam rising from a cup beside it.
+  - A close-up of a first bite, a smile right after.
+  - A sunny breakfast table, the product in the middle, hands reaching in from the sides.
+  - The product on a picnic blanket in a park, late afternoon light.
+  - The product placed back on a pantry shelf, a satisfied nod to the camera.
+hook_ideas:
+  - formula: pov
+    idea: "POV: it's 4 p.m. and snack time is sorted."
+  - formula: problem_first
+    idea: "Bored of the same breakfast every day?"
+  - formula: three_reasons
+    idea: "Three reasons to keep this in the kitchen."
+  - formula: unboxing_tease
+    idea: "First box open: let's take a look."

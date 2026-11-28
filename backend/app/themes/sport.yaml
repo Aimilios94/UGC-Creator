@@ -1,0 +1,50 @@
+# Sport theme (plan §9). Loaded by app/services/themes.py; the brief's own words always win.
+id: sport
+title: Sport
+summary: Fast and energetic, gear in action outdoors and in the gym, bold captions.
+tone: energetic
+writing: Short, punchy lines in the second person; action verbs; one idea per line; no hype words or claims of results.
+setting: Running tracks, city streets at golden hour, gyms and outdoor pitches; the product worn or used mid-movement; sweat, breath and close-ups of gear; quick pace with steady camera moves.
+captions: bold
+font: Bebas Neue
+palette:
+  primary: "#f97316"
+  secondary: "#facc15"
+  background: "#0b0f19"
+music: sport
+end_card:
+  button: square
+  uppercase: true
+scene_ideas:
+  - Lacing up on a park bench at sunrise, then standing up ready to go.
+  - A runner's feet hitting a wet street in slow motion, the product in sharp focus.
+  - Mid-workout in a gym, a close-up of the product in use, breath visible in cool light.
+  - A cool-down stretch at the end of a track, the product in shot, the city behind.
+  - A training bag packed on a locker-room bench, the product placed on top.
+hook_ideas:
+  - formula: pov
+    idea: "POV: it's 6 a.m. and the kit is ready."
+  - formula: problem_first
+    idea: "Your gear quits before you do? Watch this."
+  - formula: three_reasons
+    idea: "Three reasons to pack this for every session."
+  - formula: unboxing_tease
+    idea: "New gear day. Let's see if it keeps up."
+packs:
+  football:
+    title: Football pack
+    keywords: [football, soccer, boot, boots, cleats, studs, goalkeeper, keeper, pitch, shin, jersey, grip socks]
+    scene_ideas:
+      - A player ties their boots on the bench, then jogs out onto a floodlit pitch.
+      - Close-up of studs pressing into wet grass as a player walks to the centre circle.
+      - A player stands with one foot on the ball, looking straight at the camera.
+      - A tunnel walk before kick-off, the product in sharp focus, crowd noise ahead.
+    hook_ideas:
+      - formula: pov
+        idea: "POV: matchday, and the kit is ready."
+      - formula: problem_first
+        idea: "Slipping on a wet pitch costs you the game."
+      - formula: three_reasons
+        idea: "Three things to check before your next match."
+      - formula: unboxing_tease
+        idea: "Matchday kit, straight out of the box."

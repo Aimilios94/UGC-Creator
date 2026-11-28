@@ -30,7 +30,8 @@ export const HELP = {
   visual_style:
     'How every picture and clip looks. Realistic and cinematic keep your real product most faithfully; 3D and 2D restyle the whole scene.',
   goal: 'What the ad should achieve. It steers the script: sales pushes the offer, awareness the name, visits the link.',
-  theme: 'Sets the settings, props, pace and the music track.',
+  theme:
+    "Fills what you did not set: settings, props, pace, tone of voice, caption style, colours, font, the end card's look and the music track. Your story and your brand kit always win. With no story, the AI also gets the theme's scene and hook ideas.",
   ad_type: 'The format of the story. Testimonial uses only quotes and claims you write yourself.',
   voice: 'The AI voice that reads the voiceover. Viewers must be told it is AI: turn on the AI label when you post.',
   continuity: 'Each shot also has its own switch: "Flows on" or "Cut to a new picture". One connected video: every scene flows into the next with no jump. A scene set to "Continue" starts from the last frame of the one before; a scene with your own picture is reached by the clip before it, which ends on that picture. Separate shots: each scene starts from its own picture, with a soft blend at each cut (best for different places or angles).',

@@ -1,0 +1,32 @@
+# Beauty theme (plan §9). Loaded by app/services/themes.py; the brief's own words always win.
+id: beauty
+title: Beauty
+summary: Calm and soft, close-ups of texture in daylight, clean captions.
+tone: calm
+writing: Warm, honest lines like a friend's tip; sensory words (texture, glow, scent); no promises about skin results the brief does not state.
+setting: A bathroom shelf or vanity in soft window light; close-ups of texture on the back of a hand; slow, gentle camera moves; neutral and pastel colours.
+captions: clean
+font: Playfair Display
+palette:
+  primary: "#db2777"
+  secondary: "#fbcfe8"
+  background: "#1f1418"
+music: beauty
+end_card:
+  button: pill
+  uppercase: false
+scene_ideas:
+  - The product on a marble shelf in morning window light, a slow push in.
+  - A close-up of the texture on the back of a hand, soft daylight.
+  - A morning routine at the mirror, the product picked up from the shelf.
+  - The product beside fresh flowers and a towel, calm and tidy.
+  - A relaxed smile into the camera in soft light, the product held near the face.
+hook_ideas:
+  - formula: pov
+    idea: "POV: the one step you never skip in the morning."
+  - formula: problem_first
+    idea: "Tired of products that feel heavy by noon?"
+  - formula: three_reasons
+    idea: "Three things to know before your next routine."
+  - formula: unboxing_tease
+    idea: "Unboxing day: let's see what's inside."

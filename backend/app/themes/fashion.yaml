@@ -1,0 +1,32 @@
+# Fashion theme (plan §9). Loaded by app/services/themes.py; the brief's own words always win.
+id: fashion
+title: Fashion
+summary: Polished and stylish, the piece worn in the city, clean captions.
+tone: premium
+writing: Short, stylish lines about fit, feel and how you wear it; no celebrity or trend claims the brief does not state.
+setting: City streets, a bright studio or a mirror at home; full-body and detail shots of the piece worn; confident walks and slow turns; a soft, filmic grade.
+captions: clean
+font: Playfair Display
+palette:
+  primary: "#d4af37"
+  secondary: "#f5f5f4"
+  background: "#0c0a09"
+music: fashion
+end_card:
+  button: square
+  uppercase: true
+scene_ideas:
+  - A confident walk down a city street, the piece worn, the camera tracking alongside.
+  - A slow turn in front of a mirror at home, checking the fit.
+  - A close-up of the fabric and stitching as a hand smooths it down.
+  - The piece styled two ways, one look after the other in the same spot.
+  - A pause on a doorstep at golden hour, a glance back at the camera.
+hook_ideas:
+  - formula: pov
+    idea: "POV: getting dressed for a day in the city."
+  - formula: problem_first
+    idea: "Nothing to wear, again?"
+  - formula: three_reasons
+    idea: "Three ways to wear one piece."
+  - formula: unboxing_tease
+    idea: "The package arrived. Let's see if it fits."

@@ -147,6 +147,7 @@ export const api = {
     request(`/jobs/${encodeURIComponent(id)}/answers`, { method: 'POST', json: { answers, skip } }),
   voices: () => request('/voices'),
   music: () => request('/music'),
+  themes: () => request('/themes'),
 };
 
 export function rememberJob(id) {
