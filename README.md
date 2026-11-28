@@ -1,7 +1,7 @@
 <h1 align="center">UGC Ad Builder</h1>
 
 <p align="center">
-  <strong>One product photo and a short brief in. A UGC-style video ad out, with your real product in every frame and the cost of every step known.</strong>
+  <strong>A product photo and a short brief in. A ready-to-post UGC-style video ad out, with your real product in every frame and the cost of every step known before you pay it.</strong>
 </p>
 
 <p align="center">
@@ -9,75 +9,125 @@
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/FastAPI-Pydantic%20AI-009688" alt="FastAPI + Pydantic AI" />
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/CI-mock%20AI%20only-555" alt="CI uses mock AI only" />
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT" />
 </p>
 
-> **Try it:** [v2, current](https://ugc-creator-delta.vercel.app) · [v1, the original n8n prototype (frozen)](https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app)
->
-> **Status: v2, milestone M1 of 6 complete and live** at https://ugc-creator-delta.vercel.app (generation needs an access code while in early access): brief → storyboard you approve → a reference image of your product → a 5-second clip, for about 0.34 EUR. **M2 (full ads) is in progress on the `v2` branch, not live yet:** 1–5 scenes that follow your own story and length, your own pictures or new ones, one continuous shot or separate shots, an AI voiceover, licensed music, burned-in captions, an end card, every platform shape, and "AI-generated" metadata on every file. Measured quality and the public demo arrive in M4. The plan is in [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-plan.md).
+> **Try it:** [v2, live](https://ugc-creator-delta.vercel.app) (making an ad needs an access code during early access) · [v1, the original n8n prototype (frozen)](https://ugc-creator-4a20yqpyc-aimilios-projects-21450502.vercel.app)
 
-## What it does
+<p align="center">
+  <img src="docs/screenshots/video.jpg" width="820" alt="The finished ad: every shape, the story, and what each AI step cost" />
+</p>
 
-Live today (M1):
+## Status
 
-1. **Brief.** Upload a product photo; say what it is, who it is for, and any offer.
-2. **Storyboard.** A vision LLM reads the photo and writes a 3-scene plan (hook, demo, call to action) with three hook ideas tagged by formula. You edit and approve it. Nothing paid renders before that.
-3. **Generate.** The real photo is edited into the first scene (image editing, so the product stays the same), then animated into a clip (image-to-video). Progress and cost show live, in euros.
+| Milestone | State |
+| --- | --- |
+| **M1** — brief → storyboard you approve → a picture of your product → a 5 s clip (about 0.34 EUR) | Live |
+| **M2** — full ads | Built on the `v2` branch, tested on mock AI and in real-AI runs; not deployed yet |
+| M3 – M6 — Post Kit, measured quality and the public demo (M4), then v2.1 | Planned |
 
-Coming with M2 (on `v2`): your own story and video length set the scenes (1–5), read from timestamps, scene headings, lists or paragraphs, a vague idea gets up to 3 quick questions first, every gap the AI fills is marked "AI's guess" and editable, and your own words sent to the video AI word for word; starting pictures you make or bring; one connected video where every scene flows into the next (also with your own pictures) or separate shots; voice, music, captions and an end card; every shape; the model and cost of each step on the result page.
+What M2 adds:
+
+- **Ads of 1 to 5 scenes** that follow your own story and length. Timestamps, scene headings, lists and paragraphs are all read into scenes.
+- **Up to 3 quick questions** when the brief is vague. Every gap the AI fills is marked "AI's guess", and you can edit it.
+- **Your words reach the video AI word for word.**
+- **One connected video**, where each scene flows into the next, or separate shots.
+- **Your own pictures, or new ones** made from your product photo.
+- **An AI voiceover, licensed music, captions and an end card**, in every platform shape, with "AI-generated" metadata on each file.
+- **Themes** (beauty, fashion, food, sport, tech), a brand kit and campaigns.
+- **The model and cost of every step** on the result page, and a History page of your ads.
+- **Error reports** with personal data removed, a scheduled cleanup after 30 days, and a "Delete my data" button.
+
+The full plan: [docs/plan/ugc-v2-full-plan.md](docs/plan/ugc-v2-full-plan.md).
+
+## How it works
+
+1. **Brief.** Add a product photo (optional) and say what it is and who it is for. You can also paste your own story or script.
+2. **Storyboard.** A vision LLM reads the photo and writes the scenes. You edit everything: the text, the length, the starting picture of each scene, the voiceover and on-screen text, how the scenes connect, and the first line. Nothing paid is made before you approve, and the price is shown first.
+3. **Pictures, then video.** Your real photo is edited into each scene's setting, so the product stays the same, then animated. Voice, music, captions and the end card are added, and every shape is cut.
+
+<p align="center">
+  <img src="docs/screenshots/brief.jpg" width="49%" alt="The brief" />
+  <img src="docs/screenshots/storyboard.jpg" width="49%" alt="The storyboard: every scene editable, with its starting picture and price" />
+</p>
+
+<sub>Screenshots from the local stack on mock AI: the product is a made-up drawing, and no AI or money was used.</sub>
 
 ## How it is built
 
 | Part | Choice |
 | --- | --- |
-| API and worker | FastAPI + a worker in one Docker image: a Cloud Run service and a Cloud Run Job (europe-west4) |
+| API and worker | FastAPI and a worker in one Docker image: a Cloud Run service and a Cloud Run Job (europe-west4) |
 | AI | Pydantic AI with structured outputs; OpenAI by default, switchable; a mock provider for tests |
-| Image and video | fal: Nano Banana edit (0.0398 USD/image), Kling 2.5 Turbo Pro image-to-video (0.07 USD/s) |
-| Voice and edit (M2) | OpenAI `gpt-4o-mini-tts` voiceover; ffmpeg + Pillow compose captions, music (CC0), end card, every shape |
+| Image and video | fal: Nano Banana edit (0.0398 USD per image), Kling 2.5 Turbo Pro image-to-video (0.07 USD per second) |
+| Voice and edit | OpenAI `gpt-4o-mini-tts`; ffmpeg and Pillow add captions, CC0 music, the end card and every shape |
 | Queue and data | Postgres on Neon (Frankfurt) with pgvector; the `jobs` table is the queue (`SKIP LOCKED`) |
-| Files | Private Google Cloud Storage bucket, signed expiring URLs |
-| Frontend | React + Vite on Vercel |
+| Files | A private Google Cloud Storage bucket, with signed links that expire |
+| Frontend | React 19 and Vite on Vercel |
+| Operations | Sentry, with personal data removed before sending; a GitHub Actions schedule for cleanup |
 
-Engineering points, each pinned by a test:
+Engineering points, each covered by tests (384 on `v2`):
 
-- **Spend can't run away.** Every paid stage reserves its estimate against a per-ad cap and a daily limit before it starts, under a database lock; a model with no price cannot be called. [D8, D9](DECISIONS.md)
-- **Nothing is paid twice.** The provider's prediction ID is saved on submit, so a crashed job resumes by polling the same render; finished stages are skipped; a media cache serves repeats for free.
-- **One approval, one job.** Approve is a single conditional update; double-clicks change nothing.
-- **Private by default.** Jobs open only in the browser that made them; files are served through expiring signed URLs; uploads lose their EXIF/GPS data; fal is told not to store requests and to delete its copies after an hour.
+- **Spend can't run away.** Every paid step books its estimate against a per-ad cap and a daily limit before it starts, under a database lock. A model with no price can't be called. [D8, D9](DECISIONS.md)
+- **Nothing is paid twice.** The provider's prediction ID is saved when the job is sent. If the worker crashes, the job picks up the same render instead of paying again. Finished steps are skipped, and a media cache serves repeats for free.
+- **Crashed jobs recover on their own.** A scheduled sweep puts a job stuck mid-run back in the queue, or fails it after its last try and settles its booked cost. [D34](DECISIONS.md)
+- **One approval, one job.** Approval is a single conditional update, so a double-click changes nothing.
+- **Private by default.**
+  - A job opens only in the browser that made it.
+  - Uploads lose their location data.
+  - Files are deleted 30 days after an ad's last change, or at once with "Delete my data".
+  - fal is told not to keep requests.
+  - Error reports leave out names, IPs, request bodies and secrets.
+  - Details: [docs/PRIVACY.md](docs/PRIVACY.md).
 - **CI can't spend money.** Tests force mock providers, blank every key and block outside network.
 
-All the decisions and their reasons: [DECISIONS.md](DECISIONS.md).
+Every decision and its reason: [DECISIONS.md](DECISIONS.md).
 
 ## Run it
 
 ```bash
-docker compose up --build      # http://localhost:5173 — mock providers, no keys, nothing paid
+docker compose up --build      # http://localhost:5173 — mock AI, no keys, nothing paid
 ```
 
-Tests, settings, Neon and the Cloud Run deploy: [docs/SETUP.md](docs/SETUP.md).
+Tests, settings and the deploy steps are in [docs/SETUP.md](docs/SETUP.md). The API docs are at `http://localhost:8000/docs`.
 
-API docs are served at `/docs`. Example:
+To make an ad from the command line, run the three calls below. There are no accounts: a random session ID sent with every request is what owns the job. The live site also needs an `X-Access-Code` header.
 
 ```bash
-curl -X POST http://localhost:8000/jobs \
-  -H "X-Session-Id: $(python -c 'import secrets; print(secrets.token_urlsafe(24))')" \
-  -F 'brief={"product_name":"Grip Socks Pro","description":"Anti-slip football grip socks.","platform":"tiktok","aspect_ratio":"9:16"}' \
-  -F photo=@product.jpg
+API=http://localhost:8000
+SID=$(python -c 'import secrets; print(secrets.token_urlsafe(24))')
+
+# 1. The brief and photo in, the storyboard out (free on mock; a few cents with real AI)
+JOB=$(curl -s -X POST $API/jobs -H "X-Session-Id: $SID" \
+  -F 'brief={"product_name":"Ferna Daily Serum","description":"A light plant-based serum that sinks in fast.","platform":"tiktok","aspect_ratio":"9:16"}' \
+  -F photo=@product.jpg | jq -r .id)
+
+# 2. Approve it: the pictures and the video are made in one go
+curl -s -X POST $API/jobs/$JOB/approve -H "X-Session-Id: $SID" \
+  -H 'Content-Type: application/json' -d '{"mode":"video"}' | jq .status
+
+# 3. Poll until it is done, then get the signed links to the finished ads
+curl -s $API/jobs/$JOB -H "X-Session-Id: $SID" | jq '{status, assets: [.assets[] | select(.kind=="ad") | .url]}'
 ```
+
+If the brief is too vague, step 1 returns `questions`. Answer them with `POST /jobs/{id}/answers` before you approve.
 
 ## From v1 to v2
 
-v1 (January 2026) was a React page posting to an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) through an ngrok tunnel on a laptop. An audit found it never worked end to end: the form's email field was never read, the page posted to n8n's test-only webhook, and the text-to-image step meant the real product never appeared in the ad. Its notes and landing page named NanoBanana and Veo 3.1 while the nodes used Flux and Kling, and an API key sat in the public workflow file (now revoked and purged from this repo's history).
+v1 (January 2026) was a React page posting to an n8n workflow (GPT-4o → Flux Schnell → Kling → Gmail) through an ngrok tunnel on a laptop. An audit found it never worked end to end:
 
-v2 rebuilds it as an engineered system. The sanitised v1 workflow is kept in [legacy/n8n/](legacy/n8n/); the v1 code is tagged [`v1-final`](https://github.com/Aimilios94/UGC-Creator/releases/tag/v1-final), and screenshots of the v1 site with its known issues are in [docs/before-after/v1/](docs/before-after/v1/).
+- the form's email field was never read;
+- the page posted to n8n's test-only webhook;
+- text-to-image meant the real product never appeared in the ad.
 
-<p align="center">
-  <img src="frontend/public/assets/workflow-screenshot.png" width="700" alt="The v1 n8n workflow" />
-</p>
+Its notes also named models the workflow did not use, and an API key sat in the public workflow file. That key is now revoked and purged from this repo's history.
+
+v2 rebuilds it as an engineered system. The cleaned-up v1 workflow is in [legacy/n8n/](legacy/n8n/), the v1 code is tagged [`v1-final`](https://github.com/Aimilios94/UGC-Creator/releases/tag/v1-final), and screenshots of v1 with its known issues are in [docs/before-after/v1/](docs/before-after/v1/).
 
 ## Documents
 
-[APP_OVERVIEW.md](APP_OVERVIEW.md) · [problem-statement.md](problem-statement.md) · [DECISIONS.md](DECISIONS.md) · [CHANGELOG.md](CHANGELOG.md) · [roadmap.md](roadmap.md) · [docs/PRIVACY.md](docs/PRIVACY.md) · [docs/notes/](docs/notes/)
+[APP_OVERVIEW.md](APP_OVERVIEW.md) · [problem-statement.md](problem-statement.md) · [DECISIONS.md](DECISIONS.md) · [CHANGELOG.md](CHANGELOG.md) · [roadmap.md](roadmap.md) · [docs/SETUP.md](docs/SETUP.md) · [docs/PRIVACY.md](docs/PRIVACY.md) · [docs/notes/](docs/notes/)
 
 ## License
 
